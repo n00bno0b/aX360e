@@ -125,6 +125,19 @@
             app:entries="@array/es_arr_hid_hid"
             app:key="HID|hid"
             app:summary="@string/es_hint_hid_hid" />
+        <aenu.preference.CheckBoxPreference app:title="@string/es_hid_vibration"
+            app:key="HID|vibration"
+            app:summary="@string/es_hint_hid_vibration" />
+        <aenu.preference.ListPreference app:title="@string/es_hid_left_stick_deadzone_percentage"
+            app:entryValues="@array/es_arr_v_hid_deadzone_percentages"
+            app:entries="@array/es_arr_hid_deadzone_percentages"
+            app:key="HID|left_stick_deadzone_percentage"
+            app:summary="@string/es_hint_hid_left_stick_deadzone_percentage" />
+        <aenu.preference.ListPreference app:title="@string/es_hid_right_stick_deadzone_percentage"
+            app:entryValues="@array/es_arr_v_hid_deadzone_percentages"
+            app:entries="@array/es_arr_hid_deadzone_percentages"
+            app:key="HID|right_stick_deadzone_percentage"
+            app:summary="@string/es_hint_hid_right_stick_deadzone_percentage" />
     </PreferenceScreen>
     <PreferenceScreen app:title="@string/es_memory"
         app:key="Memory" >

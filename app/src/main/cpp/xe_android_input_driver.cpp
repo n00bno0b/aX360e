@@ -8,6 +8,7 @@
  */
 
 #include "xe_android_input_driver.h"
+#include <algorithm>
 #include "xenia/ui/virtual_key.h"
 #include "xenia/base/logging.h"
 
@@ -137,10 +138,18 @@ namespace xe {
                                 buttons |= 0x0200;  // XINPUT_GAMEPAD_RIGHT_SHOULDER
                                 break;
                             case ui::VirtualKey::kXInputPadLTrigger:
-                                left_trigger = 0xFF;
+                                if (ks.value < 0) {
+                                    left_trigger = 0xFF;
+                                } else {
+                                    left_trigger = static_cast<uint8_t>(std::clamp(ks.value, 0, 0xFF));
+                                }
                                 break;
                             case ui::VirtualKey::kXInputPadRTrigger:
-                                right_trigger = 0xFF;
+                                if (ks.value < 0) {
+                                    right_trigger = 0xFF;
+                                } else {
+                                    right_trigger = static_cast<uint8_t>(std::clamp(ks.value, 0, 0xFF));
+                                }
                                 break;
                             case ui::VirtualKey::kXInputPadLThumbLeft:
                                 thumb_lx =ks.value;//+= SHRT_MIN;
@@ -255,6 +264,9 @@ namespace xe {
                 if (!is_active()) {
                     return;
                 }
+                if (key_index < 0 || key_index >= static_cast<int>(key_status_.size())) {
+                    return;
+                }
 
                 auto global_lock = global_critical_region_.Acquire();
                 prev_key_status_[key_index] = key_status_[key_index];
@@ -262,7 +274,7 @@ namespace xe {
                 key_status_[key_index].pressed = pressed;
                 key_status_[key_index].value = value;
 
-                key_status_mask_ |= (1 << key_index);
+                key_status_mask_ |= (1u << key_index);
             }
 
 

@@ -55,7 +55,7 @@
 DEFINE_string(apu, "aaudio", "Audio system. Use: [any, nop, opensles, aaudio]", "APU");
 DEFINE_string(gpu, "vulkan", "Graphics system. Use: [vulkan, null]",
               "GPU");
-DEFINE_string(hid, "android", "Input system. Use: [android, nop]",
+DEFINE_string(hid, "android", "Input system. Use: [android, nop]. Multiple drivers can be chained via comma, for example: android,nop",
               "HID");
 
 DEFINE_path(
@@ -417,18 +417,14 @@ namespace xe {
             static std::vector<std::unique_ptr<hid::InputDriver>> create_input_drivers(
                     ui::Window* window) {
                 std::vector<std::unique_ptr<hid::InputDriver>> drivers;
-                if (cvars::hid.compare("nop") == 0) {
-                    drivers.emplace_back(xe::hid::nop::Create(window, EmulatorWindow::kZOrderHidInput));
-                }
-                else {
-                    Factory<hid::InputDriver, ui::Window *, size_t> factory;
-                    factory.Add("android", xe::hid::android::Create);
+                Factory<hid::InputDriver, ui::Window *, size_t> factory;
+                factory.Add("android", xe::hid::android::Create);
+                factory.Add("nop", xe::hid::nop::Create);
 
-                    for (auto &driver: factory.CreateAll(cvars::hid, window,
-                                                         EmulatorWindow::kZOrderHidInput)) {
-                        if (XSUCCEEDED(driver->Setup())) {
-                            drivers.emplace_back(std::move(driver));
-                        }
+                for (auto &driver: factory.CreateAll(cvars::hid, window,
+                                                     EmulatorWindow::kZOrderHidInput)) {
+                    if (driver && XSUCCEEDED(driver->Setup())) {
+                        drivers.emplace_back(std::move(driver));
                     }
                 }
                 if (drivers.empty()) {
@@ -742,10 +738,17 @@ namespace ae{
     }
 
     void key_event(int key_code,bool pressed,int value){
-        static const bool is_android=cvars::hid=="android";
-        if(is_android){
-            xe::hid::android::AndroidInputDriver* driver=reinterpret_cast<xe::hid::android::AndroidInputDriver*>(g_windowed_app_ref->emu->input_system()->drivers_[0].get());
-            driver->OnKey(key_code,pressed,value);
+        if(!g_windowed_app_ref||!g_windowed_app_ref->emu)
+            return;
+        auto* input_system=g_windowed_app_ref->emu->input_system();
+        if(!input_system)
+            return;
+        for(auto& driver_base:input_system->drivers_){
+            auto* driver=dynamic_cast<xe::hid::android::AndroidInputDriver*>(driver_base.get());
+            if(driver){
+                driver->OnKey(key_code,pressed,value);
+                return;
+            }
         }
     }
     bool is_running(){

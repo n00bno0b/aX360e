@@ -35,9 +35,18 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
     static final int DELAY_ON_CREATE=0xaeae0001;
     public static final String EXTRA_GAME_URI="game_uri";
     static SurfaceView sf=null;
+    private static final float STICK_DEADZONE = 0.10f;
+    private static final float HAT_THRESHOLD = 0.50f;
+    private static final float TRIGGER_DEADZONE = 0.02f;
+    private static final int NO_ACTIVE_CONTROLLER = -1;
+    private static final int TRIGGER_MAX_VALUE = 0xFF;
+
     private SparseIntArray keysMap = new SparseIntArray();
     private Vibrator vibrator=null;
     private VibrationEffect vibrationEffect=null;
+    private int activeControllerDeviceId = NO_ACTIVE_CONTROLLER;
+    private int hatXState = 0;
+    private int hatYState = 0;
     boolean started=false;
     Dialog delay_dialog=null;
     final Handler delay_on_create=new Handler(new Handler.Callback(){
@@ -182,6 +191,7 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
     @Override
     protected void onDestroy()
     {
+        releaseControllerState();
         super.onDestroy();
         System.exit(0);
     }
@@ -190,6 +200,19 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
+        if (isGameControllerSource(event.getSource()) && !acceptControllerEvent(event)) {
+            return true;
+        }
+
+        if (keyCode == KeyEvent.KEYCODE_BUTTON_L2) {
+            sendTrigger(VirtualControl.KEY_CODE_TRIGGER_L, true, TRIGGER_MAX_VALUE);
+            return true;
+        }
+        if (keyCode == KeyEvent.KEYCODE_BUTTON_R2) {
+            sendTrigger(VirtualControl.KEY_CODE_TRIGGER_R, true, TRIGGER_MAX_VALUE);
+            return true;
+        }
+
         int gameKey = keysMap.get(keyCode, KEY_NO_MAPPED);
         if (gameKey == KEY_NO_MAPPED) return super.onKeyDown(keyCode, event);
         if (event.getRepeatCount() == 0){
@@ -202,6 +225,19 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
 
     @Override
     public boolean onKeyUp(int keyCode, KeyEvent event) {
+        if (isGameControllerSource(event.getSource()) && !acceptControllerEvent(event)) {
+            return true;
+        }
+
+        if (keyCode == KeyEvent.KEYCODE_BUTTON_L2) {
+            sendTrigger(VirtualControl.KEY_CODE_TRIGGER_L, false, 0);
+            return true;
+        }
+        if (keyCode == KeyEvent.KEYCODE_BUTTON_R2) {
+            sendTrigger(VirtualControl.KEY_CODE_TRIGGER_R, false, 0);
+            return true;
+        }
+
         int gameKey = keysMap.get(keyCode, KEY_NO_MAPPED);
         if (gameKey != KEY_NO_MAPPED) {
             Emulator.get.key_event(gameKey, false,VirtualControl.KEY_VALUE_UNUSED);
@@ -241,187 +277,199 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
     @Override
     public void surfaceDestroyed(@NonNull SurfaceHolder holder) {
         if(!started) return;
+        releaseControllerState();
         Emulator.get.setup_surface(null);
     }
 
+    private static boolean isGameControllerSource(int source) {
+        return (source & InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD
+                || (source & InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
+                || (source & InputDevice.SOURCE_DPAD) == InputDevice.SOURCE_DPAD;
+    }
 
-    boolean handle_dpad(InputEvent event) {
-
-        boolean pressed=false;
-        if (event instanceof MotionEvent) {
-
-            // Use the hat axis value to find the D-pad direction
-            MotionEvent motionEvent = (MotionEvent) event;
-            float xaxis = motionEvent.getAxisValue(MotionEvent.AXIS_HAT_X);
-            float yaxis = motionEvent.getAxisValue(MotionEvent.AXIS_HAT_Y);
-
-            // Check if the AXIS_HAT_X value is -1 or 1, and set the D-pad
-            // LEFT and RIGHT direction accordingly.
-            if (Float.compare(xaxis, -1.0f) == 0) {
-                Emulator.get.key_event(VirtualControl.KEY_CODE_DPAD_LEFT, true,VirtualControl.KEY_VALUE_UNUSED);
-                Emulator.get.key_event(VirtualControl.KEY_CODE_DPAD_RIGHT, false,VirtualControl.KEY_VALUE_UNUSED);
-                vibrator();
-                pressed=true;
-            } else if (Float.compare(xaxis, 1.0f) == 0) {
-                Emulator.get.key_event( VirtualControl.KEY_CODE_DPAD_RIGHT, true,VirtualControl.KEY_VALUE_UNUSED);
-                Emulator.get.key_event( VirtualControl.KEY_CODE_DPAD_LEFT, false,VirtualControl.KEY_VALUE_UNUSED);
-
-                vibrator();
-                pressed=true;
-            }
-            // Check if the AXIS_HAT_Y value is -1 or 1, and set the D-pad
-            // UP and DOWN direction accordingly.
-            if (Float.compare(yaxis, -1.0f) == 0) {
-                Emulator.get.key_event(  VirtualControl.KEY_CODE_DPAD_UP, true,VirtualControl.KEY_VALUE_UNUSED);
-                Emulator.get.key_event(VirtualControl.KEY_CODE_DPAD_DOWN, false,VirtualControl.KEY_VALUE_UNUSED);
-
-                vibrator();
-                pressed=true;
-            } else if (Float.compare(yaxis, 1.0f) == 0) {
-                Emulator.get.key_event(VirtualControl.KEY_CODE_DPAD_DOWN, true,VirtualControl.KEY_VALUE_UNUSED);
-                Emulator.get.key_event(VirtualControl.KEY_CODE_DPAD_UP, false,VirtualControl.KEY_VALUE_UNUSED);
-
-                vibrator();
-                pressed=true;
-            }
+    private boolean acceptControllerEvent(InputEvent event) {
+        if (!isGameControllerSource(event.getSource())) {
+            return false;
         }
-        else if (event instanceof KeyEvent) {
-
-            // Use the key code to find the D-pad direction.
-            KeyEvent keyEvent = (KeyEvent) event;
-            if (keyEvent.getKeyCode() == KeyEvent.KEYCODE_DPAD_LEFT) {
-                Emulator.get.key_event(VirtualControl.KEY_CODE_DPAD_LEFT, true,VirtualControl.KEY_VALUE_UNUSED);
-                Emulator.get.key_event(VirtualControl.KEY_CODE_DPAD_RIGHT, false,VirtualControl.KEY_VALUE_UNUSED);
-
-                vibrator();
-                pressed=true;
-
-            } else if (keyEvent.getKeyCode() == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                Emulator.get.key_event(VirtualControl.KEY_CODE_DPAD_RIGHT, true,VirtualControl.KEY_VALUE_UNUSED);
-                Emulator.get.key_event(VirtualControl.KEY_CODE_DPAD_LEFT, false,VirtualControl.KEY_VALUE_UNUSED);
-
-                vibrator();
-                pressed=true;
-
-            } else if (keyEvent.getKeyCode() == KeyEvent.KEYCODE_DPAD_UP) {
-                Emulator.get.key_event(VirtualControl.KEY_CODE_DPAD_UP, true,VirtualControl.KEY_VALUE_UNUSED);
-                Emulator.get.key_event(VirtualControl.KEY_CODE_DPAD_DOWN, false,VirtualControl.KEY_VALUE_UNUSED);
-
-                vibrator();
-                pressed=true;
-
-            } else if (keyEvent.getKeyCode() == KeyEvent.KEYCODE_DPAD_DOWN) {
-                Emulator.get.key_event(VirtualControl.KEY_CODE_DPAD_DOWN, true,VirtualControl.KEY_VALUE_UNUSED);
-                Emulator.get.key_event(VirtualControl.KEY_CODE_DPAD_UP, false,VirtualControl.KEY_VALUE_UNUSED);
-
-                vibrator();
-                pressed=true;
-
-            }
+        final int deviceId = event.getDeviceId();
+        if (activeControllerDeviceId == NO_ACTIVE_CONTROLLER) {
+            activeControllerDeviceId = deviceId;
+            return true;
         }
-
-        if(pressed) return true;
-        Emulator.get.key_event(VirtualControl.KEY_CODE_DPAD_LEFT, false,VirtualControl.KEY_VALUE_UNUSED);
-        Emulator.get.key_event(VirtualControl.KEY_CODE_DPAD_UP, false,VirtualControl.KEY_VALUE_UNUSED);
-        Emulator.get.key_event(VirtualControl.KEY_CODE_DPAD_RIGHT, false,VirtualControl.KEY_VALUE_UNUSED);
-        Emulator.get.key_event(VirtualControl.KEY_CODE_DPAD_DOWN, false,VirtualControl.KEY_VALUE_UNUSED);
+        if (activeControllerDeviceId == deviceId) {
+            return true;
+        }
+        if (InputDevice.getDevice(activeControllerDeviceId) == null) {
+            activeControllerDeviceId = deviceId;
+            return true;
+        }
         return false;
     }
 
+    private static float clamp(float value, float min, float max) {
+        if (value < min) return min;
+        if (value > max) return max;
+        return value;
+    }
 
-    private static boolean isDpadDevice(MotionEvent event) {
-        // Check that input comes from a device with directional pads.
-        if ((event.getSource() & InputDevice.SOURCE_DPAD)
-                != InputDevice.SOURCE_DPAD) {
-            return true;
-        } else {
-            return false;
+    private static float normalizeTriggerValue(float value) {
+        float normalized = value;
+        if (normalized < 0.0f) {
+            normalized = (normalized + 1.0f) * 0.5f;
         }
+        return clamp(normalized, 0.0f, 1.0f);
+    }
+
+    private static float axisWithFallback(MotionEvent event, int primaryAxis, int fallbackAxis) {
+        float primary = event.getAxisValue(primaryAxis);
+        float fallback = event.getAxisValue(fallbackAxis);
+        return Math.abs(fallback) > Math.abs(primary) ? fallback : primary;
+    }
+
+    private static float applyDeadzone(float value, float deadzone) {
+        float abs = Math.abs(value);
+        if (abs <= deadzone) {
+            return 0.0f;
+        }
+        float normalized = (abs - deadzone) / (1.0f - deadzone);
+        return value < 0.0f ? -normalized : normalized;
+    }
+
+    private static short scaleStick(float value) {
+        float clamped = clamp(value, -1.0f, 1.0f);
+        if (clamped < 0.0f) {
+            return (short) Math.round(clamped * 32768.0f);
+        }
+        return (short) Math.round(clamped * 32767.0f);
+    }
+
+    private void sendStickAxis(int negativeKey, int positiveKey, float value) {
+        final short zero = 0;
+        if (value < 0.0f) {
+            Emulator.get.key_event(positiveKey, false, zero);
+            Emulator.get.key_event(negativeKey, true, scaleStick(value));
+        } else if (value > 0.0f) {
+            Emulator.get.key_event(negativeKey, false, zero);
+            Emulator.get.key_event(positiveKey, true, scaleStick(value));
+        } else {
+            Emulator.get.key_event(negativeKey, false, zero);
+            Emulator.get.key_event(positiveKey, false, zero);
+        }
+    }
+
+    private void sendTrigger(int triggerKey, boolean pressed, int value) {
+        Emulator.get.key_event(triggerKey, pressed, (short) value);
+    }
+
+    private void sendTriggerAxis(int triggerKey, float value) {
+        float normalized = applyDeadzone(normalizeTriggerValue(value), TRIGGER_DEADZONE);
+        int triggerValue = Math.round(normalized * TRIGGER_MAX_VALUE);
+        sendTrigger(triggerKey, triggerValue > 0, triggerValue);
+    }
+
+    private void updateHatDpad(MotionEvent event) {
+        int hatX = 0;
+        int hatY = 0;
+        float rawHatX = event.getAxisValue(MotionEvent.AXIS_HAT_X);
+        float rawHatY = event.getAxisValue(MotionEvent.AXIS_HAT_Y);
+        if (rawHatX <= -HAT_THRESHOLD) {
+            hatX = -1;
+        } else if (rawHatX >= HAT_THRESHOLD) {
+            hatX = 1;
+        }
+        if (rawHatY <= -HAT_THRESHOLD) {
+            hatY = -1;
+        } else if (rawHatY >= HAT_THRESHOLD) {
+            hatY = 1;
+        }
+
+        if (hatX == hatXState && hatY == hatYState) {
+            return;
+        }
+
+        boolean hadPressed = hatXState != 0 || hatYState != 0;
+
+        hatXState = hatX;
+        hatYState = hatY;
+
+        boolean leftPressed = hatXState < 0;
+        boolean rightPressed = hatXState > 0;
+        boolean upPressed = hatYState < 0;
+        boolean downPressed = hatYState > 0;
+
+        Emulator.get.key_event(VirtualControl.KEY_CODE_DPAD_LEFT, leftPressed, VirtualControl.KEY_VALUE_UNUSED);
+        Emulator.get.key_event(VirtualControl.KEY_CODE_DPAD_RIGHT, rightPressed, VirtualControl.KEY_VALUE_UNUSED);
+        Emulator.get.key_event(VirtualControl.KEY_CODE_DPAD_UP, upPressed, VirtualControl.KEY_VALUE_UNUSED);
+        Emulator.get.key_event(VirtualControl.KEY_CODE_DPAD_DOWN, downPressed, VirtualControl.KEY_VALUE_UNUSED);
+
+        if ((leftPressed || rightPressed || upPressed || downPressed) && !hadPressed) {
+            vibrator();
+        }
+    }
+
+    private void releaseControllerState() {
+        final short zero = 0;
+        hatXState = 0;
+        hatYState = 0;
+        activeControllerDeviceId = NO_ACTIVE_CONTROLLER;
+
+        if (Emulator.get == null) {
+            return;
+        }
+
+        Emulator.get.key_event(VirtualControl.KEY_CODE_DPAD_LEFT, false, VirtualControl.KEY_VALUE_UNUSED);
+        Emulator.get.key_event(VirtualControl.KEY_CODE_DPAD_UP, false, VirtualControl.KEY_VALUE_UNUSED);
+        Emulator.get.key_event(VirtualControl.KEY_CODE_DPAD_RIGHT, false, VirtualControl.KEY_VALUE_UNUSED);
+        Emulator.get.key_event(VirtualControl.KEY_CODE_DPAD_DOWN, false, VirtualControl.KEY_VALUE_UNUSED);
+
+        Emulator.get.key_event(VirtualControl.KEY_CODE_LTHUMB_LEFT, false, zero);
+        Emulator.get.key_event(VirtualControl.KEY_CODE_LTHUMB_UP, false, zero);
+        Emulator.get.key_event(VirtualControl.KEY_CODE_LTHUMB_RIGHT, false, zero);
+        Emulator.get.key_event(VirtualControl.KEY_CODE_LTHUMB_DOWN, false, zero);
+        Emulator.get.key_event(VirtualControl.KEY_CODE_RTHUMB_LEFT, false, zero);
+        Emulator.get.key_event(VirtualControl.KEY_CODE_RTHUMB_UP, false, zero);
+        Emulator.get.key_event(VirtualControl.KEY_CODE_RTHUMB_RIGHT, false, zero);
+        Emulator.get.key_event(VirtualControl.KEY_CODE_RTHUMB_DOWN, false, zero);
+
+        sendTrigger(VirtualControl.KEY_CODE_TRIGGER_L, false, 0);
+        sendTrigger(VirtualControl.KEY_CODE_TRIGGER_R, false, 0);
     }
 
     @Override
     public boolean onGenericMotion(View v, MotionEvent event) {
-
-        if(isDpadDevice(event)&& handle_dpad(event)) return true;
-
-        if ((event.getSource() & InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK/*&&
-			event.getAction() == MotionEvent.ACTION_MOVE*/) {
-            float laxisX = event.getAxisValue(MotionEvent.AXIS_X);
-            float laxisY = event.getAxisValue(MotionEvent.AXIS_Y);
-            float raxisX = event.getAxisValue(MotionEvent.AXIS_Z);
-            float raxisY = event.getAxisValue(MotionEvent.AXIS_RZ);
-
-            final short _0=0;
-
-            //左摇杆
-            {
-                if(laxisX!=0){
-                    if(laxisX<0){
-                        Emulator.get.key_event(VirtualControl.KEY_CODE_LTHUMB_RIGHT,false,_0);
-                        Emulator.get.key_event(VirtualControl.KEY_CODE_LTHUMB_LEFT,true,(short) (laxisX*32768.0f));
-                    }
-                    else{
-                        Emulator.get.key_event(VirtualControl.KEY_CODE_LTHUMB_LEFT,false,_0);
-                        Emulator.get.key_event(VirtualControl.KEY_CODE_LTHUMB_RIGHT,true,(short)(Math.abs(laxisX)*32767.0f));
-                    }
-                }
-                else{
-                    Emulator.get.key_event(VirtualControl.KEY_CODE_LTHUMB_RIGHT,false,_0);
-                    Emulator.get.key_event(VirtualControl.KEY_CODE_LTHUMB_LEFT,false,_0);
-                }
-
-                //Joystick 左上角为-1.0,-1.0
-                //X360左下角为 -32768,-32768
-                if(laxisY!=0){
-                    if(laxisY<0){
-                        Emulator.get.key_event(VirtualControl.KEY_CODE_LTHUMB_DOWN,false,_0);
-                        Emulator.get.key_event(VirtualControl.KEY_CODE_LTHUMB_UP,true,(short)(-laxisY*32767.0f));
-                    }else{
-                        Emulator.get.key_event(VirtualControl.KEY_CODE_LTHUMB_UP,false,_0);
-                        Emulator.get.key_event(VirtualControl.KEY_CODE_LTHUMB_DOWN,true,(short)(-laxisY*32768.0f));
-                    }
-                }
-                else{
-                    Emulator.get.key_event(VirtualControl.KEY_CODE_LTHUMB_DOWN,false,_0);
-                    Emulator.get.key_event(VirtualControl.KEY_CODE_LTHUMB_UP,false,_0);
-                }
-            }
-            //右摇杆
-            {
-                if(raxisX!=0){
-                    if(raxisX<0){
-                        Emulator.get.key_event(VirtualControl.KEY_CODE_RTHUMB_RIGHT,false,_0);
-                        Emulator.get.key_event(VirtualControl.KEY_CODE_RTHUMB_LEFT,true,(short)(raxisX*32768.f));
-                    }else{
-                        Emulator.get.key_event(VirtualControl.KEY_CODE_RTHUMB_LEFT,false,_0);
-                        Emulator.get.key_event(VirtualControl.KEY_CODE_RTHUMB_RIGHT,true,(short)(raxisX*32767.0f));
-                    }
-                }
-                else{
-                    Emulator.get.key_event(VirtualControl.KEY_CODE_RTHUMB_RIGHT,false,_0);
-                    Emulator.get.key_event(VirtualControl.KEY_CODE_RTHUMB_LEFT,false,_0);
-                }
-
-                //Joystick 左上角为-1.0,-1.0
-                //X360左下角为 -32768,-32768
-                if(raxisY!=0){
-                    if(raxisY<0){
-                        Emulator.get.key_event(VirtualControl.KEY_CODE_RTHUMB_DOWN,false,_0);
-                        Emulator.get.key_event(VirtualControl.KEY_CODE_RTHUMB_UP,true,(short)(-raxisY*32767.0f));
-                    }else{
-                        Emulator.get.key_event(VirtualControl.KEY_CODE_RTHUMB_UP,false,_0);
-                        Emulator.get.key_event(VirtualControl.KEY_CODE_RTHUMB_DOWN,true,(short)(-raxisY*32768.0f));
-                    }
-                }
-                else{
-                    Emulator.get.key_event(VirtualControl.KEY_CODE_RTHUMB_DOWN,false,_0);
-                    Emulator.get.key_event(VirtualControl.KEY_CODE_RTHUMB_UP,false,_0);
-                }
-            }
+        if (!isGameControllerSource(event.getSource())) {
+            return super.onGenericMotionEvent(event);
+        }
+        if (!acceptControllerEvent(event)) {
+            return true;
+        }
+        if (event.getAction() == MotionEvent.ACTION_CANCEL) {
+            releaseControllerState();
             return true;
         }
 
-        return super.onGenericMotionEvent(event);
+        updateHatDpad(event);
+
+        if ((event.getSource() & InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK) {
+            float leftX = applyDeadzone(event.getAxisValue(MotionEvent.AXIS_X), STICK_DEADZONE);
+            float leftY = applyDeadzone(event.getAxisValue(MotionEvent.AXIS_Y), STICK_DEADZONE);
+            float rightX = applyDeadzone(axisWithFallback(event, MotionEvent.AXIS_RX, MotionEvent.AXIS_Z), STICK_DEADZONE);
+            float rightY = applyDeadzone(axisWithFallback(event, MotionEvent.AXIS_RY, MotionEvent.AXIS_RZ), STICK_DEADZONE);
+
+            sendStickAxis(VirtualControl.KEY_CODE_LTHUMB_LEFT, VirtualControl.KEY_CODE_LTHUMB_RIGHT, leftX);
+            sendStickAxis(VirtualControl.KEY_CODE_LTHUMB_DOWN, VirtualControl.KEY_CODE_LTHUMB_UP, -leftY);
+            sendStickAxis(VirtualControl.KEY_CODE_RTHUMB_LEFT, VirtualControl.KEY_CODE_RTHUMB_RIGHT, rightX);
+            sendStickAxis(VirtualControl.KEY_CODE_RTHUMB_DOWN, VirtualControl.KEY_CODE_RTHUMB_UP, -rightY);
+
+            float lTrigger = Math.max(event.getAxisValue(MotionEvent.AXIS_LTRIGGER), event.getAxisValue(MotionEvent.AXIS_BRAKE));
+            float rTrigger = Math.max(event.getAxisValue(MotionEvent.AXIS_RTRIGGER), event.getAxisValue(MotionEvent.AXIS_GAS));
+            sendTriggerAxis(VirtualControl.KEY_CODE_TRIGGER_L, lTrigger);
+            sendTriggerAxis(VirtualControl.KEY_CODE_TRIGGER_R, rTrigger);
+
+            return true;
+        }
+
+        return true;
     }
 
 }

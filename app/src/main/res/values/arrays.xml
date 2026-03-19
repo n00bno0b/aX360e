@@ -393,7 +393,27 @@
     </string-array>
     <string-array name="es_arr_hid_hid">
         <item>android</item>
+        <item>android,nop</item>
         <item>nop</item>
+    </string-array>
+
+    <string-array name="es_arr_hid_deadzone_percentages">
+        <item>0%</item>
+        <item>5%</item>
+        <item>10%</item>
+        <item>15%</item>
+        <item>20%</item>
+        <item>25%</item>
+        <item>30%</item>
+    </string-array>
+    <string-array name="es_arr_v_hid_deadzone_percentages">
+        <item>0.0</item>
+        <item>0.05</item>
+        <item>0.10</item>
+        <item>0.15</item>
+        <item>0.20</item>
+        <item>0.25</item>
+        <item>0.30</item>
     </string-array>
 
     <string-array name="es_arr_vulkan_vulkan_debug_utils_messenger_severity">

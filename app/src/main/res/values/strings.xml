@@ -385,7 +385,7 @@ For scaling by factors of more than 2x2, multiple FSR passes are done.</string>
     <string name="es_hint_general_notification_sound_path">Path (including filename) to selected notification sound. Sound MUST be in wav format!</string>
     <string name="es_hint_general_time_scalar">Scalar used to speed or slow time (1x, 2x, 1/2x, etc).</string>
 
-    <string name="es_hint_hid_hid">Input system. Use: [android, nop]</string>
+    <string name="es_hint_hid_hid">Input system. Use: [android, nop]. You can chain drivers with comma, for example android,nop.</string>
     <string name="es_hint_hid_left_stick_deadzone_percentage">Defines deadzone level for left stick. Allowed range [0.0-1.0].</string>
     <string name="es_hint_hid_right_stick_deadzone_percentage">Defines deadzone level for right stick. Allowed range [0.0-1.0].</string>
     <string name="es_hint_hid_vibration">Toggle controller vibration.</string>

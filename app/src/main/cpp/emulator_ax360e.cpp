@@ -339,7 +339,7 @@ static const std::pair<std::string,entries> gen_list[]={
         {"Display|postprocess_scaling_and_sharpening",{"bilinear", "cas", "fsr"}},
         {"GPU|gpu",{"vulkan", "null"}},
         {"GPU|render_target_path_vulkan",{"any", "fbo","fsi"}},
-        {"HID|hid",{"android", "nop"}},
+        {"HID|hid",{"android", "android,nop", "nop"}},
         {"CPU|cpu",{"any","a64"}},
 
         //int
