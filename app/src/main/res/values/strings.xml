@@ -190,6 +190,13 @@
     <string name="es_hid_left_stick_deadzone_percentage">Left Stick Deadzone</string>
     <string name="es_hid_right_stick_deadzone_percentage">Right Stick Deadzone</string>
     <string name="es_hid_vibration">Controller Vibration</string>
+    <string name="es_custom_drivers">Custom Drivers</string>
+    <string name="es_custom_drivers_load_type">Load Type</string>
+    <string name="es_hint_custom_drivers_load_type">Open type editor for HID driver chain.</string>
+    <string name="custom_driver_type_editor_title">Custom Driver Type</string>
+    <string name="custom_driver_type_input_hint">Enter HID type (example: android,nop)</string>
+    <string name="custom_driver_type_description">Set the HID load type string used by the emulator runtime.</string>
+    <string name="custom_driver_type_invalid">Driver type cannot be empty</string>
 
     <string name="es_kernel">Kernel</string>
     <string name="es_kernel_allow_nui_initialization">Allow NUI Initialization</string>

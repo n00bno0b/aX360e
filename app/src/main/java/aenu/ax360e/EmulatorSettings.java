@@ -32,6 +32,11 @@ import java.util.Set;
 public class EmulatorSettings extends AppCompatActivity {
 
     static final String EXTRA_CONFIG_PATH="config_path";
+    static final String EXTRA_CUSTOM_DRIVER_TYPE="extra_custom_driver_type";
+    static final int REQUEST_CODE_CUSTOM_DRIVER_TYPE=6201;
+
+    static final String KEY_HID_DRIVER_TYPE="HID|hid";
+    static final String KEY_CUSTOM_DRIVER_LOAD_TYPE="CustomDrivers|load_driver_type";
 
     static final int WARNING_COLOR=0xffff8000;
 
@@ -191,6 +196,40 @@ public class EmulatorSettings extends AppCompatActivity {
             requireActivity().setTitle(title);
         }
 
+        boolean ensure_default_config_exists(){
+            try{
+                File default_config_file=Application.get_default_config_file();
+                if(default_config_file.exists())
+                    return true;
+                String default_config_str=Application.load_default_config_str(requireContext());
+                if(default_config_str==null)
+                    return false;
+                Utils.save_string(default_config_file,default_config_str);
+                return default_config_file.exists();
+            }
+            catch(Exception e){
+                Log.e("EmulatorSettings","ensure_default_config_exists",e);
+                return false;
+            }
+        }
+
+        boolean restore_config_from_default(){
+            try{
+                if(!ensure_default_config_exists())
+                    return false;
+                File config_file=new File(config_path);
+                File parent=config_file.getParentFile();
+                if(parent!=null && !parent.exists())
+                    parent.mkdirs();
+                Utils.copy_file(Application.get_default_config_file(),config_file);
+                return config_file.exists();
+            }
+            catch(Exception e){
+                Log.e("EmulatorSettings","restore_config_from_default",e);
+                return false;
+            }
+        }
+
         @Override
         public void onCreatePreferences(@Nullable Bundle savedInstanceState, @Nullable String rootKey) {
 
@@ -210,18 +249,30 @@ public class EmulatorSettings extends AppCompatActivity {
             requireActivity().getOnBackPressedDispatcher().addCallback(back_callback);
 
             if(!new File(config_path).exists()){
-                root_pref.setEnabled(false);
-                Toast.makeText(requireContext(), config_path, Toast.LENGTH_LONG).show();
-                return;
+                if(!restore_config_from_default()){
+                    root_pref.setEnabled(false);
+                    Toast.makeText(requireContext(), config_path, Toast.LENGTH_LONG).show();
+                    return;
+                }
             }
 
             try{
                 config=Emulator.Config.open_config_file(config_path);
                 original_config=Emulator.Config.open_config_from_string(Application.load_default_config_str(getContext()));
             }catch(Exception e){
-                Log.e("EmulatorSettings",e.toString());
-                root_pref.setEnabled(false);
-                return;
+                Log.e("EmulatorSettings","Failed to open config, trying to restore",e);
+                if(!restore_config_from_default()){
+                    root_pref.setEnabled(false);
+                    return;
+                }
+                try{
+                    config=Emulator.Config.open_config_file(config_path);
+                    original_config=Emulator.Config.open_config_from_string(Application.load_default_config_str(getContext()));
+                }catch(Exception e2){
+                    Log.e("EmulatorSettings","Failed to open restored config",e2);
+                    root_pref.setEnabled(false);
+                    return;
+                }
             }
 
 
@@ -359,6 +410,7 @@ public class EmulatorSettings extends AppCompatActivity {
                     "Storage",
                     "Kernel",
                     "HID",
+                    "CustomDrivers",
                     "Memory",
                     "XConfig",
                     "Display",
@@ -433,10 +485,16 @@ public class EmulatorSettings extends AppCompatActivity {
                 pref.setPreferenceDataStore(data_store);
             }
 
+            setup_custom_driver_type(null);
+
             for (String key:NODE_KEYS){
                 PreferenceScreen pref=findPreference(key);
                 pref.setOnPreferenceClickListener(this);
             }
+
+            Preference custom_driver_load_pref=findPreference(KEY_CUSTOM_DRIVER_LOAD_TYPE);
+            if(custom_driver_load_pref!=null)
+                custom_driver_load_pref.setOnPreferenceClickListener(this);
 
         }
 
@@ -457,6 +515,8 @@ public class EmulatorSettings extends AppCompatActivity {
             super.onDestroy();
             if (config!=null)
                 config.close_config_file();
+            if (original_config!=null)
+                original_config.close_config();
         }
 
         /*@Override
@@ -476,6 +536,11 @@ public class EmulatorSettings extends AppCompatActivity {
         @Override
         public boolean onPreferenceClick(@NonNull Preference preference) {
 
+            if(KEY_CUSTOM_DRIVER_LOAD_TYPE.equals(preference.getKey())){
+                open_custom_driver_type_editor();
+                return true;
+            }
+
             if(preference instanceof PreferenceScreen){
                 setPreferenceScreen(root_pref.findPreference(preference.getKey()));
                 return false;
@@ -489,6 +554,60 @@ public class EmulatorSettings extends AppCompatActivity {
                     .setItems(items, listener)
                     .setNegativeButton(android.R.string.cancel, null);
             builder.create().show();
+        }
+
+        void setup_custom_driver_type(String new_type){
+            Preference load_type_pref=findPreference(KEY_CUSTOM_DRIVER_LOAD_TYPE);
+            ListPreference hidden_hid_type_pref=findPreference(KEY_HID_DRIVER_TYPE);
+
+            if(new_type==null){
+                String current=config.load_config_entry(KEY_HID_DRIVER_TYPE);
+                if(current!=null && !current.trim().isEmpty()){
+                    if(load_type_pref!=null)
+                        load_type_pref.setSummary(current);
+                }
+                else if(load_type_pref!=null){
+                    load_type_pref.setSummary(getString(R.string.es_hint_custom_drivers_load_type));
+                }
+                return;
+            }
+
+            String value=new_type.trim();
+            if(value.isEmpty()){
+                Toast.makeText(requireContext(),R.string.custom_driver_type_invalid,Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            config.save_config_entry(KEY_HID_DRIVER_TYPE,value);
+
+            if(load_type_pref!=null)
+                load_type_pref.setSummary(value);
+
+            if(hidden_hid_type_pref!=null){
+                hidden_hid_type_pref.setValue(value);
+
+                CharSequence[] values=hidden_hid_type_pref.getEntryValues();
+                CharSequence[] entries=hidden_hid_type_pref.getEntries();
+                boolean matched=false;
+                for(int i=0;i<values.length;i++){
+                    if(values[i].toString().equals(value)){
+                        hidden_hid_type_pref.setSummary(entries[i]);
+                        matched=true;
+                        break;
+                    }
+                }
+                if(!matched)
+                    hidden_hid_type_pref.setSummary(value);
+
+                setup_pref_title_color(hidden_hid_type_pref,value);
+            }
+        }
+
+        void open_custom_driver_type_editor(){
+            String current=config.load_config_entry(KEY_HID_DRIVER_TYPE);
+            Intent intent=new Intent(requireContext(),CustomDriverTypeActivity.class);
+            intent.putExtra(EXTRA_CUSTOM_DRIVER_TYPE,current);
+            ((AppCompatActivity)requireActivity()).startActivityForResult(intent,REQUEST_CODE_CUSTOM_DRIVER_TYPE);
         }
 
         void setup_pref_title_color(Preference preference,String cur_val){
@@ -561,5 +680,19 @@ public class EmulatorSettings extends AppCompatActivity {
         }
 
         getSupportFragmentManager().beginTransaction().replace(android.R.id.content,fragment).commit();
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+
+        if(resultCode!=RESULT_OK || data==null)
+            return;
+
+        if(requestCode==REQUEST_CODE_CUSTOM_DRIVER_TYPE){
+            String type=data.getStringExtra(EXTRA_CUSTOM_DRIVER_TYPE);
+            if(fragment!=null)
+                fragment.setup_custom_driver_type(type);
+        }
     }
 }
