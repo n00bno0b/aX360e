@@ -799,9 +799,16 @@ bool VulkanRenderTargetCache::Initialize(uint32_t shared_memory_binding_count) {
     fsi_subpass_dependencies[0].dstAccessMask =
         VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
     fsi_subpass_dependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-    fsi_subpass_dependencies[1] = fsi_subpass_dependencies[0];
-    std::swap(fsi_subpass_dependencies[1].srcSubpass,
-              fsi_subpass_dependencies[1].dstSubpass);
+    fsi_subpass_dependencies[1].srcSubpass = 0;
+    fsi_subpass_dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+    fsi_subpass_dependencies[1].srcStageMask =
+        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    fsi_subpass_dependencies[1].dstStageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+    fsi_subpass_dependencies[1].srcAccessMask =
+        VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+    fsi_subpass_dependencies[1].dstAccessMask =
+        VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+    fsi_subpass_dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
     VkRenderPassCreateInfo fsi_render_pass_create_info;
     fsi_render_pass_create_info.sType =
         VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;

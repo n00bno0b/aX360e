@@ -251,6 +251,8 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
         if(!started){
             started=true;
 
+            CustomDriverUtils.setupDriverEnv(this);
+
             Emulator.get.setup_surface(holder.getSurface());
             try {
                 Emulator.get.boot();
