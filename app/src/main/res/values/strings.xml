@@ -191,6 +191,10 @@
     <string name="es_hid_right_stick_deadzone_percentage">Right Stick Deadzone</string>
     <string name="es_hid_vibration">Controller Vibration</string>
     <string name="es_custom_drivers">Custom Drivers</string>
+    <string name="es_custom_drivers_gpu">GPU Driver (Turnip ZIP)</string>
+    <string name="es_hint_custom_drivers_gpu">Select a custom Turnip driver ZIP to improve performance on Adreno GPUs.</string>
+    <string name="es_custom_drivers_gpu_remove">Remove Custom GPU Driver</string>
+    <string name="es_hint_custom_drivers_gpu_remove">Remove currently installed custom Turnip driver.</string>
     <string name="es_custom_drivers_load_type">Load Type</string>
     <string name="es_hint_custom_drivers_load_type">Open type editor for HID driver chain.</string>
     <string name="custom_driver_type_editor_title">Custom Driver Type</string>

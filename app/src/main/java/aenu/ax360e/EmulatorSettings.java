@@ -34,9 +34,12 @@ public class EmulatorSettings extends AppCompatActivity {
     static final String EXTRA_CONFIG_PATH="config_path";
     static final String EXTRA_CUSTOM_DRIVER_TYPE="extra_custom_driver_type";
     static final int REQUEST_CODE_CUSTOM_DRIVER_TYPE=6201;
+    static final int REQUEST_CODE_CUSTOM_DRIVER_GPU=6202;
 
     static final String KEY_HID_DRIVER_TYPE="HID|hid";
     static final String KEY_CUSTOM_DRIVER_LOAD_TYPE="CustomDrivers|load_driver_type";
+    static final String KEY_CUSTOM_DRIVER_GPU="CustomDrivers|gpu_driver";
+    static final String KEY_CUSTOM_DRIVER_GPU_REMOVE="CustomDrivers|gpu_driver_remove";
 
     static final int WARNING_COLOR=0xffff8000;
 
@@ -486,6 +489,7 @@ public class EmulatorSettings extends AppCompatActivity {
             }
 
             setup_custom_driver_type(null);
+            setup_custom_driver_gpu(null);
 
             for (String key:NODE_KEYS){
                 PreferenceScreen pref=findPreference(key);
@@ -495,6 +499,12 @@ public class EmulatorSettings extends AppCompatActivity {
             Preference custom_driver_load_pref=findPreference(KEY_CUSTOM_DRIVER_LOAD_TYPE);
             if(custom_driver_load_pref!=null)
                 custom_driver_load_pref.setOnPreferenceClickListener(this);
+            Preference custom_driver_gpu_pref=findPreference(KEY_CUSTOM_DRIVER_GPU);
+            if(custom_driver_gpu_pref!=null)
+                custom_driver_gpu_pref.setOnPreferenceClickListener(this);
+            Preference custom_driver_gpu_remove_pref=findPreference(KEY_CUSTOM_DRIVER_GPU_REMOVE);
+            if(custom_driver_gpu_remove_pref!=null)
+                custom_driver_gpu_remove_pref.setOnPreferenceClickListener(this);
 
         }
 
@@ -535,6 +545,16 @@ public class EmulatorSettings extends AppCompatActivity {
 
         @Override
         public boolean onPreferenceClick(@NonNull Preference preference) {
+
+            if(KEY_CUSTOM_DRIVER_GPU.equals(preference.getKey())){
+                open_custom_driver_gpu_picker();
+                return true;
+            }
+
+            if(KEY_CUSTOM_DRIVER_GPU_REMOVE.equals(preference.getKey())){
+                remove_custom_driver_gpu();
+                return true;
+            }
 
             if(KEY_CUSTOM_DRIVER_LOAD_TYPE.equals(preference.getKey())){
                 open_custom_driver_type_editor();
@@ -601,6 +621,43 @@ public class EmulatorSettings extends AppCompatActivity {
 
                 setup_pref_title_color(hidden_hid_type_pref,value);
             }
+        }
+
+        void setup_custom_driver_gpu(android.net.Uri uri){
+            Preference gpu_pref=findPreference(KEY_CUSTOM_DRIVER_GPU);
+            if(uri == null){
+                // Determine if driver is installed
+                if (CustomDriverUtils.getDriverDirectory(requireContext()).exists() &&
+                    new java.io.File(CustomDriverUtils.getDriverDirectory(requireContext()), "vk_icd.json").exists()) {
+                    if (gpu_pref != null) gpu_pref.setSummary("Custom Turnip Driver Installed");
+                } else {
+                    if (gpu_pref != null) gpu_pref.setSummary(getString(R.string.es_hint_custom_drivers_gpu));
+                }
+                return;
+            }
+
+            boolean success = CustomDriverUtils.installDriver(requireContext(), uri);
+            if (success) {
+                if (gpu_pref != null) gpu_pref.setSummary("Custom Turnip Driver Installed");
+                Toast.makeText(requireContext(), "Driver installed successfully", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(requireContext(), "Failed to install driver", Toast.LENGTH_SHORT).show();
+            }
+        }
+
+        void open_custom_driver_gpu_picker(){
+            Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+            intent.setType("application/zip");
+            ((AppCompatActivity)requireActivity()).startActivityForResult(intent, REQUEST_CODE_CUSTOM_DRIVER_GPU);
+        }
+
+        void remove_custom_driver_gpu() {
+            CustomDriverUtils.removeDriver(requireContext());
+            Preference gpu_pref = findPreference(KEY_CUSTOM_DRIVER_GPU);
+            if (gpu_pref != null) {
+                gpu_pref.setSummary(getString(R.string.es_hint_custom_drivers_gpu));
+            }
+            Toast.makeText(requireContext(), "Custom GPU driver removed", Toast.LENGTH_SHORT).show();
         }
 
         void open_custom_driver_type_editor(){
@@ -693,6 +750,9 @@ public class EmulatorSettings extends AppCompatActivity {
             String type=data.getStringExtra(EXTRA_CUSTOM_DRIVER_TYPE);
             if(fragment!=null)
                 fragment.setup_custom_driver_type(type);
+        } else if (requestCode==REQUEST_CODE_CUSTOM_DRIVER_GPU) {
+            if (fragment!=null && data.getData() != null)
+                fragment.setup_custom_driver_gpu(data.getData());
         }
     }
 }

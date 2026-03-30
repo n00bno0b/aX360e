@@ -136,6 +136,12 @@
     </PreferenceScreen>
     <PreferenceScreen app:title="@string/es_custom_drivers"
         app:key="CustomDrivers" >
+        <Preference app:title="@string/es_custom_drivers_gpu"
+            app:key="CustomDrivers|gpu_driver"
+            app:summary="@string/es_hint_custom_drivers_gpu" />
+        <Preference app:title="@string/es_custom_drivers_gpu_remove"
+            app:key="CustomDrivers|gpu_driver_remove"
+            app:summary="@string/es_hint_custom_drivers_gpu_remove" />
         <Preference app:title="@string/es_custom_drivers_load_type"
             app:key="CustomDrivers|load_driver_type"
             app:summary="@string/es_hint_custom_drivers_load_type" />
