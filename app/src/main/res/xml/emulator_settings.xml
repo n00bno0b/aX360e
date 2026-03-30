@@ -136,6 +136,11 @@
     </PreferenceScreen>
     <PreferenceScreen app:title="@string/es_custom_drivers"
         app:key="CustomDrivers" >
+        <aenu.preference.ListPreference app:title="@string/es_gpu_preset"
+            app:entryValues="@array/es_arr_v_gpu_presets"
+            app:entries="@array/es_arr_gpu_presets"
+            app:key="CustomDrivers|gpu_preset"
+            app:summary="@string/es_hint_gpu_preset" />
         <Preference app:title="@string/es_custom_drivers_gpu"
             app:key="CustomDrivers|gpu_driver"
             app:summary="@string/es_hint_custom_drivers_gpu" />

@@ -51,8 +51,8 @@ static jstring j_simple_device_info(JNIEnv* env, jobject thiz)
     std::string info;
 
     auto get_gpu_info=[]()->std::string {
-        std::pair<std::string,bool> lib_info={"libvulkan.so",false};
-        vk_load(lib_info.first.c_str(),lib_info.second);
+        std::string lib_path = "libvulkan.so";
+        vk_load(lib_path.c_str());
 
         struct clean_t{
             std::vector<std::function<void()>> funcs;
@@ -86,12 +86,20 @@ static jstring j_simple_device_info(JNIEnv* env, jobject thiz)
             }
         }
         if(auto pdev=vk_get_physical_device(*inst);pdev) {
-            std::string gpu_name=vk_get_physical_device_properties(*pdev).deviceName;
+            auto props = vk_get_physical_device_properties(*pdev);
+            std::string gpu_name = props.deviceName;
+
+            // Capability Logging
+            __android_log_print(ANDROID_LOG_INFO, "AX360", "Device Capability: VendorID=0x%x DeviceID=0x%x API=0x%x",
+                                props.vendorID, props.deviceID, props.apiVersion);
+            __android_log_print(ANDROID_LOG_INFO, "AX360", "Device Capability Limits: maxDescriptorSetInputAttachments=%d maxStorageBufferRange=%d",
+                                props.limits.maxDescriptorSetInputAttachments, props.limits.maxStorageBufferRange);
+
             std::string gpu_vk_ver=[](uint32_t v) {
                 std::ostringstream oss;
                 oss << (v >> 22) << "." << ((v >> 12) & 0x3ff) << "." << (v & 0xfff);
                 return oss.str();
-            }(vk_get_physical_device_properties(*pdev).apiVersion);
+            }(props.apiVersion);
 
             std::string gpu_ext=[&]() {
                 std::ostringstream oss;

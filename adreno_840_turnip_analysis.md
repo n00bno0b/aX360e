@@ -72,7 +72,12 @@ if (properties.vendorID == 0x5143) { // Qualcomm Vendor ID
 }
 
 // Check for the Turnip driver name in properties.deviceName or driver properties if available via VK_KHR_driver_properties
-if (strstr(properties.deviceName, "Turnip") != nullptr || strstr(properties.deviceName, "Mesa") != nullptr) {
+VkPhysicalDeviceDriverProperties driver_properties = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES};
+VkPhysicalDeviceProperties2 properties2 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+properties2.pNext = &driver_properties;
+vkGetPhysicalDeviceProperties2(physical_device_, &properties2);
+
+if (driver_properties.driverID == VK_DRIVER_ID_MESA_TURNIP) {
     is_turnip_driver = true;
     XELOGI("Detected Mesa Turnip driver. Enabling TBDR optimizations.");
 }

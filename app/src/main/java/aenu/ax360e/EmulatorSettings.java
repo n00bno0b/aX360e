@@ -639,9 +639,9 @@ public class EmulatorSettings extends AppCompatActivity {
             boolean success = CustomDriverUtils.installDriver(requireContext(), uri);
             if (success) {
                 if (gpu_pref != null) gpu_pref.setSummary(getString(R.string.es_hint_custom_driver_installed));
-                Toast.makeText(requireContext(), getString(R.string.custom_driver_installed_success), Toast.LENGTH_SHORT).show();
+                Toast.makeText(requireContext(), R.string.custom_gpu_driver_install_success, Toast.LENGTH_SHORT).show();
             } else {
-                Toast.makeText(requireContext(), getString(R.string.custom_driver_install_failed), Toast.LENGTH_SHORT).show();
+                Toast.makeText(requireContext(), R.string.custom_gpu_driver_install_failed, Toast.LENGTH_SHORT).show();
             }
         }
 
@@ -657,7 +657,7 @@ public class EmulatorSettings extends AppCompatActivity {
             if (gpu_pref != null) {
                 gpu_pref.setSummary(getString(R.string.es_hint_custom_drivers_gpu));
             }
-            Toast.makeText(requireContext(), getString(R.string.custom_driver_removed), Toast.LENGTH_SHORT).show();
+            Toast.makeText(requireContext(), R.string.custom_gpu_driver_removed, Toast.LENGTH_SHORT).show();
         }
 
         void open_custom_driver_type_editor(){
