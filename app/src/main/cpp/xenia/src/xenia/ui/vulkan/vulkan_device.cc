@@ -163,6 +163,8 @@ std::unique_ptr<VulkanDevice> VulkanDevice::CreateIfSupported(
   bool ext_EXT_fragment_shader_interlock = false;
   bool ext_1_3_EXT_shader_demote_to_helper_invocation = false;
   bool ext_EXT_non_seamless_cube_map = false;
+  bool ext_EXT_shader_tile_image = false;
+  bool ext_QCOM_tile_shading = false;
   if (with_gpu_emulation) {
     // #15.
     XE_UI_VULKAN_LOCAL_PROMOTED_EXTENSION(KHR_sampler_mirror_clamp_to_edge, 1,
@@ -185,6 +187,10 @@ std::unique_ptr<VulkanDevice> VulkanDevice::CreateIfSupported(
           EXT_shader_demote_to_helper_invocation, 1, 3)
       // #423.
       XE_UI_VULKAN_LOCAL_EXTENSION(EXT_non_seamless_cube_map)
+      // #428. Tile-based rendering optimization for mobile GPUs.
+      XE_UI_VULKAN_STRUCT_EXTENSION(EXT_shader_tile_image)
+      // QCOM-specific tile shading for Adreno GPUs.
+      XE_UI_VULKAN_STRUCT_EXTENSION(QCOM_tile_shading)
     }
     if (properties.apiVersion >= VK_MAKE_API_VERSION(0, 1, 1, 0)) {
       // #237.
@@ -289,6 +295,14 @@ std::unique_ptr<VulkanDevice> VulkanDevice::CreateIfSupported(
       VkPhysicalDeviceNonSeamlessCubeMapFeaturesEXT,
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_NON_SEAMLESS_CUBE_MAP_FEATURES_EXT>
       features_EXT_non_seamless_cube_map;
+  VulkanFeatures<
+      VkPhysicalDeviceShaderTileImageFeaturesEXT,
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_TILE_IMAGE_FEATURES_EXT>
+      features_EXT_shader_tile_image;
+  VulkanFeatures<
+      VkPhysicalDeviceTileShadingFeaturesQCOM,
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TILE_SHADING_FEATURES_QCOM>
+      features_QCOM_tile_shading;
 
   if (get_physical_device_properties2_supported) {
     if (properties.apiVersion >= VK_MAKE_API_VERSION(0, 1, 2, 0)) {
@@ -321,6 +335,14 @@ std::unique_ptr<VulkanDevice> VulkanDevice::CreateIfSupported(
     if (ext_EXT_non_seamless_cube_map) {
       features_EXT_non_seamless_cube_map.Link(supported_features_2,
                                               device_create_info);
+    }
+    if (ext_EXT_shader_tile_image) {
+      features_EXT_shader_tile_image.Link(supported_features_2,
+                                          device_create_info);
+    }
+    if (ext_QCOM_tile_shading) {
+      features_QCOM_tile_shading.Link(supported_features_2,
+                                      device_create_info);
     }
     ifn.vkGetPhysicalDeviceProperties2(physical_device, &properties_2);
     ifn.vkGetPhysicalDeviceFeatures2(physical_device, &supported_features_2);
@@ -687,6 +709,58 @@ std::unique_ptr<VulkanDevice> VulkanDevice::CreateIfSupported(
     if (with_gpu_emulation) {
       XE_UI_VULKAN_FEATURE_2(features_EXT_non_seamless_cube_map,
                              nonSeamlessCubeMap)
+    }
+  }
+
+  // Detect Adreno GPU and Turnip driver for TBDR optimizations
+  device->properties_.isAdrenoGPU = (properties.vendorID == 0x5143);
+  if (device->properties_.isAdrenoGPU) {
+    XELOGI("Detected Qualcomm Adreno GPU (Vendor ID: 0x5143)");
+
+    // Check for Turnip driver indicators in device name or driver name
+    const char* device_name_lower = properties.deviceName;
+    if (ext_1_2_KHR_driver_properties) {
+      const char* driver_name = properties_1_2_KHR_driver_properties.driverName;
+      device->properties_.isTurnipDriver =
+          (std::strstr(device_name_lower, "Turnip") != nullptr ||
+           std::strstr(device_name_lower, "turnip") != nullptr ||
+           std::strstr(device_name_lower, "Mesa") != nullptr ||
+           std::strstr(device_name_lower, "mesa") != nullptr ||
+           std::strstr(device_name_lower, "freedreno") != nullptr ||
+           std::strstr(driver_name, "Turnip") != nullptr ||
+           std::strstr(driver_name, "turnip") != nullptr ||
+           std::strstr(driver_name, "Mesa") != nullptr ||
+           std::strstr(driver_name, "mesa") != nullptr);
+    } else {
+      // Fallback to device name only if driver properties not available
+      device->properties_.isTurnipDriver =
+          (std::strstr(device_name_lower, "Turnip") != nullptr ||
+           std::strstr(device_name_lower, "turnip") != nullptr ||
+           std::strstr(device_name_lower, "Mesa") != nullptr ||
+           std::strstr(device_name_lower, "mesa") != nullptr ||
+           std::strstr(device_name_lower, "freedreno") != nullptr);
+    }
+
+    if (device->properties_.isTurnipDriver) {
+      XELOGI("Detected Mesa Turnip driver - enabling TBDR optimizations");
+    }
+  }
+
+  if (ext_EXT_shader_tile_image) {
+    if (with_gpu_emulation) {
+      XE_UI_VULKAN_FEATURE_2(features_EXT_shader_tile_image,
+                             shaderTileImageColorReadAccess)
+      XE_UI_VULKAN_FEATURE_2(features_EXT_shader_tile_image,
+                             shaderTileImageDepthReadAccess)
+      XE_UI_VULKAN_FEATURE_2(features_EXT_shader_tile_image,
+                             shaderTileImageStencilReadAccess)
+    }
+  }
+
+  if (ext_QCOM_tile_shading) {
+    if (with_gpu_emulation) {
+      XE_UI_VULKAN_FEATURE_2(features_QCOM_tile_shading,
+                             qcomTileShading)
     }
   }
 
