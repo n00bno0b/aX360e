@@ -10,6 +10,8 @@
 #include "xenia/base/logging.h"
 #include "xenia/vfs/devices/stfs_xbox.h"
 #include "xenia/base/mapped_memory.h"
+#include "xenia/gpu/vulkan/vulkan_graphics_system.h"
+#include "xenia/gpu/vulkan/vulkan_pipeline_cache.h"
 
 #include "cpuinfo.h"
 #include "vkapi.h"

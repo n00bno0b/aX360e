@@ -52,6 +52,8 @@ class VulkanCommandProcessor final : public CommandProcessor {
 #include "../pm4_command_processor_declare.h"
 #undef OVERRIDING_BASE_CMDPROCESSOR
  public:
+  VulkanPipelineCache* pipeline_cache() const { return pipeline_cache_.get(); }
+
   // Single-descriptor layouts for use within a single frame.
   enum class SingleTransientDescriptorLayout {
     kUniformBufferCompute,

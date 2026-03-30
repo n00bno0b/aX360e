@@ -106,6 +106,8 @@ public class Emulator {
     public native void setup_surface(Surface sf);
     public native void boot() throws Emulator.BootException;
 
+    public native void setup_pipeline_cache_path(String path);
+
     public native void key_event(int key_code,boolean pressed,int value);
 
     public native void quit();
@@ -114,6 +116,8 @@ public class Emulator {
     public native boolean is_paused();
 
     public native void pause();
+
+    public native void flush_pipeline_cache();
 
     public native void resume();
 

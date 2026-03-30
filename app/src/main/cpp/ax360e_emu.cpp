@@ -29,6 +29,7 @@
 #include "xenia/gpu/graphics_system.h"
 #include "xenia/gpu/null/null_graphics_system.h"
 #include "xenia/gpu/vulkan/vulkan_graphics_system.h"
+#include "xenia/gpu/vulkan/vulkan_command_processor.h"
 #include "xenia/hid/nop/nop_hid.h"
 #include "xenia/kernel/xam/xam_module.h"
 #include "xenia/ui/windowed_app_context.h"
@@ -762,6 +763,16 @@ namespace ae{
         /*g_windowed_app_ref->app_context().CallInUIThread([]{
             g_windowed_app_ref->emu->Pause();
         });*/
+    }
+
+    void vk_flush_pipeline_cache() {
+        // Hook called on Android backgrounding to flush pipeline cache
+        if (g_windowed_app_ref && g_windowed_app_ref->emu && g_windowed_app_ref->emu->graphics_system() && g_windowed_app_ref->emu->graphics_system()->command_processor()) {
+            auto* processor = reinterpret_cast<xe::gpu::vulkan::VulkanCommandProcessor*>(g_windowed_app_ref->emu->graphics_system()->command_processor());
+            if (processor && processor->pipeline_cache()) {
+                processor->pipeline_cache()->FlushCache();
+            }
+        }
     }
     void resume(){
         //g_windowed_app_ref->emu->Resume();

@@ -170,13 +170,15 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
         ab.create().show();
     }
 
-    /*@Override
+    @Override
     protected void onPause()
     {
         super.onPause();
-        if(started)
+        if(started) {
+            Emulator.get.flush_pipeline_cache();
             if(Emulator.get.is_running())
-                Emulator.get.pause();;
+                Emulator.get.pause();
+        }
     }
 
     @Override
@@ -186,7 +188,7 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
         if(started)
             if(Emulator.get.is_paused())
                 Emulator.get.resume();
-    }*/
+    }
 
     @Override
     protected void onDestroy()
@@ -254,6 +256,7 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
             CustomDriverUtils.setupDriverEnv(this);
             CustomDriverUtils.applyGpuPreset(this);
 
+            Emulator.get.setup_pipeline_cache_path(new java.io.File(Application.get_app_data_dir(), "pipeline_cache").getAbsolutePath());
             Emulator.get.setup_surface(holder.getSurface());
             try {
                 Emulator.get.boot();

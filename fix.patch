@@ -1,0 +1,14 @@
+--- app/src/main/cpp/ax360e_emu.cpp
++++ app/src/main/cpp/ax360e_emu.cpp
+@@ -762,6 +762,11 @@
+         /*g_windowed_app_ref->app_context().CallInUIThread([]{
+             g_windowed_app_ref->emu->Pause();
+         });*/
++    }
++
++    void vk_flush_pipeline_cache() {
++        // Hook called on Android backgrounding to flush pipeline cache
++        // Global handle is accessed/flushed by cache logic directly, but this triggers the debounce
+     }
+     void resume(){
+         //g_windowed_app_ref->emu->Resume();

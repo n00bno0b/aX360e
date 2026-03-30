@@ -385,6 +385,16 @@ static void j_change_surface(JNIEnv* env,jobject self,jint w,jint h){
     ae::window_height=h;
 }
 
+#include "xenia/gpu/vulkan/vulkan_pipeline_cache.h"
+
+static void j_setup_pipeline_cache_path(JNIEnv* env, jobject self, jstring path) {
+    if (path) {
+        const char* path_str = env->GetStringUTFChars(path, nullptr);
+        xe::gpu::vulkan::VulkanPipelineCache::SetCacheDirectory(path_str);
+        env->ReleaseStringUTFChars(path, path_str);
+    }
+}
+
 static void j_setup_surface(JNIEnv* env,jobject self,jobject surface){
 
     if(ae::window){
@@ -403,6 +413,11 @@ static void j_key_event(JNIEnv* env,jobject self,jint key_code,jboolean pressed,
 
 static void j_pause(JNIEnv* env,jobject self){
     ae::pause();
+}
+
+extern void vk_flush_pipeline_cache();
+static void j_flush_pipeline_cache(JNIEnv* env,jobject self){
+    vk_flush_pipeline_cache();
 }
 
 static void j_resume(JNIEnv* env,jobject self){
@@ -426,12 +441,14 @@ int register_Emulator(JNIEnv* env){
             { "setup_game_path", "(Ljava/lang/String;)V", (void *) j_setup_game_path },
             { "setup_game_path", "(Laenu/emulator/Emulator$Path;)V", (void *) j_setup_game_path },
             { "setup_surface", "(Landroid/view/Surface;)V", (void *) j_setup_surface },
+            { "setup_pipeline_cache_path", "(Ljava/lang/String;)V", (void *) j_setup_pipeline_cache_path },
             { "boot", "()V", (void *) j_boot },
             { "key_event", "(IZI)V", (void *) j_key_event },
             { "quit", "()V", (void *) j_quit },
             { "is_running", "()Z", (void *) j_is_running },
             { "is_paused", "()Z", (void *) j_is_paused },
             { "pause", "()V", (void *) j_pause },
+            { "flush_pipeline_cache", "()V", (void *) j_flush_pipeline_cache },
             { "resume", "()V", (void *) j_resume },
             { "change_surface", "(II)V", (void *) j_change_surface },
     };

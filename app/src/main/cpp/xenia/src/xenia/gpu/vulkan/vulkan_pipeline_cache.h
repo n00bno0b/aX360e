@@ -56,8 +56,10 @@ class VulkanPipelineCache {
                       VkShaderStageFlags guest_shader_vertex_stages);
   ~VulkanPipelineCache();
 
+  static void SetCacheDirectory(const std::string& path);
   bool Initialize();
   void Shutdown();
+  void FlushCache();
 
   VulkanShader* LoadShader(xenos::ShaderType shader_type,
                            const uint32_t* host_address, uint32_t dword_count);
@@ -282,6 +284,11 @@ class VulkanPipelineCache {
   const RegisterFile& register_file_;
   VulkanRenderTargetCache& render_target_cache_;
   VkShaderStageFlags guest_shader_vertex_stages_;
+
+  static std::string cache_directory_;
+  VkPipelineCache pipeline_cache_ = VK_NULL_HANDLE;
+  bool is_pipeline_cache_dirty_ = false;
+  uint32_t new_pipeline_count_ = 0;
 
   // Temporary storage for AnalyzeUcode calls on the processor thread.
   StringBuffer ucode_disasm_buffer_;
