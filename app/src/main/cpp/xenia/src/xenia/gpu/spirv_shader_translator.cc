@@ -35,7 +35,10 @@ SpirvShaderTranslator::Features::Features(bool all)
       denorm_flush_to_zero_float32(all),
       rounding_mode_rte_float32(all),
       fragment_shader_sample_interlock(all),
-      demote_to_helper_invocation(all) {}
+      demote_to_helper_invocation(all),
+      shader_tile_image_color_read_access(all),
+      shader_tile_image_depth_read_access(all),
+      shader_tile_image_stencil_read_access(all) {}
 
 SpirvShaderTranslator::Features::Features(
     const ui::vulkan::VulkanDevice* const vulkan_device)
@@ -59,7 +62,13 @@ SpirvShaderTranslator::Features::Features(
       fragment_shader_sample_interlock(
           vulkan_device->properties().fragmentShaderSampleInterlock),
       demote_to_helper_invocation(
-          vulkan_device->properties().shaderDemoteToHelperInvocation) {
+          vulkan_device->properties().shaderDemoteToHelperInvocation),
+      shader_tile_image_color_read_access(
+          vulkan_device->properties().shaderTileImageColorReadAccess),
+      shader_tile_image_depth_read_access(
+          vulkan_device->properties().shaderTileImageDepthReadAccess),
+      shader_tile_image_stencil_read_access(
+          vulkan_device->properties().shaderTileImageStencilReadAccess) {
   const uint32_t vulkan_api_version = vulkan_device->properties().apiVersion;
   if (vulkan_api_version >= VK_MAKE_API_VERSION(0, 1, 2, 0)) {
     spirv_version = spv::Spv_1_5;

@@ -149,6 +149,21 @@ class VulkanDevice {
     // VK_EXT_non_seamless_cube_map (#423)
 
     bool nonSeamlessCubeMap = false;
+
+    // VK_EXT_shader_tile_image (#428)
+
+    bool shaderTileImageColorReadAccess = false;
+    bool shaderTileImageDepthReadAccess = false;
+    bool shaderTileImageStencilReadAccess = false;
+
+    // VK_QCOM_tile_shading
+
+    bool qcomTileShading = false;
+
+    // Driver detection for optimizations
+
+    bool isTurnipDriver = false;
+    bool isAdrenoGPU = false;
   };
 
   // Properties of the core API and enabled extensions, and enabled features.
@@ -174,6 +189,9 @@ class VulkanDevice {
     bool ext_EXT_memory_budget = false;                 // #238
     // Has optional features not implied by this being true.
     bool ext_1_3_KHR_maintenance4 = false;  // #414
+    // Mobile GPU tile-based rendering optimizations
+    bool ext_EXT_shader_tile_image = false;  // #428
+    bool ext_QCOM_tile_shading = false;      // QCOM extension
   };
 
   const Extensions& extensions() const { return extensions_; }

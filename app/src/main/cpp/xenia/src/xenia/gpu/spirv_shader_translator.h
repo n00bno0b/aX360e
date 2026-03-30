@@ -344,6 +344,11 @@ class SpirvShaderTranslator : public ShaderTranslator {
     bool fragment_shader_sample_interlock;
 
     bool demote_to_helper_invocation;
+
+    // VK_EXT_shader_tile_image - for TBDR optimization on Adreno GPUs
+    bool shader_tile_image_color_read_access;
+    bool shader_tile_image_depth_read_access;
+    bool shader_tile_image_stencil_read_access;
   };
 
   SpirvShaderTranslator(const Features& features,
@@ -353,7 +358,8 @@ class SpirvShaderTranslator : public ShaderTranslator {
       : features_(features),
         native_2x_msaa_with_attachments_(native_2x_msaa_with_attachments),
         native_2x_msaa_no_attachments_(native_2x_msaa_no_attachments),
-        edram_fragment_shader_interlock_(edram_fragment_shader_interlock) {}
+        edram_fragment_shader_interlock_(edram_fragment_shader_interlock),
+        edram_tile_image_enabled_(false) {}
 
   uint64_t GetDefaultVertexShaderModification(
       uint32_t dynamic_addressable_register_count,
@@ -494,6 +500,18 @@ class SpirvShaderTranslator : public ShaderTranslator {
                Modification::DepthStencilMode::kEarlyHint &&
            !edram_fragment_shader_interlock_ &&
            current_shader().implicit_early_z_write_allowed();
+  }
+
+  // Phase 4A: Check if tile images can be used for eDRAM optimization.
+  // Returns true when all conditions are met:
+  // 1. Fragment shader interlock is enabled (FSI path)
+  // 2. Tile image color read access is supported
+  // 3. This is a pixel shader
+  // Phase 4B TODO: Use this to conditionally emit tile image operations.
+  bool CanUseTileImagesForEdram() const {
+    return edram_fragment_shader_interlock_ &&
+           features_.shader_tile_image_color_read_access &&
+           is_pixel_shader();
   }
 
   uint32_t GetModificationInterpolatorMask() const {
@@ -720,6 +738,13 @@ class SpirvShaderTranslator : public ShaderTranslator {
   // flow of the main function, and that there are no returns before either
   // (there's a single return from the shader).
   bool edram_fragment_shader_interlock_;
+
+  // Phase 4A: Infrastructure flag for VK_EXT_shader_tile_image support.
+  // When true, indicates the hardware supports tile images for eDRAM optimization.
+  // Set during initialization based on: Turnip driver + FSI + extension support.
+  // Phase 4B will use this to conditionally generate tile image operations.
+  // TODO(Phase 4B): Implement shader generation using OpColorAttachmentReadEXT
+  bool edram_tile_image_enabled_;
 
   // Is currently writing the empty depth-only pixel shader, such as for depth
   // and stencil testing with fragment shader interlock.

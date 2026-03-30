@@ -143,6 +143,9 @@ class VulkanCommandProcessor final : public CommandProcessor {
 
   void ClearCaches() override;
 
+  void InitializeShaderStorage(const std::filesystem::path& cache_root,
+                               uint32_t title_id, bool blocking) override;
+
   void TracePlaybackWroteMemory(uint32_t base_ptr, uint32_t length) override;
 
   void RestoreEdramSnapshot(const void* snapshot) override;
