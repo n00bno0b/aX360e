@@ -197,6 +197,10 @@
     <string name="es_hint_custom_drivers_gpu_remove">Remove currently installed custom Turnip driver.</string>
     <string name="es_custom_drivers_load_type">Load Type</string>
     <string name="es_hint_custom_drivers_load_type">Open type editor for HID driver chain.</string>
+    <string name="es_hint_custom_driver_installed">Custom Turnip Driver Installed</string>
+    <string name="custom_driver_installed_success">Driver installed successfully</string>
+    <string name="custom_driver_installed_failed">Failed to install driver</string>
+    <string name="custom_driver_removed">Custom GPU driver removed</string>
     <string name="custom_driver_type_editor_title">Custom Driver Type</string>
     <string name="custom_driver_type_input_hint">Enter HID type (example: android,nop)</string>
     <string name="custom_driver_type_description">Set the HID load type string used by the emulator runtime.</string>

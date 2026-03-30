@@ -629,7 +629,7 @@ public class EmulatorSettings extends AppCompatActivity {
                 // Determine if driver is installed
                 if (CustomDriverUtils.getDriverDirectory(requireContext()).exists() &&
                     new java.io.File(CustomDriverUtils.getDriverDirectory(requireContext()), "vk_icd.json").exists()) {
-                    if (gpu_pref != null) gpu_pref.setSummary("Custom Turnip Driver Installed");
+                    if (gpu_pref != null) gpu_pref.setSummary(getString(R.string.es_hint_custom_driver_installed));
                 } else {
                     if (gpu_pref != null) gpu_pref.setSummary(getString(R.string.es_hint_custom_drivers_gpu));
                 }
@@ -638,10 +638,10 @@ public class EmulatorSettings extends AppCompatActivity {
 
             boolean success = CustomDriverUtils.installDriver(requireContext(), uri);
             if (success) {
-                if (gpu_pref != null) gpu_pref.setSummary("Custom Turnip Driver Installed");
-                Toast.makeText(requireContext(), "Driver installed successfully", Toast.LENGTH_SHORT).show();
+                if (gpu_pref != null) gpu_pref.setSummary(getString(R.string.es_hint_custom_driver_installed));
+                Toast.makeText(requireContext(), getString(R.string.custom_driver_installed_success), Toast.LENGTH_SHORT).show();
             } else {
-                Toast.makeText(requireContext(), "Failed to install driver", Toast.LENGTH_SHORT).show();
+                Toast.makeText(requireContext(), getString(R.string.custom_driver_installed_failed), Toast.LENGTH_SHORT).show();
             }
         }
 
@@ -657,7 +657,7 @@ public class EmulatorSettings extends AppCompatActivity {
             if (gpu_pref != null) {
                 gpu_pref.setSummary(getString(R.string.es_hint_custom_drivers_gpu));
             }
-            Toast.makeText(requireContext(), "Custom GPU driver removed", Toast.LENGTH_SHORT).show();
+            Toast.makeText(requireContext(), getString(R.string.custom_driver_removed), Toast.LENGTH_SHORT).show();
         }
 
         void open_custom_driver_type_editor(){
