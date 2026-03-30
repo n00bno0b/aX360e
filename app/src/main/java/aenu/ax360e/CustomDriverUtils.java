@@ -2,6 +2,7 @@ package aenu.ax360e;
 
 import android.content.Context;
 import android.net.Uri;
+import android.os.Build;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.util.Log;
@@ -15,6 +16,8 @@ import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -22,6 +25,10 @@ public class CustomDriverUtils {
 
     private static final String TAG = "CustomDriverUtils";
     private static final String DRIVER_DIR_NAME = "custom_drivers";
+    // Decompression bomb protection: 100MB total extraction limit
+    private static final long MAX_EXTRACTION_SIZE = 100 * 1024 * 1024;
+    // Per-file size limit: 50MB
+    private static final long MAX_FILE_SIZE = 50 * 1024 * 1024;
 
     public static File getDriverDirectory(Context context) {
         return context.getDir(DRIVER_DIR_NAME, Context.MODE_PRIVATE);
@@ -36,49 +43,90 @@ public class CustomDriverUtils {
         stagingDir.mkdirs();
 
         String driverSoName = null;
-        try (InputStream is = context.getContentResolver().openInputStream(zipUri)) {
+        long totalExtractedSize = 0;
+        try (InputStream is = context.getContentResolver().openInputStream(zipUri);
+             ZipInputStream zis = new ZipInputStream(is)) {
             if (is == null) {
                 Log.e(TAG, "Failed to open selected ZIP URI");
                 return false;
             }
-            try (ZipInputStream zis = new ZipInputStream(is)) {
-                ZipEntry entry;
-                String canonicalDirPath = stagingDir.getCanonicalPath();
-                while ((entry = zis.getNextEntry()) != null) {
-                    if (!entry.isDirectory()) {
-                        File file = new File(stagingDir, entry.getName());
-                        String canonicalFilePath = file.getCanonicalPath();
-                        if (!canonicalFilePath.startsWith(canonicalDirPath + File.separator)) {
-                            throw new SecurityException("Entry is outside of the target dir: " + entry.getName());
-                        }
-
-                        // Create parent directories if needed
-                        file.getParentFile().mkdirs();
-
-                        try (FileOutputStream fos = new FileOutputStream(file)) {
-                            byte[] buffer = new byte[1024];
-                            int length;
-                            while ((length = zis.read(buffer)) > 0) {
-                                fos.write(buffer, 0, length);
-                            }
-                        }
-                        if (entry.getName().endsWith(".so") && entry.getName().contains("vulkan")) {
-                            driverSoName = entry.getName();
-                        }
-                    }
+            ZipEntry entry;
+            String canonicalDirPath = stagingDir.getCanonicalPath();
+            while ((entry = zis.getNextEntry()) != null) {
+                // Reject symlinks for security
+                if (entry.isDirectory()) {
                     zis.closeEntry();
+                    continue;
                 }
+
+                String entryName = entry.getName();
+                // Reject absolute paths and parent traversal attempts
+                if (entryName.startsWith("/") || entryName.contains("..")) {
+                    throw new SecurityException("Invalid entry path: " + entryName);
+                }
+
+                File file = new File(stagingDir, entryName);
+                String canonicalFilePath = file.getCanonicalPath();
+                if (!canonicalFilePath.startsWith(canonicalDirPath + File.separator)) {
+                    throw new SecurityException("Entry is outside of the target dir: " + entryName);
+                }
+
+                // Check per-file size limit
+                long entrySize = entry.getSize();
+                if (entrySize > MAX_FILE_SIZE) {
+                    throw new SecurityException("Entry exceeds max file size: " + entryName);
+                }
+
+                // Create parent directories if needed
+                file.getParentFile().mkdirs();
+
+                try (FileOutputStream fos = new FileOutputStream(file)) {
+                    byte[] buffer = new byte[8192];
+                    int length;
+                    long extractedBytes = 0;
+                    while ((length = zis.read(buffer)) > 0) {
+                        extractedBytes += length;
+                        totalExtractedSize += length;
+                        // Check decompression bomb limits
+                        if (totalExtractedSize > MAX_EXTRACTION_SIZE) {
+                            throw new SecurityException("Extraction exceeds total size limit");
+                        }
+                        fos.write(buffer, 0, length);
+                    }
+                    // Sync file to disk
+                    fos.getFD().sync();
+                }
+                if (entryName.endsWith(".so") && entryName.contains("vulkan")) {
+                    driverSoName = entryName;
+                }
+                zis.closeEntry();
             }
 
             if (driverSoName != null) {
                 generateIcdManifest(stagingDir, driverSoName);
 
-                // Swap staging with actual driver dir
+                // Swap staging with actual driver dir using atomic move
                 if (dir.exists()) {
                     deleteRecursive(dir);
                 }
-                if (!stagingDir.renameTo(dir)) {
-                    throw new IOException("Failed to rename staging directory to final driver directory");
+
+                // Use Files.move with ATOMIC_MOVE on API 26+, fallback to renameTo
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    try {
+                        Files.move(stagingDir.toPath(), dir.toPath(),
+                                StandardCopyOption.REPLACE_EXISTING,
+                                StandardCopyOption.ATOMIC_MOVE);
+                    } catch (UnsupportedOperationException e) {
+                        // ATOMIC_MOVE not supported, fall back to renameTo
+                        Log.w(TAG, "Atomic move not supported, using renameTo", e);
+                        if (!stagingDir.renameTo(dir)) {
+                            throw new IOException("Failed to rename staging directory to final driver directory");
+                        }
+                    }
+                } else {
+                    if (!stagingDir.renameTo(dir)) {
+                        throw new IOException("Failed to rename staging directory to final driver directory");
+                    }
                 }
 
                 return true;
@@ -109,6 +157,11 @@ public class CustomDriverUtils {
 
         try (FileWriter writer = new FileWriter(jsonFile)) {
             writer.write(rootObj.toString(4));
+            writer.flush();
+        }
+        // Sync JSON file to disk to ensure it's persisted before finalization
+        try (FileOutputStream fos = new FileOutputStream(jsonFile, true)) {
+            fos.getFD().sync();
         }
     }
 
@@ -117,12 +170,17 @@ public class CustomDriverUtils {
         File icdFile = new File(dir, "vk_icd.json");
         if (icdFile.exists()) {
             try {
-                Os.setenv("VK_ICD_FILENAMES", icdFile.getAbsolutePath(), true);
-                Os.setenv("VK_DRIVER_FILES", icdFile.getAbsolutePath(), true);
-                Log.i(TAG, "Custom GPU driver environment variables set.");
+                String icdPath = icdFile.getAbsolutePath();
+                Os.setenv("VK_ICD_FILENAMES", icdPath, true);
+                Os.setenv("VK_DRIVER_FILES", icdPath, true);
+                Log.i(TAG, "Custom GPU driver environment variables set:");
+                Log.i(TAG, "  VK_ICD_FILENAMES=" + icdPath);
+                Log.i(TAG, "  VK_DRIVER_FILES=" + icdPath);
             } catch (ErrnoException e) {
-                Log.e(TAG, "Failed to set custom driver env variables", e);
+                Log.e(TAG, "Failed to set custom driver env variables (errno: " + e.errno + ")", e);
             }
+        } else {
+            Log.w(TAG, "Custom driver ICD file not found, skipping env setup");
         }
     }
 
