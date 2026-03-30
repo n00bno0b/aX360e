@@ -29,53 +29,89 @@ public class CustomDriverUtils {
 
     public static boolean installDriver(Context context, Uri zipUri) {
         File dir = getDriverDirectory(context);
-        // Clear previous driver
-        if (dir.exists()) {
-            deleteRecursive(dir);
+        File stagingDir = new File(dir.getParentFile(), "staging");
+
+        // Clean up any previous staging directory
+        if (stagingDir.exists()) {
+            deleteRecursive(stagingDir);
         }
-        dir.mkdirs();
+        stagingDir.mkdirs();
 
         String driverSoName = null;
-        try (InputStream is = context.getContentResolver().openInputStream(zipUri);
-             ZipInputStream zis = new ZipInputStream(is)) {
+        InputStream is = null;
+        try {
+            is = context.getContentResolver().openInputStream(zipUri);
 
-            ZipEntry entry;
-            String canonicalDirPath = dir.getCanonicalPath();
-            while ((entry = zis.getNextEntry()) != null) {
-                if (!entry.isDirectory()) {
-                    File file = new File(dir, entry.getName());
-                    String canonicalFilePath = file.getCanonicalPath();
-                    if (!canonicalFilePath.startsWith(canonicalDirPath + File.separator)) {
-                        throw new SecurityException("Entry is outside of the target dir: " + entry.getName());
-                    }
-
-                    // Create parent directories if needed
-                    file.getParentFile().mkdirs();
-
-                    try (FileOutputStream fos = new FileOutputStream(file)) {
-                        byte[] buffer = new byte[1024];
-                        int length;
-                        while ((length = zis.read(buffer)) > 0) {
-                            fos.write(buffer, 0, length);
-                        }
-                    }
-                    if (entry.getName().endsWith(".so") && entry.getName().contains("vulkan")) {
-                        driverSoName = entry.getName();
-                    }
-                }
-                zis.closeEntry();
-            }
-
-            if (driverSoName != null) {
-                generateIcdManifest(dir, driverSoName);
-                return true;
-            } else {
-                Log.e(TAG, "No vulkan .so file found in zip.");
+            // Check if InputStream is null
+            if (is == null) {
+                Log.e(TAG, "Failed to open input stream - URI may be invalid or inaccessible");
+                deleteRecursive(stagingDir);
                 return false;
             }
-        } catch (IOException | JSONException e) {
+
+            try (ZipInputStream zis = new ZipInputStream(is)) {
+                ZipEntry entry;
+                String canonicalDirPath = stagingDir.getCanonicalPath();
+                while ((entry = zis.getNextEntry()) != null) {
+                    if (!entry.isDirectory()) {
+                        File file = new File(stagingDir, entry.getName());
+                        String canonicalFilePath = file.getCanonicalPath();
+                        if (!canonicalFilePath.startsWith(canonicalDirPath + File.separator)) {
+                            throw new SecurityException("Entry is outside of the target dir: " + entry.getName());
+                        }
+
+                        // Create parent directories if needed
+                        file.getParentFile().mkdirs();
+
+                        try (FileOutputStream fos = new FileOutputStream(file)) {
+                            byte[] buffer = new byte[1024];
+                            int length;
+                            while ((length = zis.read(buffer)) > 0) {
+                                fos.write(buffer, 0, length);
+                            }
+                        }
+                        if (entry.getName().endsWith(".so") && entry.getName().contains("vulkan")) {
+                            driverSoName = entry.getName();
+                        }
+                    }
+                    zis.closeEntry();
+                }
+
+                if (driverSoName != null) {
+                    generateIcdManifest(stagingDir, driverSoName);
+
+                    // Validation succeeded, now atomically swap staging into place
+                    // Delete the old driver directory
+                    if (dir.exists()) {
+                        deleteRecursive(dir);
+                    }
+
+                    // Rename staging to the driver directory
+                    if (!stagingDir.renameTo(dir)) {
+                        Log.e(TAG, "Failed to rename staging directory to driver directory");
+                        deleteRecursive(stagingDir);
+                        return false;
+                    }
+
+                    return true;
+                } else {
+                    Log.e(TAG, "No vulkan .so file found in zip.");
+                    deleteRecursive(stagingDir);
+                    return false;
+                }
+            }
+        } catch (IOException | JSONException | SecurityException | NullPointerException e) {
             Log.e(TAG, "Failed to install driver", e);
+            deleteRecursive(stagingDir);
             return false;
+        } finally {
+            if (is != null) {
+                try {
+                    is.close();
+                } catch (IOException e) {
+                    Log.e(TAG, "Failed to close input stream", e);
+                }
+            }
         }
     }
 

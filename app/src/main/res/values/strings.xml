@@ -508,4 +508,9 @@ This Config requires you to pair an analog and digitial flag together while digi
 2 = F16C
 -1 = Detect and utilize all possible processor features</string>
 
+    <string name="es_hint_custom_driver_installed">Custom Turnip Driver Installed</string>
+    <string name="custom_driver_installed_success">Driver installed successfully</string>
+    <string name="custom_driver_install_failed">Failed to install driver</string>
+    <string name="custom_driver_removed">Custom GPU driver removed</string>
+
 </resources>
