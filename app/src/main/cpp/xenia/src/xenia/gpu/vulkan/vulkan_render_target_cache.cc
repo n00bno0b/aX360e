@@ -798,14 +798,21 @@ bool VulkanRenderTargetCache::Initialize(uint32_t shared_memory_binding_count) {
         VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
     fsi_subpass_dependencies[0].dstAccessMask =
         VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-    fsi_subpass_dependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+    // BY_REGION is not meaningful for render passes with 0 attachments.
+    // Rely on explicit buffer barriers for SSBO synchronization.
+    fsi_subpass_dependencies[0].dependencyFlags = 0;
 
     fsi_subpass_dependencies[1] = fsi_subpass_dependencies[0];
     std::swap(fsi_subpass_dependencies[1].srcSubpass,
               fsi_subpass_dependencies[1].dstSubpass);
 
     fsi_subpass_dependencies[1].srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-    fsi_subpass_dependencies[1].dstStageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+    // Narrow dstStageMask to actual EDRAM buffer consumers to avoid unnecessary
+    // pipeline bubbles on TBDR GPUs. Explicit buffer barriers handle memory
+    // correctness.
+    fsi_subpass_dependencies[1].dstStageMask =
+        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT;
     fsi_subpass_dependencies[1].srcAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
     fsi_subpass_dependencies[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
     VkRenderPassCreateInfo fsi_render_pass_create_info;
