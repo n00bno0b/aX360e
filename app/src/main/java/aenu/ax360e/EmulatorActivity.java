@@ -252,6 +252,7 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
             started=true;
 
             CustomDriverUtils.setupDriverEnv(this);
+            CustomDriverUtils.applyGpuPreset(this);
 
             Emulator.get.setup_surface(holder.getSurface());
             try {

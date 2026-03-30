@@ -12,7 +12,7 @@
 namespace {
     void* lib_handle = nullptr;
 }
-void vk_load(const char* lib_path,bool is_adreno_custom){
+void vk_load(const char* lib_path){
     if (lib_handle) return;
     lib_handle = dlopen(lib_path, RTLD_NOW);
 #define VKFN(func) func##_=reinterpret_cast<PFN_##func>(dlsym(lib_handle, #func))

@@ -29,31 +29,26 @@ public class CustomDriverUtils {
 
     public static boolean installDriver(Context context, Uri zipUri) {
         File dir = getDriverDirectory(context);
-        File stagingDir = new File(dir.getParentFile(), "staging");
-
-        // Clean up any previous staging directory
+        File stagingDir = new File(dir.getParentFile(), DRIVER_DIR_NAME + "_staging");
         if (stagingDir.exists()) {
             deleteRecursive(stagingDir);
         }
         stagingDir.mkdirs();
 
         String driverSoName = null;
-        try {
-            InputStream is = context.getContentResolver().openInputStream(zipUri);
+        try (InputStream is = context.getContentResolver().openInputStream(zipUri)) {
             if (is == null) {
-                Log.e(TAG, "Failed to open input stream from URI");
-                deleteRecursive(stagingDir);
+                Log.e(TAG, "Failed to open selected ZIP URI");
                 return false;
             }
-
             try (ZipInputStream zis = new ZipInputStream(is)) {
                 ZipEntry entry;
-                String canonicalStagingPath = stagingDir.getCanonicalPath();
+                String canonicalDirPath = stagingDir.getCanonicalPath();
                 while ((entry = zis.getNextEntry()) != null) {
                     if (!entry.isDirectory()) {
                         File file = new File(stagingDir, entry.getName());
                         String canonicalFilePath = file.getCanonicalPath();
-                        if (!canonicalFilePath.startsWith(canonicalStagingPath + File.separator)) {
+                        if (!canonicalFilePath.startsWith(canonicalDirPath + File.separator)) {
                             throw new SecurityException("Entry is outside of the target dir: " + entry.getName());
                         }
 
@@ -73,29 +68,29 @@ public class CustomDriverUtils {
                     }
                     zis.closeEntry();
                 }
-
-                if (driverSoName != null) {
-                    generateIcdManifest(stagingDir, driverSoName);
-
-                    // Validation succeeded, atomically swap staging into place
-                    if (dir.exists()) {
-                        deleteRecursive(dir);
-                    }
-                    if (!stagingDir.renameTo(dir)) {
-                        Log.e(TAG, "Failed to move staging directory to driver directory");
-                        deleteRecursive(stagingDir);
-                        return false;
-                    }
-                    return true;
-                } else {
-                    Log.e(TAG, "No vulkan .so file found in zip.");
-                    deleteRecursive(stagingDir);
-                    return false;
-                }
             }
-        } catch (IOException | JSONException | SecurityException | NullPointerException e) {
+
+            if (driverSoName != null) {
+                generateIcdManifest(stagingDir, driverSoName);
+
+                // Swap staging with actual driver dir
+                if (dir.exists()) {
+                    deleteRecursive(dir);
+                }
+                if (!stagingDir.renameTo(dir)) {
+                    throw new IOException("Failed to rename staging directory to final driver directory");
+                }
+
+                return true;
+            } else {
+                Log.e(TAG, "No vulkan .so file found in zip.");
+                return false;
+            }
+        } catch (IOException | JSONException | SecurityException e) {
             Log.e(TAG, "Failed to install driver", e);
-            deleteRecursive(stagingDir);
+            if (stagingDir.exists()) {
+                deleteRecursive(stagingDir);
+            }
             return false;
         }
     }
@@ -134,6 +129,39 @@ public class CustomDriverUtils {
     public static void removeDriver(Context context) {
         File dir = getDriverDirectory(context);
         deleteRecursive(dir);
+    }
+
+    public static void applyGpuPreset(Context context) {
+        // Read the CustomDrivers|gpu_preset config via SharedPreferences or Emulator.Config
+        // Here we modify the global Emulator config dynamically based on the preset.
+        aenu.emulator.Emulator.Config config;
+        try {
+            config = aenu.emulator.Emulator.Config.open_config_file(Application.get_global_config_file().getAbsolutePath());
+        } catch (aenu.emulator.Emulator.ConfigFileException e) {
+            Log.e(TAG, "Failed to load global config file for GPU preset", e);
+            return;
+        }
+
+        String preset = config.load_config_entry("CustomDrivers|gpu_preset");
+        if (preset == null || preset.isEmpty()) {
+            preset = "balanced"; // Default
+        }
+
+        Log.i(TAG, "Applying GPU preset: " + preset);
+        if ("strict".equals(preset)) {
+            config.save_config_entry("GPU|render_target_path_vulkan", "fsi");
+            config.save_config_entry("GPU|depth_float24_convert_in_pixel_shader", "true");
+            config.save_config_entry("GPU|mrt_edram_used_range_clamp_to_min", "true");
+        } else if ("balanced".equals(preset)) {
+            config.save_config_entry("GPU|render_target_path_vulkan", "fbo");
+            config.save_config_entry("GPU|depth_float24_convert_in_pixel_shader", "false");
+            config.save_config_entry("GPU|mrt_edram_used_range_clamp_to_min", "false");
+        } else if ("fast".equals(preset)) {
+            config.save_config_entry("GPU|render_target_path_vulkan", "any");
+            config.save_config_entry("GPU|depth_float24_convert_in_pixel_shader", "false");
+            config.save_config_entry("GPU|mrt_edram_used_range_clamp_to_min", "false");
+            config.save_config_entry("GPU|execute_unclipped_draw_vs_on_cpu", "false");
+        }
     }
 
     private static void deleteRecursive(File fileOrDirectory) {

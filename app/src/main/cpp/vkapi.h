@@ -14,7 +14,7 @@
 #include "vksym.h"
 #undef VKFN
 
-void vk_load(const char* lib_path,bool is_adreno_custom=false);
+void vk_load(const char* lib_path);
 void vk_unload();
 
 #endif //APS3E_VKAPI_H
