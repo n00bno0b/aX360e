@@ -504,12 +504,14 @@ class SpirvShaderTranslator : public ShaderTranslator {
 
   // Phase 4A: Check if tile images can be used for eDRAM optimization.
   // Returns true when all conditions are met:
-  // 1. Fragment shader interlock is enabled (FSI path)
-  // 2. Tile image color read access is supported
-  // 3. This is a pixel shader
+  // 1. The tile image path is enabled at runtime (edram_tile_image_enabled_)
+  // 2. Fragment shader interlock is enabled (FSI path)
+  // 3. Tile image color read access is supported
+  // 4. This is a pixel shader
   // Phase 4B TODO: Use this to conditionally emit tile image operations.
   bool CanUseTileImagesForEdram() const {
-    return edram_fragment_shader_interlock_ &&
+    return edram_tile_image_enabled_ &&
+           edram_fragment_shader_interlock_ &&
            features_.shader_tile_image_color_read_access &&
            is_pixel_shader();
   }

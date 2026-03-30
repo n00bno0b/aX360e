@@ -140,8 +140,7 @@ void VulkanPipelineCache::InitializePipelineCache(
 
   // Try to load existing pipeline cache from disk
   std::vector<uint8_t> cache_data;
-  FILE* cache_file = nullptr;
-  xe::filesystem::OpenFile(pipeline_cache_path_, "rb", &cache_file);
+  FILE* cache_file = xe::filesystem::OpenFile(pipeline_cache_path_, "rb");
   if (cache_file) {
     fseek(cache_file, 0, SEEK_END);
     size_t cache_size = ftell(cache_file);
@@ -203,8 +202,7 @@ void VulkanPipelineCache::ShutdownPipelineCache() {
         result = dfn.vkGetPipelineCacheData(device, vk_pipeline_cache_,
                                             &cache_size, cache_data.data());
         if (result == VK_SUCCESS) {
-          FILE* cache_file = nullptr;
-          xe::filesystem::OpenFile(pipeline_cache_path_, "wb", &cache_file);
+          FILE* cache_file = xe::filesystem::OpenFile(pipeline_cache_path_, "wb");
           if (cache_file) {
             size_t bytes_written = fwrite(cache_data.data(), 1, cache_size, cache_file);
             fclose(cache_file);
