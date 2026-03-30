@@ -97,6 +97,14 @@ void VulkanCommandProcessor::ClearCaches() {
   cache_clear_requested_ = true;
 }
 
+void VulkanCommandProcessor::InitializeShaderStorage(
+    const std::filesystem::path& cache_root, uint32_t title_id, bool blocking) {
+  CommandProcessor::InitializeShaderStorage(cache_root, title_id, blocking);
+  if (pipeline_cache_) {
+    pipeline_cache_->InitializePipelineCache(cache_root, title_id);
+  }
+}
+
 void VulkanCommandProcessor::TracePlaybackWroteMemory(uint32_t base_ptr,
                                                       uint32_t length) {
   shared_memory_->MemoryInvalidationCallback(base_ptr, length, true);

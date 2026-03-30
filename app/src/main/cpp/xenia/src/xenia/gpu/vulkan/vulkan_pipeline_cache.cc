@@ -11,9 +11,11 @@
 
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
 
 #include "third_party/fmt/include/fmt/format.h"
 #include "xenia/base/assert.h"
+#include "xenia/base/filesystem.h"
 #include "xenia/base/logging.h"
 #include "xenia/base/math.h"
 #include "xenia/base/profiling.h"
@@ -85,6 +87,9 @@ void VulkanPipelineCache::Shutdown() {
   const ui::vulkan::VulkanDevice::Functions& dfn = vulkan_device->functions();
   const VkDevice device = vulkan_device->device();
 
+  // Shutdown pipeline cache first to save it before destroying pipelines
+  ShutdownPipelineCache();
+
   // Destroy all pipelines.
   last_pipeline_ = nullptr;
   for (const auto& pipeline_pair : pipelines_) {
@@ -114,6 +119,115 @@ void VulkanPipelineCache::Shutdown() {
 
   // Shut down shader translation.
   shader_translator_.reset();
+}
+
+void VulkanPipelineCache::InitializePipelineCache(
+    const std::filesystem::path& cache_root, uint32_t title_id) {
+  ShutdownPipelineCache();
+
+  const ui::vulkan::VulkanDevice* const vulkan_device =
+      command_processor_.GetVulkanDevice();
+  const ui::vulkan::VulkanDevice::Functions& dfn = vulkan_device->functions();
+  const VkDevice device = vulkan_device->device();
+
+  // Build pipeline cache file path
+  auto pipeline_cache_dir = cache_root / "vulkan_pipelines";
+  std::filesystem::create_directories(pipeline_cache_dir);
+
+  pipeline_cache_path_ = pipeline_cache_dir /
+                         fmt::format("{:08X}.bin", title_id);
+  pipeline_cache_title_id_ = title_id;
+
+  // Try to load existing pipeline cache from disk
+  std::vector<uint8_t> cache_data;
+  FILE* cache_file = nullptr;
+  xe::filesystem::OpenFile(pipeline_cache_path_, "rb", &cache_file);
+  if (cache_file) {
+    fseek(cache_file, 0, SEEK_END);
+    size_t cache_size = ftell(cache_file);
+    fseek(cache_file, 0, SEEK_SET);
+
+    if (cache_size > 0) {
+      cache_data.resize(cache_size);
+      size_t bytes_read = fread(cache_data.data(), 1, cache_size, cache_file);
+      if (bytes_read != cache_size) {
+        XELOGW("VulkanPipelineCache: Failed to read complete cache file, ignoring");
+        cache_data.clear();
+      } else {
+        XELOGI("VulkanPipelineCache: Loaded {}KB cache for title {:08X}",
+               cache_size / 1024, title_id);
+      }
+    }
+    fclose(cache_file);
+  }
+
+  // Create VkPipelineCache
+  VkPipelineCacheCreateInfo cache_create_info = {};
+  cache_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+  cache_create_info.pNext = nullptr;
+  cache_create_info.flags = 0;
+  cache_create_info.initialDataSize = cache_data.size();
+  cache_create_info.pInitialData = cache_data.empty() ? nullptr : cache_data.data();
+
+  VkResult result = dfn.vkCreatePipelineCache(device, &cache_create_info,
+                                              nullptr, &vk_pipeline_cache_);
+  if (result != VK_SUCCESS) {
+    XELOGE("VulkanPipelineCache: Failed to create VkPipelineCache: {}",
+           int32_t(result));
+    vk_pipeline_cache_ = VK_NULL_HANDLE;
+  } else {
+    XELOGI("VulkanPipelineCache: Created VkPipelineCache for title {:08X}",
+           title_id);
+
+    // Log if Turnip driver detected for optimizations
+    if (vulkan_device->properties().isTurnipDriver) {
+      XELOGI("VulkanPipelineCache: Turnip driver detected - pipeline cache will benefit from TBDR optimizations");
+    }
+  }
+}
+
+void VulkanPipelineCache::ShutdownPipelineCache() {
+  const ui::vulkan::VulkanDevice* const vulkan_device =
+      command_processor_.GetVulkanDevice();
+  const ui::vulkan::VulkanDevice::Functions& dfn = vulkan_device->functions();
+  const VkDevice device = vulkan_device->device();
+
+  if (vk_pipeline_cache_ != VK_NULL_HANDLE) {
+    // Save pipeline cache to disk before destroying
+    if (!pipeline_cache_path_.empty() && pipeline_cache_title_id_ != 0) {
+      size_t cache_size = 0;
+      VkResult result = dfn.vkGetPipelineCacheData(device, vk_pipeline_cache_,
+                                                    &cache_size, nullptr);
+      if (result == VK_SUCCESS && cache_size > 0) {
+        std::vector<uint8_t> cache_data(cache_size);
+        result = dfn.vkGetPipelineCacheData(device, vk_pipeline_cache_,
+                                            &cache_size, cache_data.data());
+        if (result == VK_SUCCESS) {
+          FILE* cache_file = nullptr;
+          xe::filesystem::OpenFile(pipeline_cache_path_, "wb", &cache_file);
+          if (cache_file) {
+            size_t bytes_written = fwrite(cache_data.data(), 1, cache_size, cache_file);
+            fclose(cache_file);
+            if (bytes_written == cache_size) {
+              XELOGI("VulkanPipelineCache: Saved {}KB cache for title {:08X}",
+                     cache_size / 1024, pipeline_cache_title_id_);
+            } else {
+              XELOGE("VulkanPipelineCache: Failed to write complete cache file");
+            }
+          }
+        } else {
+          XELOGE("VulkanPipelineCache: Failed to get cache data: {}",
+                 int32_t(result));
+        }
+      }
+    }
+
+    dfn.vkDestroyPipelineCache(device, vk_pipeline_cache_, nullptr);
+    vk_pipeline_cache_ = VK_NULL_HANDLE;
+  }
+
+  pipeline_cache_path_.clear();
+  pipeline_cache_title_id_ = 0;
 }
 
 VulkanShader* VulkanPipelineCache::LoadShader(xenos::ShaderType shader_type,
@@ -2160,7 +2274,7 @@ bool VulkanPipelineCache::EnsurePipelineCreated(
   const ui::vulkan::VulkanDevice::Functions& dfn = vulkan_device->functions();
   const VkDevice device = vulkan_device->device();
   VkPipeline pipeline;
-  if (dfn.vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1,
+  if (dfn.vkCreateGraphicsPipelines(device, vk_pipeline_cache_, 1,
                                     &pipeline_create_info, nullptr,
                                     &pipeline) != VK_SUCCESS) {
     // TODO(Triang3l): Move these error messages outside.

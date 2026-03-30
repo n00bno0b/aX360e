@@ -59,6 +59,11 @@ class VulkanPipelineCache {
   bool Initialize();
   void Shutdown();
 
+  // Initialize pipeline cache storage for shader caching
+  void InitializePipelineCache(const std::filesystem::path& cache_root,
+                               uint32_t title_id);
+  void ShutdownPipelineCache();
+
   VulkanShader* LoadShader(xenos::ShaderType shader_type,
                            const uint32_t* host_address, uint32_t dword_count);
   // Analyze shader microcode on the translator thread.
@@ -324,6 +329,11 @@ class VulkanPipelineCache {
   // Previously used pipeline, to avoid lookups if the state wasn't changed.
   const std::pair<const PipelineDescription, Pipeline>* last_pipeline_ =
       nullptr;
+
+  // Vulkan pipeline cache for accelerating pipeline creation
+  VkPipelineCache vk_pipeline_cache_ = VK_NULL_HANDLE;
+  std::filesystem::path pipeline_cache_path_;
+  uint32_t pipeline_cache_title_id_ = 0;
 };
 
 }  // namespace vulkan
