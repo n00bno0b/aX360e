@@ -3,3 +3,9 @@
     <style name="AppTheme" parent="Theme.AppCompat.DayNight">
     </style>
 </resources>
+    <!-- Image Shape Styles -->
+    <style name="RoundedSquare">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">8dp</item>
+    </style>
+
