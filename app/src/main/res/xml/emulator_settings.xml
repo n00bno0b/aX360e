@@ -70,6 +70,32 @@
         <aenu.preference.CheckBoxPreference app:title="@string/es_ui_headless"
             app:key="UI|headless"
             app:summary="@string/es_hint_ui_headless" />
+        <aenu.preference.CheckBoxPreference app:title="FPS Counter"
+            app:key="UI|show_fps_counter"
+            app:summary="Display frames per second overlay" />
+        <aenu.preference.CheckBoxPreference app:title="Frame Time"
+            app:key="UI|show_frame_time"
+            app:summary="Display frame time graph" />
+        <aenu.preference.CheckBoxPreference app:title="CPU Usage"
+            app:key="UI|show_cpu_usage"
+            app:summary="Display CPU usage percentage" />
+        <aenu.preference.CheckBoxPreference app:title="GPU Usage"
+            app:key="UI|show_gpu_usage"
+            app:summary="Display GPU usage percentage" />
+        <aenu.preference.CheckBoxPreference app:title="Memory Usage"
+            app:key="UI|show_memory_usage"
+            app:summary="Display memory usage statistics" />
+        <aenu.preference.ListPreference app:title="Overlay Position"
+            app:entryValues="@array/es_arr_v_ui_overlay_position"
+            app:entries="@array/es_arr_ui_overlay_position"
+            app:key="UI|profiler_position"
+            app:summary="Position of performance overlay" />
+    </PreferenceScreen>
+    <PreferenceScreen app:title="Patches"
+        app:key="Patches" >
+        <Preference app:title="Manage Game Patches"
+            app:key="Patches|manage_patches"
+            app:summary="Browse and enable/disable game patches" />
     </PreferenceScreen>
     <PreferenceScreen app:title="@string/es_storage"
         app:key="Storage" >

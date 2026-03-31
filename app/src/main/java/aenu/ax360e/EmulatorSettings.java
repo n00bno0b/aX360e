@@ -40,6 +40,7 @@ public class EmulatorSettings extends AppCompatActivity {
     static final String KEY_CUSTOM_DRIVER_LOAD_TYPE="CustomDrivers|load_driver_type";
     static final String KEY_CUSTOM_DRIVER_GPU="CustomDrivers|gpu_driver";
     static final String KEY_CUSTOM_DRIVER_GPU_REMOVE="CustomDrivers|gpu_driver_remove";
+    static final String KEY_MANAGE_PATCHES="Patches|manage_patches";
 
     static final int WARNING_COLOR=0xffff8000;
 
@@ -296,6 +297,11 @@ public class EmulatorSettings extends AppCompatActivity {
                     "UI|profiler_dpi_scaling",
                     "UI|storage_selection_dialog",
                     "UI|headless",
+                    "UI|show_fps_counter",
+                    "UI|show_frame_time",
+                    "UI|show_cpu_usage",
+                    "UI|show_gpu_usage",
+                    "UI|show_memory_usage",
                     "Storage|mount_scratch",
                     "Storage|mount_cache",
                     "Kernel|staging_mode",
@@ -404,6 +410,7 @@ public class EmulatorSettings extends AppCompatActivity {
                     "Logging|log_level",
                     "Content|license_mask",
                     "APU|apu",
+                    "UI|profiler_position",
             };
 
 
@@ -423,7 +430,8 @@ public class EmulatorSettings extends AppCompatActivity {
                     "Content",
                     "CPU",
                     "General",
-                    "Video"
+                    "Video",
+                    "Patches"
             };
 
 
@@ -505,6 +513,9 @@ public class EmulatorSettings extends AppCompatActivity {
             Preference custom_driver_gpu_remove_pref=findPreference(KEY_CUSTOM_DRIVER_GPU_REMOVE);
             if(custom_driver_gpu_remove_pref!=null)
                 custom_driver_gpu_remove_pref.setOnPreferenceClickListener(this);
+            Preference manage_patches_pref=findPreference(KEY_MANAGE_PATCHES);
+            if(manage_patches_pref!=null)
+                manage_patches_pref.setOnPreferenceClickListener(this);
 
         }
 
@@ -558,6 +569,12 @@ public class EmulatorSettings extends AppCompatActivity {
 
             if(KEY_CUSTOM_DRIVER_LOAD_TYPE.equals(preference.getKey())){
                 open_custom_driver_type_editor();
+                return true;
+            }
+
+            if(KEY_MANAGE_PATCHES.equals(preference.getKey())){
+                Intent intent = new Intent(requireContext(), PatchManagerActivity.class);
+                startActivity(intent);
                 return true;
             }
 

@@ -92,9 +92,20 @@ public class Application extends android.app.Application{
             Utils.extractAssetsDir(this,"content/E0300000A360E000/FFFE07D1/00010000/E0300000A360E000",default_profile_dir);
         }
 
+        // Extract game patches from assets if needed
+        extractGamePatches();
+
         if(!should_delay_load())
             Emulator.load_library();
 
+    }
+
+    private void extractGamePatches() {
+        File patchesDir = new File(get_app_data_dir(), "patches");
+        if (!patchesDir.exists()) {
+            patchesDir.mkdirs();
+            Utils.extractAssetsDir(this, "patches", patchesDir);
+        }
     }
 
 }
