@@ -75,6 +75,9 @@ android:value="ca-app-pub-5412294626339113~5712703744" />
             android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
             android:launchMode="singleTask"/>
         <activity android:name="aenu.ax360e.AboutActivity" android:exported="false" android:label="@string/about"> </activity>
+        <activity android:name="aenu.ax360e.PatchManagerActivity"
+            android:exported="false"
+            android:label="Patch Manager"/>
         <provider
             android:name="aenu.ax360e.DocumentsProvider"
             android:authorities="${applicationId}.DocumentsProvider"
