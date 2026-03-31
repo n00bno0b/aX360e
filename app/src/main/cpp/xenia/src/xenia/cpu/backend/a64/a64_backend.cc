@@ -10,11 +10,15 @@
 #include "xenia/cpu/backend/a64/a64_backend.h"
 
 #include <cstddef>
+#include <cstring>
+#include <filesystem>
 
 #include "third_party/capstone/include/capstone/arm64.h"
 #include "third_party/capstone/include/capstone/capstone.h"
+#include "third_party/fmt/include/fmt/format.h"
 
 #include "xenia/base/exception_handler.h"
+#include "xenia/base/filesystem.h"
 #include "xenia/base/logging.h"
 #include "xenia/cpu/backend/a64/a64_assembler.h"
 #include "xenia/cpu/backend/a64/a64_code_cache.h"
@@ -166,6 +170,9 @@ A64Backend::A64Backend() : Backend(), code_cache_(nullptr) {
 }
 
 A64Backend::~A64Backend() {
+  // Save code cache before shutdown
+  ShutdownCodeCache();
+
   if (capstone_handle_) {
     cs_close(&capstone_handle_);
   }
@@ -232,6 +239,231 @@ bool A64Backend::Initialize(Processor* processor) {
   ExceptionHandler::Install(&ExceptionCallbackThunk, this);
 
   return true;
+}
+
+void A64Backend::InitializeCodeCache(const std::filesystem::path& cache_root,
+                                      uint32_t title_id) {
+  // Build code cache directory path
+  auto code_cache_dir = cache_root / "cpu_code_cache";
+  std::filesystem::create_directories(code_cache_dir);
+
+  code_cache_path_ = code_cache_dir / fmt::format("a64_{:08X}.bin", title_id);
+  code_cache_title_id_ = title_id;
+
+  XELOGI("A64Backend: Persistent code cache initialized for title {:08X}",
+         title_id);
+  XELOGI("A64Backend: Cache path: {}", code_cache_path_.string());
+
+  // Try to load existing code cache from disk
+  FILE* cache_file = xe::filesystem::OpenFile(code_cache_path_, "rb");
+  if (cache_file) {
+    // Read cache header
+    struct CacheHeader {
+      uint32_t magic;           // 'A64C'
+      uint32_t version;         // Cache format version
+      uint32_t title_id;        // Game title ID for validation
+      uint32_t entry_count;     // Number of cached functions
+      uint64_t total_code_size; // Total size of compiled code
+      uint64_t reserved[3];     // Reserved for future use
+    };
+
+    struct CacheEntry {
+      uint32_t guest_address;   // Guest function address
+      uint32_t code_size;       // Size of compiled code
+      uint64_t host_offset;     // Offset in code cache
+    };
+
+    CacheHeader header = {};
+    size_t bytes_read = fread(&header, sizeof(CacheHeader), 1, cache_file);
+
+    const uint32_t kCacheMagic = 0x43343641;  // 'A64C' in little-endian
+    const uint32_t kCacheVersion = 1;
+
+    if (bytes_read == 1 &&
+        header.magic == kCacheMagic &&
+        header.version == kCacheVersion &&
+        header.title_id == title_id &&
+        header.entry_count > 0) {
+
+      XELOGI("A64Backend: Loading cache with {} functions, {} KB code",
+             header.entry_count, header.total_code_size / 1024);
+
+      // Read cache entries
+      std::vector<CacheEntry> entries(header.entry_count);
+      if (fread(entries.data(), sizeof(CacheEntry), header.entry_count, cache_file) !=
+          header.entry_count) {
+        XELOGE("A64Backend: Failed to read cache entries");
+        fclose(cache_file);
+        return;
+      }
+
+      // Read compiled code
+      std::vector<uint8_t> code_buffer(header.total_code_size);
+      if (fread(code_buffer.data(), 1, header.total_code_size, cache_file) !=
+          header.total_code_size) {
+        XELOGE("A64Backend: Failed to read compiled code");
+        fclose(cache_file);
+        return;
+      }
+
+      fclose(cache_file);
+
+      // Restore functions to code cache
+      size_t restored_count = 0;
+      size_t code_offset = 0;
+
+      for (const auto& entry : entries) {
+        if (code_offset + entry.code_size > header.total_code_size) {
+          XELOGE("A64Backend: Code cache entry exceeds buffer size");
+          break;
+        }
+
+        void* code_execute_address = nullptr;
+        void* code_write_address = nullptr;
+
+        EmitFunctionInfo func_info = {};
+        func_info.code_size.total = entry.code_size;
+
+        try {
+          code_cache_->PlaceHostCode(
+              entry.guest_address,
+              code_buffer.data() + code_offset,
+              func_info,
+              code_execute_address,
+              code_write_address);
+
+          if (entry.guest_address != 0) {
+            code_cache_->AddIndirection(
+                entry.guest_address,
+                static_cast<uint32_t>(reinterpret_cast<uintptr_t>(code_execute_address)));
+          }
+
+          restored_count++;
+        } catch (...) {
+          XELOGE("A64Backend: Failed to restore function at {:08X}", entry.guest_address);
+        }
+
+        code_offset += entry.code_size;
+      }
+
+      XELOGI("A64Backend: Restored {} of {} functions from cache",
+             restored_count, header.entry_count);
+      return;
+
+    } else {
+      XELOGW("A64Backend: Cache validation failed (magic={:08X}, version={}, title_id={:08X}, count={})",
+             header.magic, header.version, header.title_id, header.entry_count);
+      XELOGW("A64Backend: Expected magic={:08X}, version={}, title_id={:08X}",
+             kCacheMagic, kCacheVersion, title_id);
+    }
+
+    fclose(cache_file);
+  } else {
+    XELOGI("A64Backend: No existing cache found, will create on shutdown");
+  }
+}
+
+void A64Backend::ShutdownCodeCache() {
+  if (code_cache_path_.empty() || code_cache_title_id_ == 0) {
+    return;  // Cache not initialized
+  }
+
+  if (!code_cache_) {
+    return;  // No code cache to save
+  }
+
+  struct CacheHeader {
+    uint32_t magic;           // 'A64C'
+    uint32_t version;         // Cache format version
+    uint32_t title_id;        // Game title ID
+    uint32_t entry_count;     // Number of cached functions
+    uint64_t total_code_size; // Total size of compiled code
+    uint64_t reserved[3];     // Reserved for future use
+  };
+
+  struct CacheEntry {
+    uint32_t guest_address;   // Guest function address
+    uint32_t code_size;       // Size of compiled code
+    uint64_t host_offset;     // Offset in code cache
+  };
+
+  const uint32_t kCacheMagic = 0x43343641;  // 'A64C' in little-endian
+  const uint32_t kCacheVersion = 1;
+
+  // Collect function entries from code cache
+  std::vector<CacheEntry> entries;
+  uint64_t total_code_size = 0;
+
+  const auto& code_map = code_cache_->generated_code_map_;
+
+  for (const auto& [key, guest_function] : code_map) {
+    if (!guest_function) {
+      continue;
+    }
+
+    uint32_t start_offset = static_cast<uint32_t>(key >> 32);
+    uint32_t end_offset = static_cast<uint32_t>(key & 0xFFFFFFFF);
+    uint32_t code_size = end_offset - start_offset;
+
+    CacheEntry entry = {};
+    entry.guest_address = guest_function->address();
+    entry.code_size = code_size;
+    entry.host_offset = start_offset;
+
+    entries.push_back(entry);
+    total_code_size += code_size;
+  }
+
+  if (entries.empty()) {
+    XELOGI("A64Backend: No functions to cache, skipping cache save");
+    return;
+  }
+
+  FILE* cache_file = xe::filesystem::OpenFile(code_cache_path_, "wb");
+  if (!cache_file) {
+    XELOGE("A64Backend: Failed to open cache file for writing");
+    return;
+  }
+
+  // Write header
+  CacheHeader header = {};
+  header.magic = kCacheMagic;
+  header.version = kCacheVersion;
+  header.title_id = code_cache_title_id_;
+  header.entry_count = static_cast<uint32_t>(entries.size());
+  header.total_code_size = total_code_size;
+
+  if (fwrite(&header, sizeof(CacheHeader), 1, cache_file) != 1) {
+    XELOGE("A64Backend: Failed to write cache header");
+    fclose(cache_file);
+    return;
+  }
+
+  // Write cache entries
+  if (fwrite(entries.data(), sizeof(CacheEntry), entries.size(), cache_file) !=
+      entries.size()) {
+    XELOGE("A64Backend: Failed to write cache entries");
+    fclose(cache_file);
+    return;
+  }
+
+  // Write compiled code for each function
+  const uint8_t* code_base = code_cache_->generated_code_execute_base_;
+
+  for (const auto& entry : entries) {
+    const uint8_t* code_ptr = code_base + entry.host_offset;
+
+    if (fwrite(code_ptr, 1, entry.code_size, cache_file) != entry.code_size) {
+      XELOGE("A64Backend: Failed to write code for function {:08X}", entry.guest_address);
+      fclose(cache_file);
+      return;
+    }
+  }
+
+  fclose(cache_file);
+
+  XELOGI("A64Backend: Saved code cache: {} functions, {} KB",
+         header.entry_count, header.total_code_size / 1024);
 }
 
 void A64Backend::CommitExecutableRange(uint32_t guest_low,

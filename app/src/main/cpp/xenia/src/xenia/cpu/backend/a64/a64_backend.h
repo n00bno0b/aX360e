@@ -114,6 +114,10 @@ class A64Backend : public Backend {
 
   bool Initialize(Processor* processor) override;
 
+  void InitializeCodeCache(const std::filesystem::path& cache_root,
+                           uint32_t title_id) override;
+  void ShutdownCodeCache();
+
   void CommitExecutableRange(uint32_t guest_low, uint32_t guest_high) override;
 
   std::unique_ptr<Assembler> CreateAssembler() override;
@@ -154,6 +158,10 @@ class A64Backend : public Backend {
   HostToGuestThunk host_to_guest_thunk_;
   GuestToHostThunk guest_to_host_thunk_;
   ResolveFunctionThunk resolve_function_thunk_;
+
+  // Persistent code cache state
+  std::filesystem::path code_cache_path_;
+  uint32_t code_cache_title_id_ = 0;
 
 private:
 
