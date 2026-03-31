@@ -188,6 +188,8 @@ class A64CodeCache : public CodeCache {
   // This can be used to bsearch on host PC to find the guest function.
   // The key is [start address | end address].
   std::vector<std::pair<uint64_t, GuestFunction*>> generated_code_map_;
+
+  friend class A64Backend;  // Allow A64Backend to access private members for cache serialization
 public:
   //std::unordered_set<InstFix,InstFixHasher> fix_opcodes_;
 };

@@ -116,6 +116,7 @@ class A64Backend : public Backend {
 
   void InitializeCodeCache(const std::filesystem::path& cache_root,
                            uint32_t title_id) override;
+  void ShutdownCodeCache();
 
   void CommitExecutableRange(uint32_t guest_low, uint32_t guest_high) override;
 
