@@ -1,2 +1,0 @@
-/usr/bin/ar qc /home/runner/work/aX360e/aX360e/app/src/main/cpp/bin/Android-ARM64/Debug/libzarchive.a CMakeFiles/zarchive.dir/xenia/third_party/zarchive/src/sha_256.c.o CMakeFiles/zarchive.dir/xenia/third_party/zarchive/src/zarchivereader.cpp.o CMakeFiles/zarchive.dir/xenia/third_party/zarchive/src/zarchivewriter.cpp.o
-/usr/bin/ranlib /home/runner/work/aX360e/aX360e/app/src/main/cpp/bin/Android-ARM64/Debug/libzarchive.a

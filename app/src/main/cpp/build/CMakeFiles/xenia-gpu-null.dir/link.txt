@@ -1,2 +1,0 @@
-/usr/bin/ar qc /home/runner/work/aX360e/aX360e/app/src/main/cpp/bin/Android-ARM64/Debug/libxenia-gpu-null.a "CMakeFiles/xenia-gpu-null.dir/xenia/src/xenia/gpu/null/null_command_processor.cc.o" "CMakeFiles/xenia-gpu-null.dir/xenia/src/xenia/gpu/null/null_graphics_system.cc.o"
-/usr/bin/ranlib /home/runner/work/aX360e/aX360e/app/src/main/cpp/bin/Android-ARM64/Debug/libxenia-gpu-null.a

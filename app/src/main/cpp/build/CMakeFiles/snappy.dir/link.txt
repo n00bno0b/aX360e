@@ -1,2 +1,0 @@
-/usr/bin/ar qc libsnappy.a "CMakeFiles/snappy.dir/xenia/third_party/snappy/snappy-sinksource.cc.o" "CMakeFiles/snappy.dir/xenia/third_party/snappy/snappy-stubs-internal.cc.o" CMakeFiles/snappy.dir/xenia/third_party/snappy/snappy.cc.o
-/usr/bin/ranlib libsnappy.a

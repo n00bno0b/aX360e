@@ -1,1 +1,0 @@
-/usr/bin/c++ -fPIC -g -Wl,-z,max-page-size=16384 -Wl,--dependency-file=CMakeFiles/mspack.dir/link.d -shared -Wl,-soname,libmspack.so -o libmspack.so CMakeFiles/mspack.dir/xenia/third_party/mspack/logging.cc.o CMakeFiles/mspack.dir/xenia/third_party/mspack/lzxd.c.o CMakeFiles/mspack.dir/xenia/third_party/mspack/system.c.o

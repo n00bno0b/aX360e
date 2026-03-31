@@ -1,2 +1,0 @@
-/usr/bin/ar qc /home/runner/work/aX360e/aX360e/app/src/main/cpp/bin/Android-ARM64/Debug/libxenia-hid-skylander.a "CMakeFiles/xenia-hid-skylander.dir/xenia/src/xenia/hid/skylander/skylander_emulated.cc.o" "CMakeFiles/xenia-hid-skylander.dir/xenia/src/xenia/hid/skylander/skylander_portal.cc.o"
-/usr/bin/ranlib /home/runner/work/aX360e/aX360e/app/src/main/cpp/bin/Android-ARM64/Debug/libxenia-hid-skylander.a

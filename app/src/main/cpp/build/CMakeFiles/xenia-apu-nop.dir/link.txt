@@ -1,2 +1,0 @@
-/usr/bin/ar qc /home/runner/work/aX360e/aX360e/app/src/main/cpp/bin/Android-ARM64/Debug/libxenia-apu-nop.a "CMakeFiles/xenia-apu-nop.dir/xenia/src/xenia/apu/nop/nop_audio_system.cc.o"
-/usr/bin/ranlib /home/runner/work/aX360e/aX360e/app/src/main/cpp/bin/Android-ARM64/Debug/libxenia-apu-nop.a

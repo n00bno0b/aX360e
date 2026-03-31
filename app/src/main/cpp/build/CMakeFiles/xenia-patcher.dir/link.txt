@@ -1,2 +1,0 @@
-/usr/bin/ar qc /home/runner/work/aX360e/aX360e/app/src/main/cpp/bin/Android-ARM64/Debug/libxenia-patcher.a "CMakeFiles/xenia-patcher.dir/xenia/src/xenia/patcher/patch_db.cc.o" "CMakeFiles/xenia-patcher.dir/xenia/src/xenia/patcher/patcher.cc.o" "CMakeFiles/xenia-patcher.dir/xenia/src/xenia/patcher/plugin_loader.cc.o"
-/usr/bin/ranlib /home/runner/work/aX360e/aX360e/app/src/main/cpp/bin/Android-ARM64/Debug/libxenia-patcher.a
