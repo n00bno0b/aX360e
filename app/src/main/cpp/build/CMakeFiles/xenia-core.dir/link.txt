@@ -1,0 +1,2 @@
+/usr/bin/ar qc /home/runner/work/aX360e/aX360e/app/src/main/cpp/bin/Android-ARM64/Debug/libxenia-core.a "CMakeFiles/xenia-core.dir/xenia/src/xenia/config.cc.o" "CMakeFiles/xenia-core.dir/xenia/src/xenia/emulator.cc.o" "CMakeFiles/xenia-core.dir/xenia/src/xenia/memory.cc.o"
+/usr/bin/ranlib /home/runner/work/aX360e/aX360e/app/src/main/cpp/bin/Android-ARM64/Debug/libxenia-core.a

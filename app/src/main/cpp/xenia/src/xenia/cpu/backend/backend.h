@@ -10,6 +10,7 @@
 #ifndef XENIA_CPU_BACKEND_BACKEND_H_
 #define XENIA_CPU_BACKEND_BACKEND_H_
 
+#include <filesystem>
 #include <memory>
 
 #include "xenia/cpu/backend/machine_info.h"
@@ -51,6 +52,12 @@ class Backend {
   CodeCache* code_cache() const { return code_cache_; }
 
   virtual bool Initialize(Processor* processor);
+
+  // Initialize persistent code cache for faster startup
+  // cache_root: Root directory for cache storage
+  // title_id: Game title ID for per-game caching
+  virtual void InitializeCodeCache(const std::filesystem::path& cache_root,
+                                    uint32_t title_id) {}
 
   virtual void* AllocThreadData();
   virtual void FreeThreadData(void* thread_data);

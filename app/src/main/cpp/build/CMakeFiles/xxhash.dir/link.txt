@@ -1,0 +1,2 @@
+/usr/bin/ar qc /home/runner/work/aX360e/aX360e/app/src/main/cpp/bin/Android-ARM64/Debug/libxxhash.a CMakeFiles/xxhash.dir/xenia/third_party/xxhash/xxhash.c.o
+/usr/bin/ranlib /home/runner/work/aX360e/aX360e/app/src/main/cpp/bin/Android-ARM64/Debug/libxxhash.a

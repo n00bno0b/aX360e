@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -g -Wl,--dependency-file=CMakeFiles/hardware_ProcessorInfo.dir/link.d -shared -Wl,-soname,libhardware_ProcessorInfo.so -o libhardware_ProcessorInfo.so CMakeFiles/hardware_ProcessorInfo.dir/hardware_ProcessorInfo.cpp.o  -lvulkan

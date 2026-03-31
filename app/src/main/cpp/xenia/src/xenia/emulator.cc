@@ -1074,6 +1074,11 @@ static std::string format_version(xex2_version version) {
                                             true);
   on_shader_storage_initialization(false);
 
+  // Initialize CPU code cache for faster subsequent runs
+  if (processor_->backend()) {
+    processor_->backend()->InitializeCodeCache(cache_root_, title_id_.value());
+  }
+
   auto main_thread = kernel_state_->LaunchModule(module);
   if (!main_thread) {
     return X_STATUS_UNSUCCESSFUL;
@@ -1332,6 +1337,11 @@ static std::string format_version(xex2_version version) {
         graphics_system_->InitializeShaderStorage(cache_root_, title_id_.value(),
                                                   true);
         on_shader_storage_initialization(false);
+
+        // Initialize CPU code cache for faster subsequent runs
+        if (processor_->backend()) {
+            processor_->backend()->InitializeCodeCache(cache_root_, title_id_.value());
+        }
 
         auto main_thread = kernel_state_->LaunchModule(module);
         if (!main_thread) {

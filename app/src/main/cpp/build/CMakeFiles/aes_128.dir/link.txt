@@ -1,0 +1,2 @@
+/usr/bin/ar qc /home/runner/work/aX360e/aX360e/app/src/main/cpp/bin/Android-ARM64/Debug/libaes_128.a CMakeFiles/aes_128.dir/xenia/third_party/aes_128/unroll/aes.c.o
+/usr/bin/ranlib /home/runner/work/aX360e/aX360e/app/src/main/cpp/bin/Android-ARM64/Debug/libaes_128.a

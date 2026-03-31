@@ -1,0 +1,2 @@
+/usr/bin/ar qc /home/runner/work/aX360e/aX360e/app/src/main/cpp/bin/Android-ARM64/Debug/libxenia-hid.a "CMakeFiles/xenia-hid.dir/xenia/src/xenia/hid/hid_flags.cc.o" "CMakeFiles/xenia-hid.dir/xenia/src/xenia/hid/input_system.cc.o"
+/usr/bin/ranlib /home/runner/work/aX360e/aX360e/app/src/main/cpp/bin/Android-ARM64/Debug/libxenia-hid.a

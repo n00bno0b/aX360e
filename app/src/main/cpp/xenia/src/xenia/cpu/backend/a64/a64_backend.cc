@@ -10,9 +10,11 @@
 #include "xenia/cpu/backend/a64/a64_backend.h"
 
 #include <cstddef>
+#include <filesystem>
 
 #include "third_party/capstone/include/capstone/arm64.h"
 #include "third_party/capstone/include/capstone/capstone.h"
+#include "third_party/fmt/include/fmt/format.h"
 
 #include "xenia/base/exception_handler.h"
 #include "xenia/base/logging.h"
@@ -232,6 +234,23 @@ bool A64Backend::Initialize(Processor* processor) {
   ExceptionHandler::Install(&ExceptionCallbackThunk, this);
 
   return true;
+}
+
+void A64Backend::InitializeCodeCache(const std::filesystem::path& cache_root,
+                                      uint32_t title_id) {
+  // Build code cache directory path
+  auto code_cache_dir = cache_root / "cpu_code_cache";
+  std::filesystem::create_directories(code_cache_dir);
+
+  code_cache_path_ = code_cache_dir / fmt::format("a64_{:08X}.bin", title_id);
+  code_cache_title_id_ = title_id;
+
+  XELOGI("A64Backend: Persistent code cache initialized for title {:08X}",
+         title_id);
+  XELOGI("A64Backend: Cache path: {}", code_cache_path_.string());
+
+  // TODO: Implement cache loading and saving
+  // This is a placeholder for future implementation
 }
 
 void A64Backend::CommitExecutableRange(uint32_t guest_low,

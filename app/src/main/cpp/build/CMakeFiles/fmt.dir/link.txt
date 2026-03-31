@@ -1,0 +1,2 @@
+/usr/bin/ar qc libfmt.a CMakeFiles/fmt.dir/xenia/third_party/fmt/src/format.cc.o CMakeFiles/fmt.dir/xenia/third_party/fmt/src/os.cc.o
+/usr/bin/ranlib libfmt.a

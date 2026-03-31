@@ -1,0 +1,2 @@
+/usr/bin/ar qc libglslang-spirv.a "CMakeFiles/glslang-spirv.dir/xenia/third_party/glslang/SPIRV/InReadableOrder.cpp.o" "CMakeFiles/glslang-spirv.dir/xenia/third_party/glslang/SPIRV/Logger.cpp.o" "CMakeFiles/glslang-spirv.dir/xenia/third_party/glslang/SPIRV/SPVRemapper.cpp.o" "CMakeFiles/glslang-spirv.dir/xenia/third_party/glslang/SPIRV/SpvBuilder.cpp.o" "CMakeFiles/glslang-spirv.dir/xenia/third_party/glslang/SPIRV/disassemble.cpp.o" "CMakeFiles/glslang-spirv.dir/xenia/third_party/glslang/SPIRV/doc.cpp.o"
+/usr/bin/ranlib libglslang-spirv.a

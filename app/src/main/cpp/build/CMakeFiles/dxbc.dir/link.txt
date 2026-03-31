@@ -1,0 +1,2 @@
+/usr/bin/ar qc libdxbc.a CMakeFiles/dxbc.dir/xenia/third_party/dxbc/DXBCChecksum.cpp.o
+/usr/bin/ranlib libdxbc.a

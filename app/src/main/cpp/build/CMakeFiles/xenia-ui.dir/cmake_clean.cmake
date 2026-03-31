@@ -1,0 +1,43 @@
+file(REMOVE_RECURSE
+  "/home/runner/work/aX360e/aX360e/app/src/main/cpp/bin/Android-ARM64/Debug/libxenia-ui.a"
+  "/home/runner/work/aX360e/aX360e/app/src/main/cpp/bin/Android-ARM64/Debug/libxenia-ui.pdb"
+  "CMakeFiles/xenia-ui.dir/xenia/src/xenia/ui/file_picker_android.cc.o"
+  "CMakeFiles/xenia-ui.dir/xenia/src/xenia/ui/file_picker_android.cc.o.d"
+  "CMakeFiles/xenia-ui.dir/xenia/src/xenia/ui/graphics_upload_buffer_pool.cc.o"
+  "CMakeFiles/xenia-ui.dir/xenia/src/xenia/ui/graphics_upload_buffer_pool.cc.o.d"
+  "CMakeFiles/xenia-ui.dir/xenia/src/xenia/ui/graphics_util.cc.o"
+  "CMakeFiles/xenia-ui.dir/xenia/src/xenia/ui/graphics_util.cc.o.d"
+  "CMakeFiles/xenia-ui.dir/xenia/src/xenia/ui/imgui_dialog.cc.o"
+  "CMakeFiles/xenia-ui.dir/xenia/src/xenia/ui/imgui_dialog.cc.o.d"
+  "CMakeFiles/xenia-ui.dir/xenia/src/xenia/ui/imgui_drawer.cc.o"
+  "CMakeFiles/xenia-ui.dir/xenia/src/xenia/ui/imgui_drawer.cc.o.d"
+  "CMakeFiles/xenia-ui.dir/xenia/src/xenia/ui/imgui_guest_notification.cc.o"
+  "CMakeFiles/xenia-ui.dir/xenia/src/xenia/ui/imgui_guest_notification.cc.o.d"
+  "CMakeFiles/xenia-ui.dir/xenia/src/xenia/ui/imgui_host_notification.cc.o"
+  "CMakeFiles/xenia-ui.dir/xenia/src/xenia/ui/imgui_host_notification.cc.o.d"
+  "CMakeFiles/xenia-ui.dir/xenia/src/xenia/ui/imgui_notification.cc.o"
+  "CMakeFiles/xenia-ui.dir/xenia/src/xenia/ui/imgui_notification.cc.o.d"
+  "CMakeFiles/xenia-ui.dir/xenia/src/xenia/ui/immediate_drawer.cc.o"
+  "CMakeFiles/xenia-ui.dir/xenia/src/xenia/ui/immediate_drawer.cc.o.d"
+  "CMakeFiles/xenia-ui.dir/xenia/src/xenia/ui/menu_item.cc.o"
+  "CMakeFiles/xenia-ui.dir/xenia/src/xenia/ui/menu_item.cc.o.d"
+  "CMakeFiles/xenia-ui.dir/xenia/src/xenia/ui/microprofile_drawer.cc.o"
+  "CMakeFiles/xenia-ui.dir/xenia/src/xenia/ui/microprofile_drawer.cc.o.d"
+  "CMakeFiles/xenia-ui.dir/xenia/src/xenia/ui/presenter.cc.o"
+  "CMakeFiles/xenia-ui.dir/xenia/src/xenia/ui/presenter.cc.o.d"
+  "CMakeFiles/xenia-ui.dir/xenia/src/xenia/ui/renderdoc_api.cc.o"
+  "CMakeFiles/xenia-ui.dir/xenia/src/xenia/ui/renderdoc_api.cc.o.d"
+  "CMakeFiles/xenia-ui.dir/xenia/src/xenia/ui/surface_android.cc.o"
+  "CMakeFiles/xenia-ui.dir/xenia/src/xenia/ui/surface_android.cc.o.d"
+  "CMakeFiles/xenia-ui.dir/xenia/src/xenia/ui/window.cc.o"
+  "CMakeFiles/xenia-ui.dir/xenia/src/xenia/ui/window.cc.o.d"
+  "CMakeFiles/xenia-ui.dir/xenia/src/xenia/ui/windowed_app.cc.o"
+  "CMakeFiles/xenia-ui.dir/xenia/src/xenia/ui/windowed_app.cc.o.d"
+  "CMakeFiles/xenia-ui.dir/xenia/src/xenia/ui/windowed_app_context.cc.o"
+  "CMakeFiles/xenia-ui.dir/xenia/src/xenia/ui/windowed_app_context.cc.o.d"
+)
+
+# Per-language clean rules from dependency scanning.
+foreach(lang CXX)
+  include(CMakeFiles/xenia-ui.dir/cmake_clean_${lang}.cmake OPTIONAL)
+endforeach()

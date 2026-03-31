@@ -1,0 +1,2 @@
+/usr/bin/ar qc /home/runner/work/aX360e/aX360e/app/src/main/cpp/bin/Android-ARM64/Debug/libxenia-debug-ui.a "CMakeFiles/xenia-debug-ui.dir/xenia/src/xenia/debug/ui/debug_window.cc.o"
+/usr/bin/ranlib /home/runner/work/aX360e/aX360e/app/src/main/cpp/bin/Android-ARM64/Debug/libxenia-debug-ui.a

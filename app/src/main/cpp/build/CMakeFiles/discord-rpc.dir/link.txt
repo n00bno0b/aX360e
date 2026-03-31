@@ -1,0 +1,2 @@
+/usr/bin/ar qc libdiscord-rpc.a "CMakeFiles/discord-rpc.dir/xenia/third_party/discord-rpc/src/discord_rpc.cpp.o" "CMakeFiles/discord-rpc.dir/xenia/third_party/discord-rpc/src/rpc_connection.cpp.o" "CMakeFiles/discord-rpc.dir/xenia/third_party/discord-rpc/src/serialization.cpp.o"
+/usr/bin/ranlib libdiscord-rpc.a
