@@ -760,7 +760,7 @@ std::unique_ptr<VulkanDevice> VulkanDevice::CreateIfSupported(
   if (ext_QCOM_tile_shading) {
     if (with_gpu_emulation) {
       XE_UI_VULKAN_FEATURE_2(features_QCOM_tile_shading,
-                             qcomTileShading)
+                             tileShading)
     }
   }
 

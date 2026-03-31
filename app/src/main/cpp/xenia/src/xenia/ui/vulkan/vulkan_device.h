@@ -158,7 +158,7 @@ class VulkanDevice {
 
     // VK_QCOM_tile_shading
 
-    bool qcomTileShading = false;
+    bool tileShading = false;
 
     // Driver detection for optimizations
 
