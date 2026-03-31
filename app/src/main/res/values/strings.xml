@@ -560,3 +560,72 @@ This Config requires you to pair an analog and digitial flag together while digi
     <string name="nav_settings">Settings</string>
     <string name="nav_about">About</string>
 
+
+    <!-- Advanced Turnip Settings -->
+    <string name="turnip_advanced_settings">Advanced Turnip Settings</string>
+    <string name="turnip_driver_info">Driver Information</string>
+    <string name="turnip_env_variables">Environment Variables</string>
+    <string name="turnip_gmem_mode">Force GMEM Mode</string>
+    <string name="turnip_gmem_mode_hint">Forces GMEM mode for Adreno 710/720 GPUs (TU_DEBUG=gmem)</string>
+    <string name="turnip_ubwc_flag_hint">Enable UBWC Flag Hint</string>
+    <string name="turnip_ubwc_flag_hint_hint">Fixes graphical bugs on OneUI devices (FD_DEV_FEATURES=enable_tp_ubwc_flag_hint=1)</string>
+    <string name="turnip_debug_logging">Enable Debug Logging</string>
+    <string name="turnip_debug_logging_hint">Enable verbose Turnip driver logging (MESA_DEBUG=1)</string>
+    <string name="turnip_noubwc">Disable UBWC Compression</string>
+    <string name="turnip_noubwc_hint">Disable UBWC compression for debugging (TU_DEBUG=noubwc)</string>
+    
+    <!-- Performance Monitoring -->
+    <string name="perf_monitoring">Performance Monitoring</string>
+    <string name="show_gmem_stats">Show GMEM Statistics</string>
+    <string name="show_gmem_stats_hint">Display real-time GMEM usage for Adreno GPUs</string>
+    <string name="show_shader_stats">Show Shader Compilation</string>
+    <string name="show_shader_stats_hint">Display shader compilation metrics and cache hits</string>
+    <string name="show_edram_overhead">Show eDRAM Overhead</string>
+    <string name="show_edram_overhead_hint">Track Fragment Shader Interlock performance impact</string>
+    <string name="show_thermal_status">Show Thermal Status</string>
+    <string name="show_thermal_status_hint">Monitor device temperature and throttling</string>
+    <string name="show_power_usage">Show Power Usage</string>
+    <string name="show_power_usage_hint">Estimate GPU power consumption</string>
+    
+    <!-- Mobile GPU Optimizations -->
+    <string name="mobile_gpu_optimizations">Mobile GPU Optimizations</string>
+    <string name="dynamic_resolution">Dynamic Resolution Scaling</string>
+    <string name="dynamic_resolution_hint">Automatically adjust resolution based on GPU load</string>
+    <string name="resolution_scale_min">Minimum Resolution Scale</string>
+    <string name="resolution_scale_min_hint">Lowest resolution multiplier (50% - 100%)</string>
+    <string name="resolution_scale_max">Maximum Resolution Scale</string>
+    <string name="resolution_scale_max_hint">Highest resolution multiplier (100% - 200%)</string>
+    <string name="thermal_throttle_aware">Thermal Throttling Aware</string>
+    <string name="thermal_throttle_aware_hint">Reduce quality when device gets hot</string>
+    
+    <!-- Power Management -->
+    <string name="power_management">Power Management</string>
+    <string name="power_mode">Power Mode</string>
+    <string name="power_mode_hint">Select power/performance balance</string>
+    <string name="power_mode_performance">Performance</string>
+    <string name="power_mode_balanced">Balanced</string>
+    <string name="power_mode_battery_saver">Battery Saver</string>
+    <string name="background_resource_unload">Background Resource Unload</string>
+    <string name="background_resource_unload_hint">Free resources when app is in background</string>
+    <string name="low_memory_mode">Low Memory Mode</string>
+    <string name="low_memory_mode_hint">Aggressive memory management for devices with limited RAM</string>
+    
+    <!-- Performance Presets -->
+    <string name="performance_presets">Performance Presets</string>
+    <string name="apply_preset">Apply Preset</string>
+    <string name="preset_ultra_performance">Ultra Performance</string>
+    <string name="preset_ultra_performance_hint">Maximum FPS, lowest quality - Best for high-end devices</string>
+    <string name="preset_high_quality">High Quality</string>
+    <string name="preset_high_quality_hint">Balanced quality and performance - Recommended for most devices</string>
+    <string name="preset_maximum_quality">Maximum Quality</string>
+    <string name="preset_maximum_quality_hint">Best visuals, may impact FPS - For flagship devices</string>
+    <string name="preset_battery_optimized">Battery Optimized</string>
+    <string name="preset_battery_optimized_hint">Extended battery life, reduced quality</string>
+    
+    <!-- Per-Game Driver Selection -->
+    <string name="per_game_driver">Per-Game Driver</string>
+    <string name="per_game_driver_hint">Use different driver for this game</string>
+    <string name="driver_global">Global (System/Custom)</string>
+    <string name="driver_stock">Stock Qualcomm Driver</string>
+    <string name="driver_custom">Custom Turnip Driver</string>
+

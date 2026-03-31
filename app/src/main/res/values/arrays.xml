@@ -447,4 +447,30 @@
         <item>bottom_left</item>
         <item>bottom_right</item>
     </string-array>
+
+    <!-- Power Mode Arrays -->
+    <string-array name="power_mode_entries">
+        <item>@string/power_mode_performance</item>
+        <item>@string/power_mode_balanced</item>
+        <item>@string/power_mode_battery_saver</item>
+    </string-array>
+
+    <string-array name="power_mode_values">
+        <item>performance</item>
+        <item>balanced</item>
+        <item>battery_saver</item>
+    </string-array>
+
+    <!-- Per-Game Driver Selection -->
+    <string-array name="per_game_driver_entries">
+        <item>@string/driver_global</item>
+        <item>@string/driver_stock</item>
+        <item>@string/driver_custom</item>
+    </string-array>
+
+    <string-array name="per_game_driver_values">
+        <item>global</item>
+        <item>stock</item>
+        <item>custom</item>
+    </string-array>
 </resources>
