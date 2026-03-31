@@ -22,6 +22,7 @@
         <aenu.preference.CheckBoxPreference app:title="@string/es_vulkan_vulkan_allow_present_mode_fifo_relaxed"
             app:key="Vulkan|vulkan_allow_present_mode_fifo_relaxed"
             app:summary="@string/es_hint_vulkan_vulkan_allow_present_mode_fifo_relaxed" />
+    <!-- Include Advanced Settings -->
     </PreferenceScreen>
     <PreferenceScreen app:title="@string/es_video"
         app:key="Video" >
@@ -52,6 +53,7 @@
         <aenu.preference.CheckBoxPreference app:title="@string/es_video_enable_3d_mode"
             app:key="Video|enable_3d_mode"
             app:summary="@string/es_hint_video_enable_3d_mode" />
+    <!-- Include Advanced Settings -->
     </PreferenceScreen>
     <PreferenceScreen app:title="@string/es_ui"
         app:key="UI" >
@@ -90,12 +92,14 @@
             app:entries="@array/es_arr_ui_overlay_position"
             app:key="UI|profiler_position"
             app:summary="Position of performance overlay" />
+    <!-- Include Advanced Settings -->
     </PreferenceScreen>
     <PreferenceScreen app:title="Patches"
         app:key="Patches" >
         <Preference app:title="Manage Game Patches"
             app:key="Patches|manage_patches"
             app:summary="Browse and enable/disable game patches" />
+    <!-- Include Advanced Settings -->
     </PreferenceScreen>
     <PreferenceScreen app:title="@string/es_storage"
         app:key="Storage" >
@@ -105,6 +109,7 @@
         <aenu.preference.CheckBoxPreference app:title="@string/es_storage_mount_cache"
             app:key="Storage|mount_cache"
             app:summary="@string/es_hint_storage_mount_cache" />
+    <!-- Include Advanced Settings -->
     </PreferenceScreen>
     <PreferenceScreen app:title="@string/es_kernel"
         app:key="Kernel" >
@@ -143,6 +148,7 @@
         <aenu.preference.CheckBoxPreference app:title="@string/es_kernel_allow_nui_initialization"
             app:key="Kernel|Allow_nui_initialization"
             app:summary="@string/es_hint_kernel_allow_nui_initialization" />
+    <!-- Include Advanced Settings -->
     </PreferenceScreen>
     <PreferenceScreen app:title="@string/es_hid"
         app:key="HID" >
@@ -159,6 +165,7 @@
             app:entries="@array/es_arr_hid_deadzone_percentages"
             app:key="HID|right_stick_deadzone_percentage"
             app:summary="@string/es_hint_hid_right_stick_deadzone_percentage" />
+    <!-- Include Advanced Settings -->
     </PreferenceScreen>
     <PreferenceScreen app:title="@string/es_custom_drivers"
         app:key="CustomDrivers" >
@@ -177,6 +184,7 @@
             app:key="HID|hid"
             app:isPreferenceVisible="false"
             app:summary="@string/es_hint_hid_hid" />
+    <!-- Include Advanced Settings -->
     </PreferenceScreen>
     <PreferenceScreen app:title="@string/es_memory"
         app:key="Memory" >
@@ -201,6 +209,7 @@
         <aenu.preference.CheckBoxPreference app:title="@string/es_memory_ignore_offset_for_ranged_allocations"
             app:key="Memory|ignore_offset_for_ranged_allocations"
             app:summary="@string/es_hint_memory_ignore_offset_for_ranged_allocations" />
+    <!-- Include Advanced Settings -->
     </PreferenceScreen>
     <PreferenceScreen app:title="@string/es_xconfig"
         app:key="XConfig" >
@@ -214,6 +223,7 @@
             app:entries="@array/es_arr_xconfig_user_country"
             app:key="XConfig|user_country"
             app:summary="@string/es_hint_xconfig_user_country" />
+    <!-- Include Advanced Settings -->
     </PreferenceScreen>
     <PreferenceScreen app:title="@string/es_display"
         app:key="Display" >
@@ -242,6 +252,7 @@
         <aenu.preference.CheckBoxPreference app:title="@string/es_display_fullscreen"
             app:key="Display|fullscreen"
             app:summary="@string/es_hint_display_fullscreen" />
+    <!-- Include Advanced Settings -->
     </PreferenceScreen>
     <PreferenceScreen app:title="@string/es_gpu"
         app:key="GPU" >
@@ -354,6 +365,7 @@
         <aenu.preference.CheckBoxPreference app:title="@string/es_gpu_depth_float24_convert_in_pixel_shader"
             app:key="GPU|depth_float24_convert_in_pixel_shader"
             app:summary="@string/es_hint_gpu_depth_float24_convert_in_pixel_shader" />
+    <!-- Include Advanced Settings -->
     </PreferenceScreen>
     <PreferenceScreen app:title="@string/es_cpu"
         app:key="CPU" >
@@ -410,6 +422,7 @@
         <aenu.preference.CheckBoxPreference app:title="@string/es_cpu_clock_no_scaling"
             app:key="CPU|clock_no_scaling"
             app:summary="@string/es_hint_cpu_clock_no_scaling" />
+    <!-- Include Advanced Settings -->
     </PreferenceScreen>
     <PreferenceScreen app:title="@string/es_logging"
         app:key="Logging" >
@@ -430,6 +443,7 @@
         <aenu.preference.CheckBoxPreference app:title="@string/es_logging_flush_log"
             app:key="Logging|flush_log"
             app:summary="@string/es_hint_logging_flush_log" />
+    <!-- Include Advanced Settings -->
     </PreferenceScreen>
     <PreferenceScreen app:title="@string/es_content"
         app:key="Content" >
@@ -438,6 +452,7 @@
             app:entries="@array/es_arr_content_license_mask"
             app:key="Content|license_mask"
             app:summary="@string/es_hint_content_license_mask" />
+    <!-- Include Advanced Settings -->
     </PreferenceScreen>
     <PreferenceScreen app:title="@string/es_general"
         app:key="General" >
@@ -459,6 +474,7 @@
         <aenu.preference.CheckBoxPreference app:title="@string/es_general_apply_patches"
             app:key="General|apply_patches"
             app:summary="@string/es_hint_general_apply_patches" />
+    <!-- Include Advanced Settings -->
     </PreferenceScreen>
     <PreferenceScreen app:title="@string/es_apu"
         app:key="APU" >
@@ -494,5 +510,106 @@
             app:entries="@array/es_arr_apu_apu"
             app:key="APU|apu"
             app:summary="@string/es_hint_apu_apu" />
+    <!-- Include Advanced Settings -->
+    </PreferenceScreen>
+    <!-- Include Advanced Settings -->
+</PreferenceScreen>    
+    <!-- Advanced Turnip Settings -->
+    <PreferenceScreen app:title="@string/turnip_advanced_settings"
+        app:key="TurnipAdvanced">
+        <Preference app:title="@string/turnip_driver_info"
+            app:key="TurnipAdvanced|driver_info"
+            app:summary="View installed Turnip driver information" />
+        
+        <PreferenceCategory app:title="@string/turnip_env_variables">
+            <aenu.preference.CheckBoxPreference app:title="@string/turnip_gmem_mode"
+                app:key="TurnipAdvanced|gmem_mode"
+                app:summary="@string/turnip_gmem_mode_hint" />
+            <aenu.preference.CheckBoxPreference app:title="@string/turnip_ubwc_flag_hint"
+                app:key="TurnipAdvanced|ubwc_flag_hint"
+                app:summary="@string/turnip_ubwc_flag_hint_hint" />
+            <aenu.preference.CheckBoxPreference app:title="@string/turnip_debug_logging"
+                app:key="TurnipAdvanced|debug_logging"
+                app:summary="@string/turnip_debug_logging_hint" />
+            <aenu.preference.CheckBoxPreference app:title="@string/turnip_noubwc"
+                app:key="TurnipAdvanced|noubwc"
+                app:summary="@string/turnip_noubwc_hint" />
+        </PreferenceCategory>
+    </PreferenceScreen>
+    
+    <!-- Performance Monitoring -->
+    <PreferenceScreen app:title="@string/perf_monitoring"
+        app:key="PerfMonitoring">
+        <aenu.preference.CheckBoxPreference app:title="@string/show_gmem_stats"
+            app:key="PerfMonitoring|show_gmem_stats"
+            app:summary="@string/show_gmem_stats_hint" />
+        <aenu.preference.CheckBoxPreference app:title="@string/show_shader_stats"
+            app:key="PerfMonitoring|show_shader_stats"
+            app:summary="@string/show_shader_stats_hint" />
+        <aenu.preference.CheckBoxPreference app:title="@string/show_edram_overhead"
+            app:key="PerfMonitoring|show_edram_overhead"
+            app:summary="@string/show_edram_overhead_hint" />
+        <aenu.preference.CheckBoxPreference app:title="@string/show_thermal_status"
+            app:key="PerfMonitoring|show_thermal_status"
+            app:summary="@string/show_thermal_status_hint" />
+        <aenu.preference.CheckBoxPreference app:title="@string/show_power_usage"
+            app:key="PerfMonitoring|show_power_usage"
+            app:summary="@string/show_power_usage_hint" />
+    </PreferenceScreen>
+    
+    <!-- Mobile GPU Optimizations -->
+    <PreferenceScreen app:title="@string/mobile_gpu_optimizations"
+        app:key="MobileGPU">
+        <aenu.preference.CheckBoxPreference app:title="@string/dynamic_resolution"
+            app:key="MobileGPU|dynamic_resolution"
+            app:summary="@string/dynamic_resolution_hint" />
+        <aenu.preference.SeekBarPreference app:title="@string/resolution_scale_min"
+            app:min="50"
+            android:max="100"
+            app:showSeekBarValue="true"
+            app:key="MobileGPU|resolution_scale_min"
+            app:summary="@string/resolution_scale_min_hint" />
+        <aenu.preference.SeekBarPreference app:title="@string/resolution_scale_max"
+            app:min="100"
+            android:max="200"
+            app:showSeekBarValue="true"
+            app:key="MobileGPU|resolution_scale_max"
+            app:summary="@string/resolution_scale_max_hint" />
+        <aenu.preference.CheckBoxPreference app:title="@string/thermal_throttle_aware"
+            app:key="MobileGPU|thermal_aware"
+            app:summary="@string/thermal_throttle_aware_hint" />
+    </PreferenceScreen>
+    
+    <!-- Power Management -->
+    <PreferenceScreen app:title="@string/power_management"
+        app:key="PowerManagement">
+        <aenu.preference.ListPreference app:title="@string/power_mode"
+            app:entryValues="@array/power_mode_values"
+            app:entries="@array/power_mode_entries"
+            app:key="PowerManagement|power_mode"
+            app:summary="@string/power_mode_hint" />
+        <aenu.preference.CheckBoxPreference app:title="@string/background_resource_unload"
+            app:key="PowerManagement|background_unload"
+            app:summary="@string/background_resource_unload_hint" />
+        <aenu.preference.CheckBoxPreference app:title="@string/low_memory_mode"
+            app:key="PowerManagement|low_memory_mode"
+            app:summary="@string/low_memory_mode_hint" />
+    </PreferenceScreen>
+    
+    <!-- Performance Presets -->
+    <PreferenceScreen app:title="@string/performance_presets"
+        app:key="Presets">
+        <Preference app:title="@string/preset_ultra_performance"
+            app:key="Presets|ultra_performance"
+            app:summary="@string/preset_ultra_performance_hint" />
+        <Preference app:title="@string/preset_high_quality"
+            app:key="Presets|high_quality"
+            app:summary="@string/preset_high_quality_hint" />
+        <Preference app:title="@string/preset_maximum_quality"
+            app:key="Presets|maximum_quality"
+            app:summary="@string/preset_maximum_quality_hint" />
+        <Preference app:title="@string/preset_battery_optimized"
+            app:key="Presets|battery_optimized"
+            app:summary="@string/preset_battery_optimized_hint" />
     </PreferenceScreen>
 </PreferenceScreen>

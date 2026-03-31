@@ -42,6 +42,13 @@ public class EmulatorSettings extends AppCompatActivity {
     static final String KEY_CUSTOM_DRIVER_GPU_REMOVE="CustomDrivers|gpu_driver_remove";
     static final String KEY_MANAGE_PATCHES="Patches|manage_patches";
 
+    // Advanced settings keys
+    static final String KEY_TURNIP_DRIVER_INFO="TurnipAdvanced|driver_info";
+    static final String KEY_PRESET_ULTRA_PERFORMANCE="Presets|ultra_performance";
+    static final String KEY_PRESET_HIGH_QUALITY="Presets|high_quality";
+    static final String KEY_PRESET_MAXIMUM_QUALITY="Presets|maximum_quality";
+    static final String KEY_PRESET_BATTERY_OPTIMIZED="Presets|battery_optimized";
+
     static final int WARNING_COLOR=0xffff8000;
 
     @SuppressLint("ValidFragment")
@@ -383,6 +390,27 @@ public class EmulatorSettings extends AppCompatActivity {
                     "APU|enable_xmp",
                     "APU|use_new_decoder",
                     "APU|use_dedicated_xma_thread",
+
+                    // Advanced Turnip settings
+                    "TurnipAdvanced|gmem_mode",
+                    "TurnipAdvanced|ubwc_flag_hint",
+                    "TurnipAdvanced|debug_logging",
+                    "TurnipAdvanced|noubwc",
+
+                    // Performance Monitoring
+                    "PerfMonitoring|show_gmem_stats",
+                    "PerfMonitoring|show_shader_stats",
+                    "PerfMonitoring|show_edram_overhead",
+                    "PerfMonitoring|show_thermal_status",
+                    "PerfMonitoring|show_power_usage",
+
+                    // Mobile GPU
+                    "MobileGPU|dynamic_resolution",
+                    "MobileGPU|thermal_aware",
+
+                    // Power Management
+                    "PowerManagement|background_unload",
+                    "PowerManagement|low_memory_mode",
             };
             final String[] INT_KEYS={
                     "Memory|mmap_address_high",
@@ -391,6 +419,10 @@ public class EmulatorSettings extends AppCompatActivity {
                     "General|time_scalar",
                     "APU|xmp_default_volume",
                     "APU|apu_max_queued_frames",
+
+                    // Mobile GPU resolution scales
+                    "MobileGPU|resolution_scale_min",
+                    "MobileGPU|resolution_scale_max",
             };
             final String[] STRING_ARR_KEYS={
                     "Video|video_standard",
@@ -411,6 +443,9 @@ public class EmulatorSettings extends AppCompatActivity {
                     "Content|license_mask",
                     "APU|apu",
                     "UI|profiler_position",
+
+                    // Power Management
+                    "PowerManagement|power_mode",
             };
 
 
@@ -431,7 +466,12 @@ public class EmulatorSettings extends AppCompatActivity {
                     "CPU",
                     "General",
                     "Video",
-                    "Patches"
+                    "Patches",
+                    "TurnipAdvanced",
+                    "PerfMonitoring",
+                    "MobileGPU",
+                    "PowerManagement",
+                    "Presets"
             };
 
 
@@ -517,6 +557,27 @@ public class EmulatorSettings extends AppCompatActivity {
             if(manage_patches_pref!=null)
                 manage_patches_pref.setOnPreferenceClickListener(this);
 
+            // Advanced settings click listeners
+            Preference turnip_driver_info_pref=findPreference(KEY_TURNIP_DRIVER_INFO);
+            if(turnip_driver_info_pref!=null)
+                turnip_driver_info_pref.setOnPreferenceClickListener(this);
+
+            Preference preset_ultra_perf_pref=findPreference(KEY_PRESET_ULTRA_PERFORMANCE);
+            if(preset_ultra_perf_pref!=null)
+                preset_ultra_perf_pref.setOnPreferenceClickListener(this);
+
+            Preference preset_high_quality_pref=findPreference(KEY_PRESET_HIGH_QUALITY);
+            if(preset_high_quality_pref!=null)
+                preset_high_quality_pref.setOnPreferenceClickListener(this);
+
+            Preference preset_max_quality_pref=findPreference(KEY_PRESET_MAXIMUM_QUALITY);
+            if(preset_max_quality_pref!=null)
+                preset_max_quality_pref.setOnPreferenceClickListener(this);
+
+            Preference preset_battery_pref=findPreference(KEY_PRESET_BATTERY_OPTIMIZED);
+            if(preset_battery_pref!=null)
+                preset_battery_pref.setOnPreferenceClickListener(this);
+
         }
 
 
@@ -575,6 +636,31 @@ public class EmulatorSettings extends AppCompatActivity {
             if(KEY_MANAGE_PATCHES.equals(preference.getKey())){
                 Intent intent = new Intent(requireContext(), PatchManagerActivity.class);
                 startActivity(intent);
+                return true;
+            }
+
+            if(KEY_TURNIP_DRIVER_INFO.equals(preference.getKey())){
+                show_turnip_driver_info();
+                return true;
+            }
+
+            if(KEY_PRESET_ULTRA_PERFORMANCE.equals(preference.getKey())){
+                apply_performance_preset(KEY_PRESET_ULTRA_PERFORMANCE);
+                return true;
+            }
+
+            if(KEY_PRESET_HIGH_QUALITY.equals(preference.getKey())){
+                apply_performance_preset(KEY_PRESET_HIGH_QUALITY);
+                return true;
+            }
+
+            if(KEY_PRESET_MAXIMUM_QUALITY.equals(preference.getKey())){
+                apply_performance_preset(KEY_PRESET_MAXIMUM_QUALITY);
+                return true;
+            }
+
+            if(KEY_PRESET_BATTERY_OPTIMIZED.equals(preference.getKey())){
+                apply_performance_preset(KEY_PRESET_BATTERY_OPTIMIZED);
                 return true;
             }
 
@@ -682,6 +768,69 @@ public class EmulatorSettings extends AppCompatActivity {
             Intent intent=new Intent(requireContext(),CustomDriverTypeActivity.class);
             intent.putExtra(EXTRA_CUSTOM_DRIVER_TYPE,current);
             ((AppCompatActivity)requireActivity()).startActivityForResult(intent,REQUEST_CODE_CUSTOM_DRIVER_TYPE);
+        }
+
+        void show_turnip_driver_info() {
+            TurnipDriverInfo driverInfo = TurnipDriverInfo.detect(requireContext());
+
+            String message;
+            if (driverInfo != null) {
+                message = "Turnip Driver Detected\n\n" +
+                         "Driver: " + driverInfo.getDriverName() + "\n" +
+                         "Version: " + driverInfo.getDriverVersion() + "\n" +
+                         "Mesa Version: " + driverInfo.getMesaVersion() + "\n\n" +
+                         driverInfo.getFormattedInfo();
+            } else {
+                message = "No custom Turnip driver detected.\n\n" +
+                         "To install a custom Turnip driver:\n" +
+                         "1. Go to Custom Drivers settings\n" +
+                         "2. Select 'Install GPU Driver'\n" +
+                         "3. Choose a Turnip driver ZIP file";
+            }
+
+            new AlertDialog.Builder(requireContext())
+                    .setTitle("Turnip Driver Information")
+                    .setMessage(message)
+                    .setPositiveButton(android.R.string.ok, null)
+                    .create().show();
+        }
+
+        void apply_performance_preset(String presetKey) {
+            String presetName = "";
+            switch (presetKey) {
+                case KEY_PRESET_ULTRA_PERFORMANCE:
+                    presetName = getString(R.string.preset_ultra_performance);
+                    break;
+                case KEY_PRESET_HIGH_QUALITY:
+                    presetName = getString(R.string.preset_high_quality);
+                    break;
+                case KEY_PRESET_MAXIMUM_QUALITY:
+                    presetName = getString(R.string.preset_maximum_quality);
+                    break;
+                case KEY_PRESET_BATTERY_OPTIMIZED:
+                    presetName = getString(R.string.preset_battery_optimized);
+                    break;
+            }
+
+            new AlertDialog.Builder(requireContext())
+                    .setTitle("Apply Preset")
+                    .setMessage("Apply \"" + presetName + "\" preset?\n\nThis will modify multiple settings to optimize for this configuration.")
+                    .setPositiveButton(android.R.string.ok, new DialogInterface.OnClickListener() {
+                        @Override
+                        public void onClick(DialogInterface dialog, int which) {
+                            TurnipEnvManager envManager = new TurnipEnvManager(requireContext());
+                            envManager.applyPreset(presetKey, config);
+
+                            Toast.makeText(requireContext(),
+                                    "Applied " + presetName + " preset",
+                                    Toast.LENGTH_SHORT).show();
+
+                            // Restart the settings activity to refresh all preference values
+                            requireActivity().recreate();
+                        }
+                    })
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .create().show();
         }
 
         void setup_pref_title_color(Preference preference,String cur_val){
