@@ -45,7 +45,7 @@ public class Application extends android.app.Application{
         if (data == null) {
             throw new RuntimeException("Failed to load default config from assets");
         }
-        return new String(data);
+        return new String(data, java.nio.charset.StandardCharsets.UTF_8);
     }
 
     public static File get_uri_info_list_file(){

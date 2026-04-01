@@ -19,8 +19,6 @@ android {
             cmake {
                 cppFlags '-std=c++20'
                 arguments '-DANDROID_STL=c++_shared'
-                // Enable parallel compilation for faster builds
-                arguments "-DCMAKE_BUILD_PARALLEL_LEVEL=${Runtime.runtime.availableProcessors()}"
             }
         }
 
@@ -33,7 +31,8 @@ android {
         release {
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            signingConfig signingConfigs.debug
+            // signingConfig should be configured in CI/CD with proper release keys
+            // For local builds, use: ./gradlew assembleDebug instead
         }
         debug {
             minifyEnabled false

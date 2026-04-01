@@ -12,23 +12,17 @@
 #   public *;
 #}
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
+# Preserve line number information for debugging stack traces
 -keepattributes SourceFile,LineNumberTable
-
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# Rename source file attribute for obfuscation while keeping line numbers
+-renamesourcefileattribute SourceFile
 
 # Keep native methods - CRITICAL for JNI to work
 -keepclasseswithmembernames class * {
     native <methods>;
 }
 
-# Keep all classes with native methods
--keep class aenu.** { *; }
-
-# Keep emulator classes and their native methods
+# Keep specific emulator classes and their native methods
 -keep class aenu.emulator.Emulator { *; }
 -keep class aenu.emulator.Emulator$** { *; }
 -keep class aenu.ax360e.Emulator { *; }
@@ -55,7 +49,3 @@
 
 # Keep JSON classes for serialization
 -keep class org.json.** { *; }
-
-# Preserve line numbers for crash reports
--keepattributes SourceFile,LineNumberTable
--renamesourcefileattribute SourceFile
