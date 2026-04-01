@@ -50,7 +50,7 @@ public class TurnipEnvManager {
 
         // FD_DEV_FEATURES flags
         if (prefs.getBoolean("TurnipAdvanced|ubwc_flag_hint", false)) {
-            envVars.add(new EnvVar("FD_DEV_FEATURES", "ubwc_flag_hint"));
+            envVars.add(new EnvVar("FD_DEV_FEATURES", "enable_tp_ubwc_flag_hint=1"));
         }
 
         // MESA_DEBUG - general Mesa debugging

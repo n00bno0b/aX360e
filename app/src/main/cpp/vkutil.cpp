@@ -12,6 +12,11 @@
 #define LOGI(...)  __android_log_print(ANDROID_LOG_INFO,LOG_TAG,__VA_ARGS__)
  #define LOGE(...)  __android_log_print(ANDROID_LOG_ERROR,LOG_TAG,__VA_ARGS__)
 std::optional<VkInstance> vk_create_instance(const char * name) {
+        if (!vkCreateInstance_) {
+            LOGE("vkCreateInstance function pointer is null - Vulkan library not loaded?");
+            return std::nullopt;
+        }
+
         VkApplicationInfo appinfo = {};
         appinfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
         appinfo.pNext = nullptr;
@@ -26,7 +31,9 @@ std::optional<VkInstance> vk_create_instance(const char * name) {
         inst_create_info.pApplicationInfo = &appinfo;
 
         VkInstance inst;
-        if (vkCreateInstance_(&inst_create_info, nullptr, &inst)!= VK_SUCCESS) {
+        VkResult result = vkCreateInstance_(&inst_create_info, nullptr, &inst);
+        if (result != VK_SUCCESS) {
+            LOGE("vkCreateInstance failed with result: %d", result);
             return std::nullopt;
         }
         return inst;
@@ -37,8 +44,12 @@ void vk_destroy_instance(VkInstance inst) {
 }
 
 int vk_get_physical_device_count(VkInstance inst){
-    uint32_t count;
-    vkEnumeratePhysicalDevices_(inst, &count, nullptr);
+    if (!vkEnumeratePhysicalDevices_) return 0;
+    uint32_t count = 0;
+    if (vkEnumeratePhysicalDevices_(inst, &count, nullptr) != VK_SUCCESS) {
+        LOGE("vkEnumeratePhysicalDevices failed");
+        return 0;
+    }
     return count;
 }
 std::optional<VkPhysicalDevice> vk_get_physical_device(VkInstance inst, int index){
@@ -46,13 +57,22 @@ std::optional<VkPhysicalDevice> vk_get_physical_device(VkInstance inst, int inde
     if (count == 0 || index < 0 || static_cast<uint32_t>(index) >= count)
         return std::nullopt;
     std::vector<VkPhysicalDevice> devices(count);
-    vkEnumeratePhysicalDevices_(inst, &count, devices.data());
+    if (vkEnumeratePhysicalDevices_(inst, &count, devices.data()) != VK_SUCCESS) {
+        LOGE("vkEnumeratePhysicalDevices (fetch) failed");
+        return std::nullopt;
+    }
+    if (static_cast<uint32_t>(index) >= count)
+        return std::nullopt;
     return devices[index];
 }
 
  VkPhysicalDeviceProperties vk_get_physical_device_properties(VkPhysicalDevice dev){
-    VkPhysicalDeviceProperties props;
-    vkGetPhysicalDeviceProperties_(dev, &props);
+    VkPhysicalDeviceProperties props = {};
+    if (vkGetPhysicalDeviceProperties_) {
+        vkGetPhysicalDeviceProperties_(dev, &props);
+    } else {
+        LOGE("vkGetPhysicalDeviceProperties function pointer is null");
+    }
     return props;
 }
 
@@ -61,10 +81,18 @@ VkPhysicalDeviceLimits vk_get_physical_device_limits(VkPhysicalDevice dev){
 }
 
 std::vector<VkExtensionProperties> vk_get_physical_device_extension_properties(VkPhysicalDevice dev){
-    uint32_t count;
-    vkEnumerateDeviceExtensionProperties_(dev, nullptr, &count, nullptr);
+    if (!vkEnumerateDeviceExtensionProperties_) return {};
+    uint32_t count = 0;
+    if (vkEnumerateDeviceExtensionProperties_(dev, nullptr, &count, nullptr) != VK_SUCCESS) {
+        LOGE("vkEnumerateDeviceExtensionProperties (count) failed");
+        return {};
+    }
+    if (count == 0) return {};
     std::vector<VkExtensionProperties> props(count);
-    vkEnumerateDeviceExtensionProperties_(dev, nullptr, &count, props.data());
+    if (vkEnumerateDeviceExtensionProperties_(dev, nullptr, &count, props.data()) != VK_SUCCESS) {
+        LOGE("vkEnumerateDeviceExtensionProperties (fetch) failed");
+        return {};
+    }
     std::sort(props.begin(), props.end(), [](const VkExtensionProperties& a, const VkExtensionProperties& b) {
          return strcmp(a.extensionName, b.extensionName) < 0;
     });
@@ -72,7 +100,8 @@ std::vector<VkExtensionProperties> vk_get_physical_device_extension_properties(V
 }
 
 int vk_get_queue_family_properties_count(VkPhysicalDevice dev) {
-    uint32_t count;
+    if (!vkGetPhysicalDeviceQueueFamilyProperties_) return 0;
+    uint32_t count = 0;
     vkGetPhysicalDeviceQueueFamilyProperties_(dev, &count, nullptr);
     return count;
 }

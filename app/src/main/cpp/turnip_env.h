@@ -6,6 +6,7 @@
 #define AX360E_TURNIP_ENV_H
 
 #include <cstdlib>
+#include <string>
 #include <android/log.h>
 
 #define TURNIP_LOG_TAG "TurnipEnv"
@@ -19,7 +20,13 @@ namespace turnip {
 
 inline void SetGmemMode(bool enable) {
     if (enable) {
-        setenv("TU_DEBUG", "gmem", 1);
+        const char* existing = std::getenv("TU_DEBUG");
+        if (existing && std::string(existing).find("gmem") == std::string::npos) {
+            std::string combined = std::string(existing) + ",gmem";
+            setenv("TU_DEBUG", combined.c_str(), 1);
+        } else if (!existing) {
+            setenv("TU_DEBUG", "gmem", 1);
+        }
         TURNIP_LOGI("Enabled GMEM mode (recommended for Adreno 710/720)");
     }
 }
@@ -41,7 +48,13 @@ inline void SetDebugLogging(bool enable) {
 
 inline void DisableUbwc(bool disable) {
     if (disable) {
-        setenv("TU_DEBUG", "noubwc", 1);
+        const char* existing = std::getenv("TU_DEBUG");
+        if (existing && std::string(existing).find("noubwc") == std::string::npos) {
+            std::string combined = std::string(existing) + ",noubwc";
+            setenv("TU_DEBUG", combined.c_str(), 1);
+        } else if (!existing) {
+            setenv("TU_DEBUG", "noubwc", 1);
+        }
         TURNIP_LOGI("Disabled UBWC compression (debug mode)");
     }
 }

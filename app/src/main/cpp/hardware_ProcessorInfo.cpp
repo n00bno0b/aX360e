@@ -45,7 +45,11 @@ extern "C" JNIEXPORT jstring JNICALL  Java_aenu_hardware_ProcessorInfo_gpu_1get_
     VkPhysicalDeviceProperties physicalDeviceProperties;
     vkGetPhysicalDeviceProperties(physicalDevices[0], &physicalDeviceProperties);
 
+    // Copy deviceName before destroying the instance, as the properties
+    // struct may reference driver-internal memory freed by vkDestroyInstance.
+    jstring result = env->NewStringUTF(physicalDeviceProperties.deviceName);
+
     vkDestroyInstance(inst, nullptr);
 
-    return env->NewStringUTF(physicalDeviceProperties.deviceName);
+    return result;
 }
