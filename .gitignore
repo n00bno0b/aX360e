@@ -15,9 +15,7 @@ app/src/main/libs/
 
 aps3e.keystore
 aps3e.jks
-app/build.gradle
 app/release/
 app/.cxx/
 app/src/main/cpp/bin/
 app/src/main/cpp/build/
-app/build.gradle
