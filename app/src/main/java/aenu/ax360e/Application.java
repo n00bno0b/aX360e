@@ -41,8 +41,11 @@ public class Application extends android.app.Application{
         }
     }
     static String load_default_config_str(Context ctx){
-        return new String(Application.load_assets_file(
-                ctx,"config/default_config.toml"));
+        byte[] data = Application.load_assets_file(ctx,"config/default_config.toml");
+        if (data == null) {
+            throw new RuntimeException("Failed to load default config from assets");
+        }
+        return new String(data);
     }
 
     public static File get_uri_info_list_file(){
@@ -71,7 +74,18 @@ public class Application extends android.app.Application{
         super.onCreate();
 
         Application.ctx=this;
-        gpu_device_name_vk= ProcessorInfo.gpu_get_physical_device_name_vk();
+        try {
+            gpu_device_name_vk = ProcessorInfo.gpu_get_physical_device_name_vk();
+        } catch (Exception e) {
+            e.printStackTrace();
+            gpu_device_name_vk = null;
+        }
+
+        // Check if Vulkan is supported
+        if (!device_support_vulkan()) {
+            // App will show error dialog in MainActivity
+            return;
+        }
 
         String[] entry={"cache","cache0","cache1",};
         for(String e:entry){
@@ -88,8 +102,10 @@ public class Application extends android.app.Application{
 
         if(!get_default_profile_file().exists()){
             File default_profile_dir=get_default_profile_file().getParentFile();
-            default_profile_dir.mkdirs();
-            Utils.extractAssetsDir(this,"content/E0300000A360E000/FFFE07D1/00010000/E0300000A360E000",default_profile_dir);
+            if (default_profile_dir != null) {
+                default_profile_dir.mkdirs();
+                Utils.extractAssetsDir(this,"content/E0300000A360E000/FFFE07D1/00010000/E0300000A360E000",default_profile_dir);
+            }
         }
 
         // Extract game patches from assets if needed
