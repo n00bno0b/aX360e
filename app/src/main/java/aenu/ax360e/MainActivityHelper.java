@@ -164,27 +164,53 @@ public class MainActivityHelper {
     }
     
     public void setupSearchBar(SearchBar searchBar) {
-        // SearchBar's built-in EditText handles text input
         if (searchBar != null) {
-            EditText searchEditText = searchBar.findViewById(
-                    com.google.android.material.R.id.open_search_view_edit_text);
-            if (searchEditText != null) {
-                searchEditText.addTextChangedListener(new TextWatcher() {
-                    @Override
-                    public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-
-                    @Override
-                    public void onTextChanged(CharSequence s, int start, int before, int count) {
-                        if (adapter != null) {
-                            adapter.filter(s.toString());
-                        }
-                    }
-
-                    @Override
-                    public void afterTextChanged(Editable s) {}
-                });
-            }
+            searchBar.setOnClickListener(v -> showSearchDialog());
         }
+    }
+
+    private void showSearchDialog() {
+        final EditText input = new EditText(activity);
+        input.setHint(R.string.search_games);
+        input.setSingleLine(true);
+
+        new MaterialAlertDialogBuilder(activity)
+            .setTitle(R.string.search_games)
+            .setView(input)
+            .setPositiveButton(android.R.string.ok, (dialog, which) -> {
+                String query = input.getText().toString().trim();
+                if (adapter != null) {
+                    adapter.filter(query);
+                }
+                if (searchBar != null) {
+                    searchBar.setText(query.isEmpty() ? null : query);
+                }
+            })
+            .setNegativeButton(android.R.string.cancel, null)
+            .setNeutralButton(R.string.all_games, (dialog, which) -> {
+                if (adapter != null) {
+                    adapter.filter("");
+                }
+                if (searchBar != null) {
+                    searchBar.setText(null);
+                }
+            })
+            .show();
+
+        input.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                if (adapter != null) {
+                    adapter.filter(s.toString());
+                }
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {}
+        });
     }
     
     public void showEmptyState(boolean show) {
