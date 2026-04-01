@@ -354,9 +354,10 @@ static void j_save_config_entry(JNIEnv* env,jobject self,std::shared_ptr<cpptoml
             table->insert(key_name,val_str);
         }
     }
-    else if(!val_str.empty()){
-        const auto begin=val_str[0]!='-'?val_str.begin():val_str.begin()+1;
-        if(begin!=val_str.end()&&std::all_of(begin,val_str.end(),::isdigit)){
+    else if(val_str.size()>0){
+        const bool has_sign = val_str[0]=='-';
+        const auto begin = has_sign ? val_str.begin()+1 : val_str.begin();
+        if((!has_sign || val_str.size()>1) && begin!=val_str.end() && std::all_of(begin,val_str.end(),::isdigit)){
             LOGE("save_config_entry I %s %s",tag_str.c_str(),val_str.c_str());
             try {
                 table->insert(key_name,std::stoi(val_str));
