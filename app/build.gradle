@@ -19,6 +19,8 @@ android {
             cmake {
                 cppFlags '-std=c++20'
                 arguments '-DANDROID_STL=c++_shared'
+                // Enable parallel compilation for faster builds
+                arguments "-DCMAKE_BUILD_PARALLEL_LEVEL=${Runtime.runtime.availableProcessors()}"
             }
         }
 
@@ -53,6 +55,13 @@ android {
 
     buildFeatures {
         viewBinding true
+    }
+
+    // Optimize build performance
+    // Prevent build timeouts for large native codebase
+    androidResources {
+        // Skip generation of unused resources
+        ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
     }
 }
 
