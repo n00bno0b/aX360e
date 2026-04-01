@@ -75,11 +75,16 @@ public class VirtualControlEdit extends Activity implements View.OnTouchListener
         });
 
         final String scale_text=getString(R.string.scale_rate)+": ";
-        double joystick_scale=vc.find_component("joystick_l").get_scale();
-        double dpad_scale=vc.find_component("dpad").get_scale();
-        double abxy_scale=vc.find_component("a").get_scale();
-        double sb_scale=vc.find_component("start").get_scale();
-        double lr_scale=vc.find_component("shoulder_l").get_scale();
+        VirtualControl.Component jl = vc.find_component("joystick_l");
+        VirtualControl.Component dp = vc.find_component("dpad");
+        VirtualControl.Component abxy = vc.find_component("a");
+        VirtualControl.Component sb = vc.find_component("start");
+        VirtualControl.Component lr = vc.find_component("shoulder_l");
+        double joystick_scale = jl != null ? jl.get_scale() : 1.0;
+        double dpad_scale = dp != null ? dp.get_scale() : 1.0;
+        double abxy_scale = abxy != null ? abxy.get_scale() : 1.0;
+        double sb_scale = sb != null ? sb.get_scale() : 1.0;
+        double lr_scale = lr != null ? lr.get_scale() : 1.0;
 
         ((TextView)d.findViewById(R.id.virtual_pad_joystick_scale_hint)).setText(scale_text+joystick_scale);
         ((TextView)d.findViewById(R.id.virtual_pad_dpad_scale_hint)).setText(scale_text+dpad_scale);
@@ -99,8 +104,9 @@ public class VirtualControlEdit extends Activity implements View.OnTouchListener
             public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override
             public void onStopTrackingTouch(SeekBar seekBar) {
-                vc.find_component("joystick_l").set_scale( scale);
-                vc.find_component("joystick_r").set_scale( scale);
+                VirtualControl.Component c;
+                c = vc.find_component("joystick_l"); if (c != null) c.set_scale(scale);
+                c = vc.find_component("joystick_r"); if (c != null) c.set_scale(scale);
                 vc.invalidate();
             }
         });
@@ -117,7 +123,7 @@ public class VirtualControlEdit extends Activity implements View.OnTouchListener
             public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override
             public void onStopTrackingTouch(SeekBar seekBar) {
-                vc.find_component("dpad").set_scale( scale);
+                VirtualControl.Component c = vc.find_component("dpad"); if (c != null) c.set_scale(scale);
                 vc.invalidate();
             }
         });
@@ -134,10 +140,11 @@ public class VirtualControlEdit extends Activity implements View.OnTouchListener
             public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override
             public void onStopTrackingTouch(SeekBar seekBar) {
-                vc.find_component("a").set_scale( scale);
-                vc.find_component("b").set_scale( scale);
-                vc.find_component("x").set_scale( scale);
-                vc.find_component("y").set_scale( scale);
+                VirtualControl.Component c;
+                c = vc.find_component("a"); if (c != null) c.set_scale(scale);
+                c = vc.find_component("b"); if (c != null) c.set_scale(scale);
+                c = vc.find_component("x"); if (c != null) c.set_scale(scale);
+                c = vc.find_component("y"); if (c != null) c.set_scale(scale);
                 vc.invalidate();
             }
         });
@@ -154,8 +161,9 @@ public class VirtualControlEdit extends Activity implements View.OnTouchListener
             public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override
             public void onStopTrackingTouch(SeekBar seekBar) {
-                vc.find_component("start").set_scale( scale);
-                vc.find_component("back").set_scale( scale);
+                VirtualControl.Component c;
+                c = vc.find_component("start"); if (c != null) c.set_scale(scale);
+                c = vc.find_component("back"); if (c != null) c.set_scale(scale);
                 vc.invalidate();
             }
         });
@@ -172,12 +180,13 @@ public class VirtualControlEdit extends Activity implements View.OnTouchListener
             public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override
             public void onStopTrackingTouch(SeekBar seekBar) {
-                vc.find_component("shoulder_l").set_scale( scale);
-                vc.find_component("shoulder_r").set_scale( scale);
-                vc.find_component("thumb_press_l").set_scale( scale);
-                vc.find_component("thumb_press_r").set_scale( scale);
-                vc.find_component("trigger_l").set_scale( scale);
-                vc.find_component("trigger_r").set_scale( scale);
+                VirtualControl.Component c;
+                c = vc.find_component("shoulder_l"); if (c != null) c.set_scale(scale);
+                c = vc.find_component("shoulder_r"); if (c != null) c.set_scale(scale);
+                c = vc.find_component("thumb_press_l"); if (c != null) c.set_scale(scale);
+                c = vc.find_component("thumb_press_r"); if (c != null) c.set_scale(scale);
+                c = vc.find_component("trigger_l"); if (c != null) c.set_scale(scale);
+                c = vc.find_component("trigger_r"); if (c != null) c.set_scale(scale);
                 vc.invalidate();
             }
         });

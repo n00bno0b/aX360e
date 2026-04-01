@@ -41,7 +41,9 @@ static void j_setup_launch_args(JNIEnv* env,jobject self,jobjectArray args ){
     g_launch_args.clear();
     for(int i=0;i<env->GetArrayLength(args);i++){
         jstring arg=(jstring)env->GetObjectArrayElement(args,i);
-        g_launch_args.push_back(env->GetStringUTFChars(arg,NULL) );
+        const char* str = env->GetStringUTFChars(arg,NULL);
+        g_launch_args.push_back(str);
+        env->ReleaseStringUTFChars(arg, str);
     }
 }
 
@@ -110,13 +112,16 @@ static jstring j_simple_device_info(JNIEnv* env, jobject thiz)
 
         std::vector<core_info_t> core_info=cpu_get_core_info();
         std::string cpu_name=cpu_get_simple_info(core_info);
-        std::string cpu_features=[&](){
-            std::ostringstream oss;
-            for(const auto& feature : core_info[0].features){
-                oss <<"    * " << feature << "\n";
-            }
-            return oss.str();
-        }();
+        std::string cpu_features;
+        if (!core_info.empty()) {
+            cpu_features=[&](){
+                std::ostringstream oss;
+                for(const auto& feature : core_info[0].features){
+                    oss <<"    * " << feature << "\n";
+                }
+                return oss.str();
+            }();
+        }
         return "CPU [" + cpu_name + "]:\n" + cpu_features;
     };
 

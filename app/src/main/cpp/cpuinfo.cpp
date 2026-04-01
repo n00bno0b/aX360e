@@ -29,7 +29,7 @@ std::vector<core_info_t> cpu_get_core_info(){
 
     std::string line;
     while (std::getline(cpuinfo, line)) {
-
+        try {
         if (line.find("processor") != std::string::npos) {
             core.processor = std::stoi(line.substr(line.find(":") + 2));
         }
@@ -50,6 +50,11 @@ std::vector<core_info_t> cpu_get_core_info(){
             while (iss >> feature) {
                 core.features.push_back(feature);
             }
+        }
+        } catch (const std::invalid_argument&) {
+            continue;
+        } catch (const std::out_of_range&) {
+            continue;
         }
     }
     std::sort(cores.begin(), cores.end(), [](const core_info_t& a, const core_info_t& b) {

@@ -95,6 +95,7 @@ public class PerformanceMonitor {
     private void updateMemoryUsage() {
         ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
         ActivityManager activityManager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+        if (activityManager == null) return;
         activityManager.getMemoryInfo(mi);
         
         memoryTotal = mi.totalMem;

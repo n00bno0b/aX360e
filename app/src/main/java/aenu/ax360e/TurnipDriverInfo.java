@@ -28,14 +28,12 @@ public class TurnipDriverInfo {
         
         if (icdFile.exists()) {
             info.isInstalled = true;
-            try {
-                BufferedReader reader = new BufferedReader(new FileReader(icdFile));
+            try (BufferedReader reader = new BufferedReader(new FileReader(icdFile))) {
                 StringBuilder sb = new StringBuilder();
                 String line;
                 while ((line = reader.readLine()) != null) {
                     sb.append(line);
                 }
-                reader.close();
                 
                 JSONObject json = new JSONObject(sb.toString());
                 JSONObject icd = json.getJSONObject("ICD");
