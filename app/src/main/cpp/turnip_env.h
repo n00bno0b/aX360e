@@ -59,6 +59,36 @@ inline void DisableUbwc(bool disable) {
     }
 }
 
+// Force system memory rendering instead of GMEM
+// Required for Adreno 830 where GMEM is broken and causes GPU hangs
+inline void SetSysmemMode(bool enable) {
+    if (enable) {
+        const char* existing = std::getenv("TU_DEBUG");
+        if (existing && std::string(existing).find("sysmem") == std::string::npos) {
+            std::string combined = std::string(existing) + ",sysmem";
+            setenv("TU_DEBUG", combined.c_str(), 1);
+        } else if (!existing) {
+            setenv("TU_DEBUG", "sysmem", 1);
+        }
+        TURNIP_LOGI("Enabled sysmem mode (required for Adreno 830)");
+    }
+}
+
+// Disable Low Resolution Z feature
+// Fixes Z-fighting and GPU hangs on some Adreno GPUs (especially A830)
+inline void DisableLrz(bool disable) {
+    if (disable) {
+        const char* existing = std::getenv("TU_DEBUG");
+        if (existing && std::string(existing).find("nolrz") == std::string::npos) {
+            std::string combined = std::string(existing) + ",nolrz";
+            setenv("TU_DEBUG", combined.c_str(), 1);
+        } else if (!existing) {
+            setenv("TU_DEBUG", "nolrz", 1);
+        }
+        TURNIP_LOGI("Disabled Low Resolution Z (fixes Z-fighting on some GPUs)");
+    }
+}
+
 // Get current TU_DEBUG setting
 inline const char* GetTuDebug() {
     return std::getenv("TU_DEBUG");

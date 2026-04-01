@@ -40,7 +40,9 @@ std::optional<VkInstance> vk_create_instance(const char * name) {
 }
 
 void vk_destroy_instance(VkInstance inst) {
-    vkDestroyInstance_(inst, nullptr);
+    if (vkDestroyInstance_ && inst != VK_NULL_HANDLE) {
+        vkDestroyInstance_(inst, nullptr);
+    }
 }
 
 int vk_get_physical_device_count(VkInstance inst){
@@ -116,6 +118,10 @@ std::optional<VkQueueFamilyProperties> vk_get_queue_family_properties(VkPhysical
 }
 
 std::optional<VkDevice> vk_create_device(VkPhysicalDevice pdev,uint32_t queueFamilyIndex,VkQueueFamilyProperties  props) {
+    if (!vkCreateDevice_) {
+        LOGE("vkCreateDevice function pointer is null");
+        return std::nullopt;
+    }
     float  queue_priority = 0.0f;
     VkDeviceQueueCreateInfo queue_create_info = {
             .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
@@ -146,10 +152,16 @@ std::optional<VkDevice> vk_create_device(VkPhysicalDevice pdev,uint32_t queueFam
 }
 
 void vk_destroy_device(VkDevice dev) {
-    vkDestroyDevice_(dev, nullptr);
+    if (vkDestroyDevice_ && dev != VK_NULL_HANDLE) {
+        vkDestroyDevice_(dev, nullptr);
+    }
 }
 
 std::optional<VkDescriptorSetLayout> vk_create_descriptor_set_layout(VkDevice dev,const std::vector<VkDescriptorSetLayoutBinding>& binds) {
+    if (!vkCreateDescriptorSetLayout_) {
+        LOGE("vkCreateDescriptorSetLayout function pointer is null");
+        return std::nullopt;
+    }
     VkDescriptorSetLayoutCreateInfo descriptor_set_layout_create_info = {
             .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
             .pNext = nullptr,
@@ -166,10 +178,16 @@ std::optional<VkDescriptorSetLayout> vk_create_descriptor_set_layout(VkDevice de
  }
 
   void vk_destroy_descriptor_set_layout(VkDevice dev,VkDescriptorSetLayout layout) {
-     vkDestroyDescriptorSetLayout_(dev,layout, nullptr);
+     if (vkDestroyDescriptorSetLayout_ && layout != VK_NULL_HANDLE) {
+         vkDestroyDescriptorSetLayout_(dev,layout, nullptr);
+     }
  }
 
 std::optional<VkPipelineLayout> vk_create_pipeline_layout(VkDevice dev,VkDescriptorSetLayout descriptor_set_layout) {
+    if (!vkCreatePipelineLayout_) {
+        LOGE("vkCreatePipelineLayout function pointer is null");
+        return std::nullopt;
+    }
     VkPipelineLayoutCreateInfo pipeline_layout_create_info = {
             .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
             .pNext = nullptr,
@@ -188,6 +206,14 @@ std::optional<VkPipelineLayout> vk_create_pipeline_layout(VkDevice dev,VkDescrip
 }
 
 std::optional<VkShaderModule> vk_create_shader_module(VkDevice dev,const std::vector<uint32_t>& code) {
+    if (!vkCreateShaderModule_) {
+        LOGE("vkCreateShaderModule function pointer is null");
+        return std::nullopt;
+    }
+    if (code.empty()) {
+        LOGE("Shader code is empty");
+        return std::nullopt;
+    }
      VkShaderModuleCreateInfo shader_module_create_info = {
             .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
             .pNext = nullptr,
@@ -204,14 +230,22 @@ std::optional<VkShaderModule> vk_create_shader_module(VkDevice dev,const std::ve
 }
 
 void vk_destroy_shader_module(VkDevice dev,VkShaderModule module){
-    vkDestroyShaderModule_(dev, module, nullptr);
+    if (vkDestroyShaderModule_ && module != VK_NULL_HANDLE) {
+        vkDestroyShaderModule_(dev, module, nullptr);
+    }
 }
 
 void vk_destroy_pipeline_layout(VkDevice dev,VkPipelineLayout layout) {
-    vkDestroyPipelineLayout_(dev, layout, nullptr);
+    if (vkDestroyPipelineLayout_ && layout != VK_NULL_HANDLE) {
+        vkDestroyPipelineLayout_(dev, layout, nullptr);
+    }
 }
 
 std::optional <VkPipeline> vk_create_compute_pipeline(VkDevice dev,VkPipelineLayout layout,VkShaderModule module) {
+    if (!vkCreateComputePipelines_) {
+        LOGE("vkCreateComputePipelines function pointer is null");
+        return std::nullopt;
+    }
     VkComputePipelineCreateInfo compute_pipeline_create_info = {
             .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
             .pNext = nullptr,
@@ -237,5 +271,7 @@ std::optional <VkPipeline> vk_create_compute_pipeline(VkDevice dev,VkPipelineLay
 }
 
 void  vk_destroy_pipeline(VkDevice dev,VkPipeline pipeline) {
-    vkDestroyPipeline_(dev, pipeline, nullptr);
+    if (vkDestroyPipeline_ && pipeline != VK_NULL_HANDLE) {
+        vkDestroyPipeline_(dev, pipeline, nullptr);
+    }
 }

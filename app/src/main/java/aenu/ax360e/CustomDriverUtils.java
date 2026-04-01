@@ -22,6 +22,9 @@ public class CustomDriverUtils {
 
     private static final String TAG = "CustomDriverUtils";
     private static final String DRIVER_DIR_NAME = "custom_drivers";
+    // Decompression bomb limits to prevent OOM from malicious zip files
+    private static final long MAX_TOTAL_UNCOMPRESSED_SIZE = 100 * 1024 * 1024; // 100MB total
+    private static final long MAX_SINGLE_FILE_SIZE = 50 * 1024 * 1024; // 50MB per file
 
     public static File getDriverDirectory(Context context) {
         return context.getDir(DRIVER_DIR_NAME, Context.MODE_PRIVATE);
@@ -49,8 +52,17 @@ public class CustomDriverUtils {
             try (ZipInputStream zis = new ZipInputStream(is)) {
                 ZipEntry entry;
                 String canonicalStagingPath = stagingDir.getCanonicalPath();
+                long totalBytesExtracted = 0;
                 while ((entry = zis.getNextEntry()) != null) {
                     if (!entry.isDirectory()) {
+                        // Check for decompression bomb - individual file size
+                        if (entry.getSize() > MAX_SINGLE_FILE_SIZE) {
+                            Log.e(TAG, "Zip entry too large: " + entry.getName()
+                                    + " (" + entry.getSize() + " bytes, max " + MAX_SINGLE_FILE_SIZE + ")");
+                            deleteRecursive(stagingDir);
+                            return false;
+                        }
+
                         File file = new File(stagingDir, entry.getName());
                         String canonicalFilePath = file.getCanonicalPath();
                         if (!canonicalFilePath.startsWith(canonicalStagingPath + File.separator)) {
@@ -62,9 +74,23 @@ public class CustomDriverUtils {
                         if (parentDir != null) parentDir.mkdirs();
 
                         try (FileOutputStream fos = new FileOutputStream(file)) {
-                            byte[] buffer = new byte[1024];
+                            byte[] buffer = new byte[4096];
                             int length;
+                            long fileBytesWritten = 0;
                             while ((length = zis.read(buffer)) > 0) {
+                                fileBytesWritten += length;
+                                totalBytesExtracted += length;
+                                // Check limits during extraction (handles unknown sizes)
+                                if (fileBytesWritten > MAX_SINGLE_FILE_SIZE) {
+                                    Log.e(TAG, "File exceeded max size during extraction: " + entry.getName());
+                                    deleteRecursive(stagingDir);
+                                    return false;
+                                }
+                                if (totalBytesExtracted > MAX_TOTAL_UNCOMPRESSED_SIZE) {
+                                    Log.e(TAG, "Total extraction exceeded max size: " + totalBytesExtracted + " bytes");
+                                    deleteRecursive(stagingDir);
+                                    return false;
+                                }
                                 fos.write(buffer, 0, length);
                             }
                         }

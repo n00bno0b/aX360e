@@ -109,3 +109,7 @@ void vk_unload() {
 
     LOGI("Vulkan library unloaded successfully");
 }
+
+bool vk_is_loaded() {
+    return lib_handle != nullptr;
+}

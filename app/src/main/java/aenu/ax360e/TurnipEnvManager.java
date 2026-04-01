@@ -44,6 +44,16 @@ public class TurnipEnvManager {
             tuDebugFlags.add("noubwc");
         }
 
+        // Sysmem mode - required for Adreno 830 where GMEM is broken
+        if (prefs.getBoolean("TurnipAdvanced|sysmem_mode", false)) {
+            tuDebugFlags.add("sysmem");
+        }
+
+        // Disable Low Resolution Z - fixes Z-fighting and GPU hangs on some Adreno GPUs
+        if (prefs.getBoolean("TurnipAdvanced|nolrz", false)) {
+            tuDebugFlags.add("nolrz");
+        }
+
         if (!tuDebugFlags.isEmpty()) {
             envVars.add(new EnvVar("TU_DEBUG", String.join(",", tuDebugFlags)));
         }
