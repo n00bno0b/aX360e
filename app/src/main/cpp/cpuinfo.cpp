@@ -7,6 +7,7 @@
 #include <sstream>
 #include <algorithm>
 #include <format>
+#include <stdexcept>
 #include <map>
 #include <android/log.h>
 
@@ -74,7 +75,9 @@ int cpu_get_max_mhz(const int core_idx) {
     std::getline(max_freq, hz);
     try {
         return std::stoi(hz)/1000;
-    } catch (const std::exception&) {
+    } catch (const std::invalid_argument&) {
+        return 0;
+    } catch (const std::out_of_range&) {
         return 0;
     }
 }
