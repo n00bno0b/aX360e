@@ -37,8 +37,11 @@ public class Emulator extends aenu.emulator.Emulator{
     public static int nc_open_uri_fd(Context ctx,Uri uri) {
         try {
             ParcelFileDescriptor pfd_ = ctx.getContentResolver().openFileDescriptor(uri, "r");
+            if (pfd_ == null) {
+                Log.e("ax360e", "openFileDescriptor returned null for: " + uri);
+                return -1;
+            }
             int game_fd=pfd_.detachFd();
-            pfd_.close();
             return game_fd;
         } catch (Exception e) {
             Log.e("ax360e",e.toString());

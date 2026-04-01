@@ -54,13 +54,17 @@ public class MainActivityHelper {
     }
     
     private void setupRecyclerView() {
-        gameListRecycler.setLayoutManager(new LinearLayoutManager(activity));
-        gameListRecycler.setHasFixedSize(true);
+        if (gameListRecycler != null) {
+            gameListRecycler.setLayoutManager(new LinearLayoutManager(activity));
+            gameListRecycler.setHasFixedSize(true);
+        }
     }
     
     public void setAdapter(GameListAdapter adapter) {
         this.adapter = adapter;
-        gameListRecycler.setAdapter(adapter);
+        if (gameListRecycler != null) {
+            gameListRecycler.setAdapter(adapter);
+        }
     }
     
     private void setupSwipeRefresh() {
@@ -77,7 +81,7 @@ public class MainActivityHelper {
         if (viewToggleButton != null) {
             viewToggleButton.setOnClickListener(v -> {
                 isGridView = !isGridView;
-                if (adapter != null) {
+                if (adapter != null && gameListRecycler != null) {
                     adapter.setGridView(isGridView);
                     
                     if (isGridView) {
@@ -130,8 +134,8 @@ public class MainActivityHelper {
             chipAllGames.setOnCheckedChangeListener((buttonView, isChecked) -> {
                 if (isChecked && adapter != null) {
                     adapter.clearFilters();
-                    chipFavorites.setChecked(false);
-                    chipRecent.setChecked(false);
+                    if (chipFavorites != null) chipFavorites.setChecked(false);
+                    if (chipRecent != null) chipRecent.setChecked(false);
                 }
             });
         }
@@ -140,8 +144,8 @@ public class MainActivityHelper {
             chipFavorites.setOnCheckedChangeListener((buttonView, isChecked) -> {
                 if (isChecked && adapter != null) {
                     adapter.filterFavorites();
-                    chipAllGames.setChecked(false);
-                    chipRecent.setChecked(false);
+                    if (chipAllGames != null) chipAllGames.setChecked(false);
+                    if (chipRecent != null) chipRecent.setChecked(false);
                 }
             });
         }
@@ -150,8 +154,8 @@ public class MainActivityHelper {
             chipRecent.setOnCheckedChangeListener((buttonView, isChecked) -> {
                 if (isChecked && adapter != null) {
                     adapter.filterRecent();
-                    chipAllGames.setChecked(false);
-                    chipFavorites.setChecked(false);
+                    if (chipAllGames != null) chipAllGames.setChecked(false);
+                    if (chipFavorites != null) chipFavorites.setChecked(false);
                 }
             });
         }

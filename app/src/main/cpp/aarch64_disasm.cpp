@@ -15,6 +15,7 @@ std::string aarch64_disasm(uint64_t base, uint32_t* code,size_t count){
     size_t n=cs_disasm(capstone_handle_, reinterpret_cast<const uint8_t*>(code), count* sizeof(uint32_t), base, count, &instructions);
     if(n!=count){
         cs_free(instructions, n);
+        cs_close(&capstone_handle_);
         return "";
     }
     std::stringstream ss;
@@ -23,5 +24,6 @@ std::string aarch64_disasm(uint64_t base, uint32_t* code,size_t count){
         ss<<instructions[i].address<<" "<<instructions[i].mnemonic<<" "<<instructions[i].op_str<<"\n";
     }
     cs_free(instructions, n);
+    cs_close(&capstone_handle_);
     return ss.str();
 }

@@ -82,7 +82,9 @@ namespace xe {
                 entry->attributes_ = kFileAttributeReadOnly;
                 entry->handle_ = static_cast<uint32_t>(handle);
                 entry->parent_ = parent;
-                entry->children_.push_back(std::unique_ptr<Entry>(entry));
+                if (parent) {
+                    parent->children_.push_back(std::unique_ptr<Entry>(entry));
+                }
                 return true;
             }
 
