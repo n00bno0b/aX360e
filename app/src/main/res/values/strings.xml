@@ -512,7 +512,7 @@ This Config requires you to pair an analog and digitial flag together while digi
 2 = F16C
 -1 = Detect and utilize all possible processor features</string>
 
-</resources>
+
     <!-- UI Improvements -->
     <string name="search_games">Search games...</string>
     <string name="all_games">All Games</string>
@@ -628,4 +628,6 @@ This Config requires you to pair an analog and digitial flag together while digi
     <string name="driver_global">Global (System/Custom)</string>
     <string name="driver_stock">Stock Qualcomm Driver</string>
     <string name="driver_custom">Custom Turnip Driver</string>
+
+</resources>
 
