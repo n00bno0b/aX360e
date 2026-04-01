@@ -513,7 +513,6 @@
     <!-- Include Advanced Settings -->
     </PreferenceScreen>
     <!-- Include Advanced Settings -->
-</PreferenceScreen>    
     <!-- Advanced Turnip Settings -->
     <PreferenceScreen app:title="@string/turnip_advanced_settings"
         app:key="TurnipAdvanced">
