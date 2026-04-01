@@ -55,7 +55,14 @@ static jstring j_simple_device_info(JNIEnv* env, jobject thiz)
     std::string info;
 
     auto get_gpu_info=[]()->std::string {
-        std::pair<std::string,bool> lib_info={"libvulkan.so",false};
+        // Check if a custom Turnip driver is installed via CUSTOM_DRIVER_PATH env var
+        const char* custom_path = std::getenv("CUSTOM_DRIVER_PATH");
+        std::pair<std::string,bool> lib_info;
+        if (custom_path && custom_path[0] != '\0') {
+            lib_info = {custom_path, true};
+        } else {
+            lib_info = {"libvulkan.so", false};
+        }
         vk_load(lib_info.first.c_str(),lib_info.second);
 
         struct clean_t{

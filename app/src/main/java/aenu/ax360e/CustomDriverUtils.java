@@ -102,8 +102,6 @@ public class CustomDriverUtils {
                 }
 
                 if (driverSoName != null) {
-                    generateIcdManifest(stagingDir, driverSoName);
-
                     // Validation succeeded, atomically swap staging into place
                     if (dir.exists()) {
                         deleteRecursive(dir);
@@ -113,6 +111,8 @@ public class CustomDriverUtils {
                         deleteRecursive(stagingDir);
                         return false;
                     }
+                    // Generate ICD manifest AFTER rename so paths point to final location
+                    generateIcdManifest(dir, driverSoName);
                     return true;
                 } else {
                     Log.e(TAG, "No vulkan .so file found in zip.");
@@ -149,13 +149,62 @@ public class CustomDriverUtils {
         File icdFile = new File(dir, "vk_icd.json");
         if (icdFile.exists()) {
             try {
+                // Set ICD env vars (used by desktop Vulkan loaders, informational on Android)
                 Os.setenv("VK_ICD_FILENAMES", icdFile.getAbsolutePath(), true);
                 Os.setenv("VK_DRIVER_FILES", icdFile.getAbsolutePath(), true);
+
+                // On Android the system Vulkan loader ignores VK_ICD_FILENAMES,
+                // so we also export the direct .so path for native code to dlopen.
+                String soPath = findDriverSoPath(dir);
+                if (soPath != null) {
+                    Os.setenv("CUSTOM_DRIVER_PATH", soPath, true);
+                    Log.i(TAG, "Custom GPU driver path set: " + soPath);
+                }
+
                 Log.i(TAG, "Custom GPU driver environment variables set.");
             } catch (ErrnoException e) {
                 Log.e(TAG, "Failed to set custom driver env variables", e);
             }
         }
+    }
+
+    /**
+     * Find the Vulkan .so path inside the installed driver directory.
+     * Returns null if no valid driver .so is found.
+     */
+    private static String findDriverSoPath(File dir) {
+        // First try parsing vk_icd.json for library_path
+        File icdFile = new File(dir, "vk_icd.json");
+        if (icdFile.exists()) {
+            try (FileInputStream fis = new FileInputStream(icdFile)) {
+                byte[] data = new byte[(int) icdFile.length()];
+                fis.read(data);
+                JSONObject root = new JSONObject(new String(data));
+                JSONObject icd = root.getJSONObject("ICD");
+                String path = icd.getString("library_path");
+                if (new File(path).exists()) {
+                    return path;
+                }
+            } catch (IOException | JSONException e) {
+                Log.w(TAG, "Failed to parse vk_icd.json for library_path", e);
+            }
+        }
+        // Fallback: scan directory for vulkan .so files
+        return findSoRecursive(dir);
+    }
+
+    private static String findSoRecursive(File dir) {
+        File[] files = dir.listFiles();
+        if (files == null) return null;
+        for (File f : files) {
+            if (f.isDirectory()) {
+                String result = findSoRecursive(f);
+                if (result != null) return result;
+            } else if (f.getName().endsWith(".so") && f.getName().contains("vulkan")) {
+                return f.getAbsolutePath();
+            }
+        }
+        return null;
     }
 
     public static void removeDriver(Context context) {
