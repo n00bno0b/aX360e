@@ -121,6 +121,7 @@ public class PerformanceMonitor {
     private void updateThermalStatus() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             PowerManager powerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+            if (powerManager == null) return;
             int thermalStatus = powerManager.getCurrentThermalStatus();
             
             // THERMAL_STATUS_NONE = 0, THERMAL_STATUS_LIGHT = 1, 

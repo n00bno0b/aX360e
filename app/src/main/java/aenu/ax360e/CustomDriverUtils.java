@@ -58,7 +58,8 @@ public class CustomDriverUtils {
                         }
 
                         // Create parent directories if needed
-                        file.getParentFile().mkdirs();
+                        File parentDir = file.getParentFile();
+                        if (parentDir != null) parentDir.mkdirs();
 
                         try (FileOutputStream fos = new FileOutputStream(file)) {
                             byte[] buffer = new byte[1024];

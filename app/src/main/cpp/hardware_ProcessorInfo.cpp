@@ -26,10 +26,16 @@ extern "C" JNIEXPORT jstring JNICALL  Java_aenu_hardware_ProcessorInfo_gpu_1get_
     }
 
     uint32_t physicalDeviceCount = 0;
-    vkEnumeratePhysicalDevices(inst, &physicalDeviceCount, nullptr);
+    if (vkEnumeratePhysicalDevices(inst, &physicalDeviceCount, nullptr) != VK_SUCCESS || physicalDeviceCount == 0) {
+        vkDestroyInstance(inst, nullptr);
+        return nullptr;
+    }
 
     std::vector<VkPhysicalDevice> physicalDevices(physicalDeviceCount);
-    vkEnumeratePhysicalDevices(inst, &physicalDeviceCount, physicalDevices.data());
+    if (vkEnumeratePhysicalDevices(inst, &physicalDeviceCount, physicalDevices.data()) != VK_SUCCESS) {
+        vkDestroyInstance(inst, nullptr);
+        return nullptr;
+    }
 
     if(physicalDevices.empty()){
         vkDestroyInstance(inst, nullptr);

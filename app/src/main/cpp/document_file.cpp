@@ -119,6 +119,10 @@ std::string DocumentFile::getName() const {
     }
 
     const char *nameChars = env_->GetStringUTFChars(nameStr, nullptr);
+    if (nameChars == nullptr) {
+        env_->DeleteLocalRef(nameStr);
+        return "";
+    }
     std::string name(nameChars);
     env_->ReleaseStringUTFChars(nameStr, nameChars);
     env_->DeleteLocalRef(nameStr);
