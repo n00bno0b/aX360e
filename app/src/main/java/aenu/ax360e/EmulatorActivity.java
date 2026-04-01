@@ -62,7 +62,32 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
             return true;
         }
     });
+    private static final long MIN_RAM_BYTES = 4L * 1024 * 1024 * 1024; // 4 GB
+
     void on_create(){
+        // Check minimum RAM before attempting to boot emulator
+        android.app.ActivityManager am = (android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE);
+        if (am != null) {
+            android.app.ActivityManager.MemoryInfo mi = new android.app.ActivityManager.MemoryInfo();
+            am.getMemoryInfo(mi);
+            if (mi.totalMem < MIN_RAM_BYTES) {
+                long totalMB = mi.totalMem / (1024 * 1024);
+                new AlertDialog.Builder(this)
+                    .setTitle("Insufficient RAM")
+                    .setMessage("This device has " + totalMB + " MB of RAM. " +
+                                "Xbox 360 emulation requires at least 4 GB. " +
+                                "The app may crash or run very poorly.")
+                    .setPositiveButton("Continue Anyway", (d, w) -> continueOnCreate())
+                    .setNegativeButton("Exit", (d, w) -> finish())
+                    .setCancelable(false)
+                    .show();
+                return;
+            }
+        }
+        continueOnCreate();
+    }
+
+    private void continueOnCreate(){
         String uri=getIntent().getStringExtra(EXTRA_GAME_URI);
         aenu.emulator.Emulator.Path path=aenu.emulator.Emulator.Path.from(uri,-1);
         Emulator.get.setup_context(this);

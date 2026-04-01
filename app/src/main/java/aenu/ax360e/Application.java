@@ -30,6 +30,10 @@ public class Application extends android.app.Application{
     public  static byte[] load_assets_file(Context ctx,String asset_file_path) {
         try (InputStream in = ctx.getAssets().open(asset_file_path)) {
             int size = in.available();
+            if (size > 10 * 1024 * 1024) { // 10 MB safety limit for asset files
+                android.util.Log.e("Application", "Asset file too large: " + asset_file_path + " (" + size + " bytes)");
+                return null;
+            }
             byte[] buffer = new byte[size];
             in.read(buffer);
             return buffer;

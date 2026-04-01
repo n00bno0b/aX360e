@@ -58,7 +58,12 @@ public class Utils {
 
     static String load_string(File file){
         try(FileInputStream fis=new FileInputStream(file)){
-            byte[] buf=new byte[fis.available()];
+            int size = fis.available();
+            if (size > 10 * 1024 * 1024) { // 10 MB safety limit for config/text files
+                android.util.Log.e("Utils", "File too large to load as string: " + file.getPath() + " (" + size + " bytes)");
+                return null;
+            }
+            byte[] buf=new byte[size];
             fis.read(buf);
             return new String(buf);
         }catch(Exception e){

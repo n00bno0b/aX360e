@@ -18,6 +18,7 @@
         android:theme="@style/Theme.Ax360e"
         android:requestLegacyExternalStorage="true"
         android:allowNativeHeapPointerTagging="false"
+        android:largeHeap="true"
         tools:targetApi="31" >
 
 
