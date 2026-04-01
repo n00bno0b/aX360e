@@ -130,10 +130,8 @@ public class PerformanceMonitor {
             deviceTemperature = 25 + (thermalStatus * 10); // 25°C + 10°C per level
         } else {
             // Fallback for older Android versions - try reading thermal zone
-            try {
-                BufferedReader reader = new BufferedReader(new FileReader("/sys/class/thermal/thermal_zone0/temp"));
+            try (BufferedReader reader = new BufferedReader(new FileReader("/sys/class/thermal/thermal_zone0/temp"))) {
                 String temp = reader.readLine();
-                reader.close();
                 deviceTemperature = Integer.parseInt(temp) / 1000.0f; // Convert from millidegrees
                 isThermalThrottling = deviceTemperature > 60; // Threshold for throttling
             } catch (IOException | NumberFormatException e) {

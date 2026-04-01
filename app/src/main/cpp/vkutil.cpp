@@ -43,11 +43,11 @@ int vk_get_physical_device_count(VkInstance inst){
 }
 std::optional<VkPhysicalDevice> vk_get_physical_device(VkInstance inst, int index){
     uint32_t count = vk_get_physical_device_count(inst);
-     if (count == 0)
+    if (count == 0 || index < 0 || static_cast<uint32_t>(index) >= count)
         return std::nullopt;
-     std ::vector<VkPhysicalDevice> devices(count);
-     vkEnumeratePhysicalDevices_(inst, &count, devices.data());
-     return devices[index];
+    std::vector<VkPhysicalDevice> devices(count);
+    vkEnumeratePhysicalDevices_(inst, &count, devices.data());
+    return devices[index];
 }
 
  VkPhysicalDeviceProperties vk_get_physical_device_properties(VkPhysicalDevice dev){
@@ -77,8 +77,10 @@ int vk_get_queue_family_properties_count(VkPhysicalDevice dev) {
     return count;
 }
 
-VkQueueFamilyProperties vk_get_queue_family_properties(VkPhysicalDevice dev,int index) {
+std::optional<VkQueueFamilyProperties> vk_get_queue_family_properties(VkPhysicalDevice dev,int index) {
     uint32_t count= vk_get_queue_family_properties_count( dev);
+    if (count == 0 || index < 0 || static_cast<uint32_t>(index) >= count)
+        return std::nullopt;
     std::vector<VkQueueFamilyProperties> props(count);
     vkGetPhysicalDeviceQueueFamilyProperties_(dev, &count, props.data());
     return props[index];
@@ -124,7 +126,7 @@ std::optional<VkDescriptorSetLayout> vk_create_descriptor_set_layout(VkDevice de
             .pNext = nullptr,
             .flags = 0,
             .bindingCount = static_cast<uint32_t>(binds.size()),
-            .pBindings = binds .data()
+            .pBindings = binds.data()
     };
     VkDescriptorSetLayout layout;
     if(vkCreateDescriptorSetLayout_( dev, &descriptor_set_layout_create_info, nullptr, &layout)!= VK_SUCCESS){

@@ -28,12 +28,10 @@ public class Application extends android.app.Application{
     }
 
     public  static byte[] load_assets_file(Context ctx,String asset_file_path) {
-        try {
-            InputStream in = ctx.getAssets().open(asset_file_path);
+        try (InputStream in = ctx.getAssets().open(asset_file_path)) {
             int size = in.available();
             byte[] buffer = new byte[size];
             in.read(buffer);
-            in.close();
             return buffer;
         } catch (IOException e) {
             e.printStackTrace();

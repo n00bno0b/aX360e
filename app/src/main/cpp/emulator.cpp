@@ -364,7 +364,10 @@ static void j_setup_game_path(JNIEnv* env,jobject self,jobject path ){
             ae::boot_type=ae::BOOT_TYPE_WITH_FD;
         else{
             jfieldID f_uri  = env->GetFieldID(path_cls, "uri", "Ljava/lang/String;");
-            ae::boot_game_uri=std::string(env->GetStringUTFChars(reinterpret_cast<jstring>(env->GetObjectField(path, f_uri)), nullptr));
+            jstring j_uri = reinterpret_cast<jstring>(env->GetObjectField(path, f_uri));
+            const char* uri_chars = env->GetStringUTFChars(j_uri, nullptr);
+            ae::boot_game_uri=std::string(uri_chars);
+            env->ReleaseStringUTFChars(j_uri, uri_chars);
             ae::boot_type=ae::BOOT_TYPE_WITH_URI;
         }
     }

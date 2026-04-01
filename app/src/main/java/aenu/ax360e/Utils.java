@@ -49,21 +49,17 @@ public class Utils {
     }
 
     static void save_string(File file, String str){
-        try{
-            FileOutputStream fos=new FileOutputStream(file);
+        try(FileOutputStream fos=new FileOutputStream(file)){
             fos.write(str.getBytes());
-            fos.close();
         }catch(Exception e){
             e.printStackTrace();
         }
     }
 
     static String load_string(File file){
-        try{
-            FileInputStream fis=new FileInputStream(file);
+        try(FileInputStream fis=new FileInputStream(file)){
             byte[] buf=new byte[fis.available()];
             fis.read(buf);
-            fis.close();
             return new String(buf);
         }catch(Exception e){
             e.printStackTrace();
@@ -72,16 +68,13 @@ public class Utils {
     }
 
     static void copy_file(File src_file,File dst_file){
-        try{
-            FileInputStream in=new FileInputStream(src_file);
-            FileOutputStream out=new FileOutputStream(dst_file);
+        try(FileInputStream in=new FileInputStream(src_file);
+            FileOutputStream out=new FileOutputStream(dst_file)){
             byte[] buf=new byte[16384];
             int len;
             while((len=in.read(buf))>0){
                 out.write(buf,0,len);
             }
-            in.close();
-            out.close();
         }catch(Exception e){
             e.printStackTrace();
         }
@@ -118,15 +111,14 @@ public class Utils {
                     File outputFile = new File(outputDir, file);
                     if(outputFile.exists())continue;
 
-                    InputStream in = assetManager.open(assertDir + "/" + file);
-                    FileOutputStream out = new FileOutputStream(outputFile);
-                    byte[] buffer = new byte[16384];
-                    int read;
-                    while ((read = in.read(buffer))!= -1) {
-                        out.write(buffer, 0, read);
+                    try(InputStream in = assetManager.open(assertDir + "/" + file);
+                        FileOutputStream out = new FileOutputStream(outputFile)){
+                        byte[] buffer = new byte[16384];
+                        int read;
+                        while ((read = in.read(buffer))!= -1) {
+                            out.write(buffer, 0, read);
+                        }
                     }
-                    in.close();
-                    out.close();
                 }
             }
         } catch (IOException e) {

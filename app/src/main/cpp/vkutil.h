@@ -26,7 +26,7 @@ void vk_destroy_instance(VkInstance inst);
 
 int vk_get_queue_family_properties_count(VkPhysicalDevice dev);
 
-VkQueueFamilyProperties vk_get_queue_family_properties(VkPhysicalDevice dev,int index);
+std::optional<VkQueueFamilyProperties> vk_get_queue_family_properties(VkPhysicalDevice dev,int index);
 
 std::optional<VkDevice> vk_create_device(VkPhysicalDevice pdev,uint32_t queueFamilyIndex,VkQueueFamilyProperties  props);
 

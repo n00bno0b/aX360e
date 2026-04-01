@@ -497,28 +497,30 @@ public class MainActivity extends AppCompatActivity {
                 return metas;
             DocumentFile[] files=iso_dir.listFiles();
             for(DocumentFile file:files){
+                String fileName = file.getName();
+                if(fileName == null) continue;
                 if(file.isDirectory()){
                     DocumentFile default_xex_file=Filter.get_default_xex_file(file);
                     if(default_xex_file==null) continue;
                     Emulator.GameInfo meta=new Emulator.GameInfo();
                     meta.uri=default_xex_file.getUri().toString();
-                    meta.name=file.getName();
+                    meta.name=fileName;
                     metas.add(meta);
                 }
                 else{
-                    if(Filter.is_iso_file(file.getName())){
+                    if(Filter.is_iso_file(fileName)){
                         Emulator.GameInfo meta=new Emulator.GameInfo();
-                        meta.name=file.getName().substring(0,file.getName().length()-4);
+                        meta.name=fileName.length()>=4?fileName.substring(0,fileName.length()-4):fileName;
                         meta.uri=file.getUri().toString();
                         metas.add(meta);
                     }
-                    if(Filter.is_zar_file(file.getName())){
+                    if(Filter.is_zar_file(fileName)){
                         Emulator.GameInfo meta=new Emulator.GameInfo();
-                        meta.name=file.getName().substring(0,file.getName().length()-4);
+                        meta.name=fileName.length()>=4?fileName.substring(0,fileName.length()-4):fileName;
                         meta.uri=file.getUri().toString();
                         metas.add(meta);
                     }
-                    else if(Filter.is_god_game(file.getName())){
+                    else if(Filter.is_god_game(fileName)){
                         Emulator.GameInfo meta=Emulator.get.meta_info_from_god_game(context,file.getUri().toString());
                         if(meta!=null)
                         metas.add(meta);
