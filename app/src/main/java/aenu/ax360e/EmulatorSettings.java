@@ -477,6 +477,7 @@ public class EmulatorSettings extends AppCompatActivity {
 
             for (String key:BOOL_KEYS){
                 CheckBoxPreference pref=findPreference(key);
+                if (pref == null) continue;
                 String val_str=config.load_config_entry(key);
                 if (val_str!=null) {
                     boolean val=Boolean.parseBoolean(val_str);
@@ -490,6 +491,7 @@ public class EmulatorSettings extends AppCompatActivity {
 
             for (String key:INT_KEYS){
                 SeekBarPreference pref=findPreference(key);
+                if (pref == null) continue;
                 String val_str=config.load_config_entry(key);
                 if (val_str!=null) {
                     //FIXME
@@ -525,6 +527,7 @@ public class EmulatorSettings extends AppCompatActivity {
             };*/
             for (String key:STRING_ARR_KEYS){
                 ListPreference pref=findPreference(key);
+                if (pref == null) continue;
                 String val_str=config.load_config_entry(key);
                 if (val_str!=null) {
                     pref.setValue(val_str);
@@ -541,7 +544,7 @@ public class EmulatorSettings extends AppCompatActivity {
 
             for (String key:NODE_KEYS){
                 PreferenceScreen pref=findPreference(key);
-                pref.setOnPreferenceClickListener(this);
+                if (pref != null) pref.setOnPreferenceClickListener(this);
             }
 
             Preference custom_driver_load_pref=findPreference(KEY_CUSTOM_DRIVER_LOAD_TYPE);
