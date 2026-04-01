@@ -441,15 +441,15 @@ public class MainActivity extends AppCompatActivity {
         }
 
         static String load_file_as_string(File file) throws IOException {
-            FileInputStream fis=new FileInputStream(file);
-            ByteArrayOutputStream baos=new ByteArrayOutputStream();
-            byte[] buffer=new byte[16384];
-            int n;
-            while ((n=fis.read(buffer))!=-1){
-                baos.write(buffer,0,n);
+            try (FileInputStream fis=new FileInputStream(file);
+                 ByteArrayOutputStream baos=new ByteArrayOutputStream()) {
+                byte[] buffer=new byte[16384];
+                int n;
+                while ((n=fis.read(buffer))!=-1){
+                    baos.write(buffer,0,n);
+                }
+                return baos.toString();
             }
-            fis.close();
-            return baos.toString();
         }
         /*static ArrayList<Emulator.GameInfo> load_game_list_from_json_file(File json) throws JSONException, IOException {
             String json_str=load_file_as_string(json);

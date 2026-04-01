@@ -5,6 +5,7 @@
 
  #include "vkutil.h"
 
+#include <algorithm>
 #include <android/log.h>
 
 #define LOG_TAG "vkutil"

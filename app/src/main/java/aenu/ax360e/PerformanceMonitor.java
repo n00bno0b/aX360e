@@ -64,9 +64,10 @@ public class PerformanceMonitor {
             if (elapsedTime < 1000) return; // Update every second
             
             // Read /proc/stat for total CPU time
-            RandomAccessFile reader = new RandomAccessFile("/proc/stat", "r");
-            String load = reader.readLine();
-            reader.close();
+            String load;
+            try (RandomAccessFile reader = new RandomAccessFile("/proc/stat", "r")) {
+                load = reader.readLine();
+            }
             
             String[] toks = load.split(" +");
             long idle = Long.parseLong(toks[4]);
