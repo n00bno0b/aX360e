@@ -1,6 +1,5 @@
 package aenu.ax360e;
 
-import android.annotation.TargetApi;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.Dialog;
@@ -8,25 +7,16 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.content.pm.PackageManager;
 import android.content.pm.ShortcutInfo;
 import android.content.pm.ShortcutManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.graphics.Canvas;
-import android.graphics.ColorMatrix;
-import android.graphics.ColorMatrixColorFilter;
-import android.graphics.Paint;
 import android.graphics.drawable.Icon;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.Environment;
 import android.os.Handler;
 import android.os.Message;
-import android.os.ParcelFileDescriptor;
 import android.preference.PreferenceManager;
-import android.provider.DocumentsContract;
-import android.util.Log;
 import android.view.ContextMenu;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
@@ -35,66 +25,33 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
-import android.widget.ArrayAdapter;
 import android.widget.BaseAdapter;
 import android.widget.ImageView;
-import android.widget.ListView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
-import androidx.activity.EdgeToEdge;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.graphics.Insets;
-import androidx.core.view.ViewCompat;
-import androidx.core.view.WindowInsetsCompat;
 import androidx.documentfile.provider.DocumentFile;
 
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-import org.w3c.dom.Text;
-
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileFilter;
 import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.Base64;
 
 public class MainActivity extends AppCompatActivity {
 
     public static final int REQUEST_SELECT_GAME_DIR=6004;
     static final int DELAY_ON_CREATE=0xaeae0000;
     public static final String PREF_GAME_DIR="game_dir";
-    /*public static File get_game_list_file(){
-        return new File(Application.get_app_data_dir(),"game_list.json");
-    }*/
 
-
-    private final AdapterView.OnItemClickListener item_click_l=new AdapterView.OnItemClickListener(){
-        @Override
-        public void onItemClick(AdapterView<?> l, View v, int position,long id)
-        {
-
-            Emulator.GameInfo meta_info=((GameMetaInfoAdapter)l.getAdapter()).getMetaInfo(position);
-
-            Intent intent = new Intent("aenu.intent.action.AX360E");
-            intent.setPackage(getPackageName());
-
-            intent.putExtra(EmulatorActivity.EXTRA_GAME_URI,meta_info.uri);
-            startActivity(intent);
-        }
-    };
-
-    ListView list_view;
     ProgressBar progress;
     ProgressTask progress_task;
     Emulator.Config config;
+    MainActivityHelper helper;
+    GameListAdapter gameListAdapter;
+    GameMetadataManager metadataManager;
     Dialog delay_dialog=null;
     final Handler delay_on_create=new Handler(new Handler.Callback() {
         @Override
@@ -135,26 +92,47 @@ public class MainActivity extends AppCompatActivity {
     }
 
     void _on_create(){
-        /*Emulator.get.setup_context(this);
-        //FIXME
-        Emulator.get.setup_document_file_tree(DocumentFile.fromTreeUri(this,MainActivity.load_pref_game_dir( this)));
-        Emulator.get.setup_launch_args(new String[]{
-                "--storage_root=/storage/emulated/0/Download/ax360e",
-                "--log_file=/storage/emulated/0/Download/ax360e/xe.log",
-        });*/
         setContentView(R.layout.activity_main);
-        list_view=findViewById(R.id.game_list);
-        list_view.setOnItemClickListener(item_click_l);
-        list_view.setEmptyView(findViewById(R.id.game_list_is_empty));
 
-        if(getPackageName().equals("aenu.ax360e"))
-        registerForContextMenu(list_view);
-        //refresh_game_list();
+        // Initialize metadata manager and adapter
+        metadataManager = new GameMetadataManager(this);
+        gameListAdapter = new GameListAdapter(this, metadataManager);
+        gameListAdapter.setOnGameClickListener(new GameListAdapter.OnGameClickListener() {
+            @Override
+            public void onGameClick(Emulator.GameInfo game) {
+                Intent intent = new Intent("aenu.intent.action.AX360E");
+                intent.setPackage(getPackageName());
+                intent.putExtra(EmulatorActivity.EXTRA_GAME_URI, game.uri);
+                startActivity(intent);
+            }
+
+            @Override
+            public void onGameLongClick(Emulator.GameInfo game) {
+                // Handle long-click directly since context menus are not wired for RecyclerView items
+                AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
+                builder.setTitle(game.name);
+                String uriDisplay = game.uri != null ? game.uri : "No URI";
+                builder.setMessage(uriDisplay);
+                builder.setPositiveButton(android.R.string.ok, null);
+                builder.show();
+            }
+        });
+
+        // Initialize Material3 helper and wire up all UI components
+        helper = new MainActivityHelper(this);
+        helper.initializeViews(findViewById(android.R.id.content));
+        helper.setAdapter(gameListAdapter);
+
+        // Wire up the "Set Game Directory" button in the empty state
+        View btnSetGameDir = findViewById(R.id.btn_set_game_dir);
+        if (btnSetGameDir != null) {
+            btnSetGameDir.setOnClickListener(v -> request_game_dir_select(MainActivity.this));
+        }
+
+        if(getPackageName().equals("aenu.ax360e")) {
+            // Context menu registered on adapter items via long-click above
+        }
         show_game_list();
-        /*if(!new File(Application.get_app_data_dir(),"xenia.config.toml").exists()) return;
-        String config_str=Emulator.get.generate_config_xml(new File(Application.get_app_data_dir(),"xenia.config.toml").getAbsolutePath());
-        File config_file=new File(Application.get_app_data_dir(),"xenia.config.xml");
-        Utils.save_string(config_file,config_str);*/
     }
 
     void on_create(){
@@ -191,11 +169,6 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         }.start();
-    }
-
-    @Override
-    protected void onStart() {
-        super.onStart();
     }
 
     @Override
@@ -298,6 +271,7 @@ public class MainActivity extends AppCompatActivity {
         }
         else if(item_id==R.id.menu_about){
             startActivity(new Intent(this,AboutActivity.class));
+            return true;
         }
         else if(item_id==R.id.menu_settings){
             startActivity(new Intent(this,EmulatorSettings.class));
@@ -330,7 +304,7 @@ public class MainActivity extends AppCompatActivity {
         activity.startActivityForResult(intent, REQUEST_SELECT_GAME_DIR);
     }
     GameMetaInfoAdapter adapter=null;
-    private void refresh_game_list(){
+    void refresh_game_list(){
 
         (progress_task=new ProgressTask( this)
                 .set_progress_message(getString( R.string.game_list_loading))
@@ -363,7 +337,14 @@ public class MainActivity extends AppCompatActivity {
             refresh_game_list();
             return;
         }
-        ((ListView)findViewById(R.id.game_list)).setAdapter(adapter);
+        // Convert to list and set on RecyclerView adapter
+        if (gameListAdapter != null) {
+            gameListAdapter.setGameList(adapter.metas);
+        }
+        // Show/hide empty state
+        if (helper != null) {
+            helper.showEmptyState(adapter.metas == null || adapter.metas.isEmpty());
+        }
     }
     static void save_pref_game_dir(Context ctx,Uri uri){
         try{
@@ -373,7 +354,7 @@ public class MainActivity extends AppCompatActivity {
             editor.apply();
         }
         catch(Exception e){
-            e.printStackTrace();
+            android.util.Log.e("ax360e", "Failed to save game dir preference", e);
         }
     }
 
@@ -387,7 +368,7 @@ public class MainActivity extends AppCompatActivity {
             return uri;
         }
         catch(Exception e){
-            e.printStackTrace();
+            android.util.Log.e("ax360e", "Failed to load game dir preference", e);
             return null;
         }
     }
@@ -441,15 +422,15 @@ public class MainActivity extends AppCompatActivity {
         }
 
         static String load_file_as_string(File file) throws IOException {
-            FileInputStream fis=new FileInputStream(file);
-            ByteArrayOutputStream baos=new ByteArrayOutputStream();
-            byte[] buffer=new byte[16384];
-            int n;
-            while ((n=fis.read(buffer))!=-1){
-                baos.write(buffer,0,n);
+            try (FileInputStream fis=new FileInputStream(file);
+                 ByteArrayOutputStream baos=new ByteArrayOutputStream()) {
+                byte[] buffer=new byte[16384];
+                int n;
+                while ((n=fis.read(buffer))!=-1){
+                    baos.write(buffer,0,n);
+                }
+                return baos.toString();
             }
-            fis.close();
-            return baos.toString();
         }
         /*static ArrayList<Emulator.GameInfo> load_game_list_from_json_file(File json) throws JSONException, IOException {
             String json_str=load_file_as_string(json);
@@ -468,12 +449,10 @@ public class MainActivity extends AppCompatActivity {
         }
 
         static void save_game_list_to_json_file(File json,ArrayList<Emulator.GameInfo> metas){
-            try {
-                FileOutputStream fos=new FileOutputStream(json);
+            try (FileOutputStream fos=new FileOutputStream(json)) {
                 fos.write(save_game_list_to_json(metas).getBytes());
-                fos.close();
             } catch (IOException | JSONException e) {
-                e.printStackTrace();
+                android.util.Log.e("ax360e", "Failed to save game list", e);
             }
         }
 
@@ -497,28 +476,30 @@ public class MainActivity extends AppCompatActivity {
                 return metas;
             DocumentFile[] files=iso_dir.listFiles();
             for(DocumentFile file:files){
+                String fileName = file.getName();
+                if(fileName == null) continue;
                 if(file.isDirectory()){
                     DocumentFile default_xex_file=Filter.get_default_xex_file(file);
                     if(default_xex_file==null) continue;
                     Emulator.GameInfo meta=new Emulator.GameInfo();
                     meta.uri=default_xex_file.getUri().toString();
-                    meta.name=file.getName();
+                    meta.name=fileName;
                     metas.add(meta);
                 }
                 else{
-                    if(Filter.is_iso_file(file.getName())){
+                    if(Filter.is_iso_file(fileName)){
                         Emulator.GameInfo meta=new Emulator.GameInfo();
-                        meta.name=file.getName().substring(0,file.getName().length()-4);
+                        meta.name=fileName.length()>=4?fileName.substring(0,fileName.length()-4):fileName;
                         meta.uri=file.getUri().toString();
                         metas.add(meta);
                     }
-                    if(Filter.is_zar_file(file.getName())){
+                    if(Filter.is_zar_file(fileName)){
                         Emulator.GameInfo meta=new Emulator.GameInfo();
-                        meta.name=file.getName().substring(0,file.getName().length()-4);
+                        meta.name=fileName.length()>=4?fileName.substring(0,fileName.length()-4):fileName;
                         meta.uri=file.getUri().toString();
                         metas.add(meta);
                     }
-                    else if(Filter.is_god_game(file.getName())){
+                    else if(Filter.is_god_game(fileName)){
                         Emulator.GameInfo meta=Emulator.get.meta_info_from_god_game(context,file.getUri().toString());
                         if(meta!=null)
                         metas.add(meta);

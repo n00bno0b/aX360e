@@ -26,10 +26,16 @@ extern "C" JNIEXPORT jstring JNICALL  Java_aenu_hardware_ProcessorInfo_gpu_1get_
     }
 
     uint32_t physicalDeviceCount = 0;
-    vkEnumeratePhysicalDevices(inst, &physicalDeviceCount, nullptr);
+    if (vkEnumeratePhysicalDevices(inst, &physicalDeviceCount, nullptr) != VK_SUCCESS || physicalDeviceCount == 0) {
+        vkDestroyInstance(inst, nullptr);
+        return nullptr;
+    }
 
     std::vector<VkPhysicalDevice> physicalDevices(physicalDeviceCount);
-    vkEnumeratePhysicalDevices(inst, &physicalDeviceCount, physicalDevices.data());
+    if (vkEnumeratePhysicalDevices(inst, &physicalDeviceCount, physicalDevices.data()) != VK_SUCCESS) {
+        vkDestroyInstance(inst, nullptr);
+        return nullptr;
+    }
 
     if(physicalDevices.empty()){
         vkDestroyInstance(inst, nullptr);
@@ -39,7 +45,12 @@ extern "C" JNIEXPORT jstring JNICALL  Java_aenu_hardware_ProcessorInfo_gpu_1get_
     VkPhysicalDeviceProperties physicalDeviceProperties;
     vkGetPhysicalDeviceProperties(physicalDevices[0], &physicalDeviceProperties);
 
+    // Copy deviceName into a Java string before destroying the instance.
+    // VkPhysicalDeviceProperties is a value type; deviceName is stored directly
+    // in the struct as a char array, not as a pointer to driver-internal memory.
+    jstring result = env->NewStringUTF(physicalDeviceProperties.deviceName);
+
     vkDestroyInstance(inst, nullptr);
 
-    return env->NewStringUTF(physicalDeviceProperties.deviceName);
+    return result;
 }

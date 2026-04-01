@@ -6,6 +6,8 @@
 #include <fstream>
 #include <sstream>
 #include <algorithm>
+#include <format>
+#include <stdexcept>
 #include <map>
 #include <android/log.h>
 
@@ -27,7 +29,7 @@ std::vector<core_info_t> cpu_get_core_info(){
 
     std::string line;
     while (std::getline(cpuinfo, line)) {
-
+        try {
         if (line.find("processor") != std::string::npos) {
             core.processor = std::stoi(line.substr(line.find(":") + 2));
         }
@@ -48,6 +50,11 @@ std::vector<core_info_t> cpu_get_core_info(){
             while (iss >> feature) {
                 core.features.push_back(feature);
             }
+        }
+        } catch (const std::invalid_argument&) {
+            continue;
+        } catch (const std::out_of_range&) {
+            continue;
         }
     }
     std::sort(cores.begin(), cores.end(), [](const core_info_t& a, const core_info_t& b) {
@@ -71,9 +78,18 @@ int cpu_get_max_mhz(const int core_idx) {
     std::ifstream max_freq(path);
     std::string hz;
     std::getline(max_freq, hz);
-    return std::stoi(hz)/1000;
+    try {
+        return std::stoi(hz)/1000;
+    } catch (const std::invalid_argument&) {
+        return 0;
+    } catch (const std::out_of_range&) {
+        return 0;
+    }
 }
 std::string cpu_get_simple_info(const std::vector<core_info_t>& core_info_list){
+    if (core_info_list.empty()) {
+        return "Unknown";
+    }
     std::map<core_info_t, int> core_counts;
     for (const auto& core : core_info_list) {
         if(core_counts.find(core) == core_counts.end())
@@ -187,7 +203,11 @@ std::string cpu_get_processor_name(const core_info_t& core_info){
 }
 
 std::string cpu_get_processor_name(const int core_idx){
-    return cpu_get_processor_name(cpu_get_core_info()[core_idx]);
+    auto cores = cpu_get_core_info();
+    if (core_idx < 0 || static_cast<size_t>(core_idx) >= cores.size()) {
+        return "Unknown";
+    }
+    return cpu_get_processor_name(cores[core_idx]);
 }
 
 std::string cpu_get_processor_isa(const core_info_t& core_info){

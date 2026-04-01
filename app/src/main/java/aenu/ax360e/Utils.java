@@ -32,58 +32,72 @@ public class Utils {
     }
     static String getFileNameFromUri(Uri uri) {
         String fileName = null;
-        Cursor cursor = Application.ctx.getContentResolver().query(
+        try (Cursor cursor = Application.ctx.getContentResolver().query(
                 uri,
                 new String[]{DocumentsContract.Document.COLUMN_DISPLAY_NAME},
                 null, null, null
-        );
-        if (cursor != null) {
-            if (cursor.moveToFirst()) {
+        )) {
+            if (cursor != null && cursor.moveToFirst()) {
                 fileName = cursor.getString(cursor.getColumnIndexOrThrow(
                         DocumentsContract.Document.COLUMN_DISPLAY_NAME
                 ));
             }
-            cursor.close();
+        } catch (Exception e) {
+            android.util.Log.e("Utils", "Failed to get file name from URI", e);
         }
         return fileName;
     }
 
     static void save_string(File file, String str){
-        try{
-            FileOutputStream fos=new FileOutputStream(file);
+        try(FileOutputStream fos=new FileOutputStream(file)){
             fos.write(str.getBytes());
-            fos.close();
         }catch(Exception e){
-            e.printStackTrace();
+            android.util.Log.e("Utils", "Failed to save string to " + file.getPath(), e);
         }
     }
 
     static String load_string(File file){
-        try{
-            FileInputStream fis=new FileInputStream(file);
-            byte[] buf=new byte[fis.available()];
-            fis.read(buf);
-            fis.close();
-            return new String(buf);
+        try(FileInputStream fis=new FileInputStream(file)){
+            long fileSize = file.length();
+            if (fileSize > 10 * 1024 * 1024) { // 10 MB safety limit for config/text files
+                android.util.Log.e("Utils", "File too large to load as string: " + file.getPath() + " (" + fileSize + " bytes)");
+                return null;
+            }
+            if (fileSize > Integer.MAX_VALUE) {
+                android.util.Log.e("Utils", "File size exceeds maximum array size: " + file.getPath());
+                return null;
+            }
+
+            // Read file in a loop to ensure complete read
+            byte[] buf = new byte[(int) fileSize];
+            int totalRead = 0;
+            int bytesRead;
+            while (totalRead < fileSize && (bytesRead = fis.read(buf, totalRead, (int) fileSize - totalRead)) != -1) {
+                totalRead += bytesRead;
+            }
+
+            if (totalRead < fileSize) {
+                android.util.Log.e("Utils", "Incomplete read: expected " + fileSize + " bytes, got " + totalRead + " bytes from " + file.getPath());
+                return null;
+            }
+
+            return new String(buf, java.nio.charset.StandardCharsets.UTF_8);
         }catch(Exception e){
-            e.printStackTrace();
+            android.util.Log.e("Utils", "Failed to load string from " + file.getPath(), e);
             return null;
         }
     }
 
     static void copy_file(File src_file,File dst_file){
-        try{
-            FileInputStream in=new FileInputStream(src_file);
-            FileOutputStream out=new FileOutputStream(dst_file);
+        try(FileInputStream in=new FileInputStream(src_file);
+            FileOutputStream out=new FileOutputStream(dst_file)){
             byte[] buf=new byte[16384];
             int len;
             while((len=in.read(buf))>0){
                 out.write(buf,0,len);
             }
-            in.close();
-            out.close();
         }catch(Exception e){
-            e.printStackTrace();
+            android.util.Log.e("Utils", "Failed to copy " + src_file.getPath() + " to " + dst_file.getPath(), e);
         }
     }
 
@@ -118,19 +132,18 @@ public class Utils {
                     File outputFile = new File(outputDir, file);
                     if(outputFile.exists())continue;
 
-                    InputStream in = assetManager.open(assertDir + "/" + file);
-                    FileOutputStream out = new FileOutputStream(outputFile);
-                    byte[] buffer = new byte[16384];
-                    int read;
-                    while ((read = in.read(buffer))!= -1) {
-                        out.write(buffer, 0, read);
+                    try(InputStream in = assetManager.open(assertDir + "/" + file);
+                        FileOutputStream out = new FileOutputStream(outputFile)){
+                        byte[] buffer = new byte[16384];
+                        int read;
+                        while ((read = in.read(buffer))!= -1) {
+                            out.write(buffer, 0, read);
+                        }
                     }
-                    in.close();
-                    out.close();
                 }
             }
         } catch (IOException e) {
-            e.printStackTrace();
+            android.util.Log.e("Utils", "Failed to extract assets dir: " + assertDir, e);
         }
     }
 }

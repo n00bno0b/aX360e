@@ -64,9 +64,10 @@ public class PerformanceMonitor {
             if (elapsedTime < 1000) return; // Update every second
             
             // Read /proc/stat for total CPU time
-            RandomAccessFile reader = new RandomAccessFile("/proc/stat", "r");
-            String load = reader.readLine();
-            reader.close();
+            String load;
+            try (RandomAccessFile reader = new RandomAccessFile("/proc/stat", "r")) {
+                load = reader.readLine();
+            }
             
             String[] toks = load.split(" +");
             long idle = Long.parseLong(toks[4]);
@@ -94,6 +95,7 @@ public class PerformanceMonitor {
     private void updateMemoryUsage() {
         ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
         ActivityManager activityManager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+        if (activityManager == null) return;
         activityManager.getMemoryInfo(mi);
         
         memoryTotal = mi.totalMem;
@@ -119,6 +121,7 @@ public class PerformanceMonitor {
     private void updateThermalStatus() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             PowerManager powerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+            if (powerManager == null) return;
             int thermalStatus = powerManager.getCurrentThermalStatus();
             
             // THERMAL_STATUS_NONE = 0, THERMAL_STATUS_LIGHT = 1, 
@@ -129,10 +132,8 @@ public class PerformanceMonitor {
             deviceTemperature = 25 + (thermalStatus * 10); // 25°C + 10°C per level
         } else {
             // Fallback for older Android versions - try reading thermal zone
-            try {
-                BufferedReader reader = new BufferedReader(new FileReader("/sys/class/thermal/thermal_zone0/temp"));
+            try (BufferedReader reader = new BufferedReader(new FileReader("/sys/class/thermal/thermal_zone0/temp"))) {
                 String temp = reader.readLine();
-                reader.close();
                 deviceTemperature = Integer.parseInt(temp) / 1000.0f; // Convert from millidegrees
                 isThermalThrottling = deviceTemperature > 60; // Threshold for throttling
             } catch (IOException | NumberFormatException e) {

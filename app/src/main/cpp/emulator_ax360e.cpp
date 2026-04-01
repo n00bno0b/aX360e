@@ -41,7 +41,11 @@ static void j_setup_launch_args(JNIEnv* env,jobject self,jobjectArray args ){
     g_launch_args.clear();
     for(int i=0;i<env->GetArrayLength(args);i++){
         jstring arg=(jstring)env->GetObjectArrayElement(args,i);
-        g_launch_args.push_back(env->GetStringUTFChars(arg,NULL) );
+        const char* str = env->GetStringUTFChars(arg,NULL);
+        if (str != NULL) {
+            g_launch_args.push_back(std::string(str));
+            env->ReleaseStringUTFChars(arg, str);
+        }
     }
 }
 
@@ -51,7 +55,14 @@ static jstring j_simple_device_info(JNIEnv* env, jobject thiz)
     std::string info;
 
     auto get_gpu_info=[]()->std::string {
-        std::pair<std::string,bool> lib_info={"libvulkan.so",false};
+        // Check if a custom Turnip driver is installed via CUSTOM_DRIVER_PATH env var
+        const char* custom_path = std::getenv("CUSTOM_DRIVER_PATH");
+        std::pair<std::string,bool> lib_info;
+        if (custom_path && custom_path[0] != '\0') {
+            lib_info = {custom_path, true};
+        } else {
+            lib_info = {"libvulkan.so", false};
+        }
         vk_load(lib_info.first.c_str(),lib_info.second);
 
         struct clean_t{
@@ -110,13 +121,16 @@ static jstring j_simple_device_info(JNIEnv* env, jobject thiz)
 
         std::vector<core_info_t> core_info=cpu_get_core_info();
         std::string cpu_name=cpu_get_simple_info(core_info);
-        std::string cpu_features=[&](){
-            std::ostringstream oss;
-            for(const auto& feature : core_info[0].features){
-                oss <<"    * " << feature << "\n";
-            }
-            return oss.str();
-        }();
+        std::string cpu_features;
+        if (!core_info.empty()) {
+            cpu_features=[&](){
+                std::ostringstream oss;
+                for(const auto& feature : core_info[0].features){
+                    oss <<"    * " << feature << "\n";
+                }
+                return oss.str();
+            }();
+        }
         return "CPU [" + cpu_name + "]:\n" + cpu_features;
     };
 
@@ -128,13 +142,18 @@ static jstring j_simple_device_info(JNIEnv* env, jobject thiz)
 
 static jobject j_meta_info_from_god_game(JNIEnv* env,jobject self,jobject context,jstring uri_str ) {
     jclass cls_Emulator$GameInfo = env->FindClass("aenu/ax360e/Emulator$GameInfo");
+    if (cls_Emulator$GameInfo == NULL) return NULL;
     jmethodID mid_Emulator$GameInfo = env->GetMethodID(cls_Emulator$GameInfo, "<init>", "()V");
+    if (mid_Emulator$GameInfo == NULL) return NULL;
     jfieldID fid_name = env->GetFieldID(cls_Emulator$GameInfo, "name", "Ljava/lang/String;");
     jfieldID fid_uri = env->GetFieldID(cls_Emulator$GameInfo, "uri", "Ljava/lang/String;");
     jfieldID fid_icon = env->GetFieldID(cls_Emulator$GameInfo, "icon", "[B");
+    if (fid_name == NULL || fid_uri == NULL || fid_icon == NULL) return NULL;
 
     jclass uri_class = env->FindClass("android/net/Uri");
+    if (uri_class == NULL) return NULL;
     jmethodID parse_method = env->GetStaticMethodID(uri_class, "parse", "(Ljava/lang/String;)Landroid/net/Uri;");
+    if (parse_method == NULL) return NULL;
 
     jobject game_info = env->NewObject(cls_Emulator$GameInfo, mid_Emulator$GameInfo);
     env->SetObjectField(game_info, fid_uri, uri_str);
@@ -422,8 +441,17 @@ static jstring generate_config_xml(JNIEnv* env,jobject self,jstring toml_path){
 
     jboolean is_copy=false;
     const char* path=env->GetStringUTFChars(toml_path,&is_copy);
+    if (path == NULL) {
+        return env->NewStringUTF("");
+    }
 
-    std::shared_ptr<cpptoml::table> toml=cpptoml::parse_file(path);
+    std::shared_ptr<cpptoml::table> toml;
+    try {
+        toml=cpptoml::parse_file(path);
+    } catch (const std::exception& e) {
+        env->ReleaseStringUTFChars(toml_path,path);
+        return env->NewStringUTF("");
+    }
     env->ReleaseStringUTFChars(toml_path,path);
 
     std::ostringstream out;
@@ -664,20 +692,37 @@ static jstring generate_config_xml(JNIEnv* env,jobject self,jstring toml_path){
 //public  native void setup_uri_info_list_file(String path);
 static void j_setup_uri_info_list_file(JNIEnv* env,jobject self,jstring jpath ){
     const char* path = env->GetStringUTFChars(jpath,NULL);
+    if (path == NULL) {
+        return;
+    }
     g_uri_info_list_file_path=path;
     env->ReleaseStringUTFChars(jpath,path);
 }
 
 int register_ax360e_Emulator(JNIEnv* env){
 
-    g_class_DocumentFile=env->FindClass("androidx/documentfile/provider/DocumentFile");
-    g_class_DocumentFile=(jclass)env->NewGlobalRef(g_class_DocumentFile);
+    jclass localDocFile=env->FindClass("androidx/documentfile/provider/DocumentFile");
+    if (localDocFile == NULL) {
+        LOGE("Failed to find DocumentFile class");
+        return -1;
+    }
+    g_class_DocumentFile=(jclass)env->NewGlobalRef(localDocFile);
+    env->DeleteLocalRef(localDocFile);
 
-    g_class_Emulator = env->FindClass("aenu/ax360e/Emulator");
-    g_class_Emulator = (jclass)env->NewGlobalRef(g_class_Emulator);
+    jclass localEmulator = env->FindClass("aenu/ax360e/Emulator");
+    if (localEmulator == NULL) {
+        LOGE("Failed to find Emulator class");
+        return -1;
+    }
+    g_class_Emulator = (jclass)env->NewGlobalRef(localEmulator);
+    env->DeleteLocalRef(localEmulator);
 
     //public static int nc_open_uri_fd(Context ctx,String uri)
     mid_open_uri_fd = env->GetStaticMethodID(g_class_Emulator, "nc_open_uri_fd", "(Landroid/content/Context;Landroid/net/Uri;)I");
+    if (mid_open_uri_fd == NULL) {
+        LOGE("Failed to find nc_open_uri_fd method");
+        return -1;
+    }
 
     static const JNINativeMethod methods[] = {
             { "setup_context", "(Landroid/content/Context;)V", (void *) j_setup_context },

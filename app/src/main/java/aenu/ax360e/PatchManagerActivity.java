@@ -100,13 +100,16 @@ public class PatchManagerActivity extends AppCompatActivity {
         } else {
             String lowerQuery = query.toLowerCase();
             for (PatchInfo.GamePatchFile gamePatch : allPatches) {
-                boolean matches = gamePatch.titleName.toLowerCase().contains(lowerQuery) ||
-                                gamePatch.titleId.toLowerCase().contains(lowerQuery);
+                String titleName = gamePatch.titleName != null ? gamePatch.titleName : "";
+                String titleId = gamePatch.titleId != null ? gamePatch.titleId : "";
+                boolean matches = titleName.toLowerCase().contains(lowerQuery) ||
+                                titleId.toLowerCase().contains(lowerQuery);
 
                 if (!matches) {
                     // Check if any patch name matches
                     for (PatchInfo patch : gamePatch.patches) {
-                        if (patch.patchName.toLowerCase().contains(lowerQuery)) {
+                        String patchName = patch.patchName != null ? patch.patchName : "";
+                        if (patchName.toLowerCase().contains(lowerQuery)) {
                             matches = true;
                             break;
                         }

@@ -5,12 +5,18 @@
 
  #include "vkutil.h"
 
+#include <algorithm>
 #include <android/log.h>
 
 #define LOG_TAG "vkutil"
 #define LOGI(...)  __android_log_print(ANDROID_LOG_INFO,LOG_TAG,__VA_ARGS__)
  #define LOGE(...)  __android_log_print(ANDROID_LOG_ERROR,LOG_TAG,__VA_ARGS__)
 std::optional<VkInstance> vk_create_instance(const char * name) {
+        if (!vkCreateInstance_) {
+            LOGE("vkCreateInstance function pointer is null - Vulkan library not loaded?");
+            return std::nullopt;
+        }
+
         VkApplicationInfo appinfo = {};
         appinfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
         appinfo.pNext = nullptr;
@@ -25,33 +31,50 @@ std::optional<VkInstance> vk_create_instance(const char * name) {
         inst_create_info.pApplicationInfo = &appinfo;
 
         VkInstance inst;
-        if (vkCreateInstance_(&inst_create_info, nullptr, &inst)!= VK_SUCCESS) {
+        VkResult result = vkCreateInstance_(&inst_create_info, nullptr, &inst);
+        if (result != VK_SUCCESS) {
+            LOGE("vkCreateInstance failed with result: %d", result);
             return std::nullopt;
         }
         return inst;
 }
 
 void vk_destroy_instance(VkInstance inst) {
-    vkDestroyInstance_(inst, nullptr);
+    if (vkDestroyInstance_ && inst != VK_NULL_HANDLE) {
+        vkDestroyInstance_(inst, nullptr);
+    }
 }
 
 int vk_get_physical_device_count(VkInstance inst){
-    uint32_t count;
-    vkEnumeratePhysicalDevices_(inst, &count, nullptr);
+    if (!vkEnumeratePhysicalDevices_) return 0;
+    uint32_t count = 0;
+    if (vkEnumeratePhysicalDevices_(inst, &count, nullptr) != VK_SUCCESS) {
+        LOGE("vkEnumeratePhysicalDevices failed");
+        return 0;
+    }
     return count;
 }
 std::optional<VkPhysicalDevice> vk_get_physical_device(VkInstance inst, int index){
     uint32_t count = vk_get_physical_device_count(inst);
-     if (count == 0)
+    if (count == 0 || index < 0 || static_cast<uint32_t>(index) >= count)
         return std::nullopt;
-     std ::vector<VkPhysicalDevice> devices(count);
-     vkEnumeratePhysicalDevices_(inst, &count, devices.data());
-     return devices[index];
+    std::vector<VkPhysicalDevice> devices(count);
+    if (vkEnumeratePhysicalDevices_(inst, &count, devices.data()) != VK_SUCCESS) {
+        LOGE("vkEnumeratePhysicalDevices (fetch) failed");
+        return std::nullopt;
+    }
+    if (static_cast<uint32_t>(index) >= count)
+        return std::nullopt;
+    return devices[index];
 }
 
  VkPhysicalDeviceProperties vk_get_physical_device_properties(VkPhysicalDevice dev){
-    VkPhysicalDeviceProperties props;
-    vkGetPhysicalDeviceProperties_(dev, &props);
+    VkPhysicalDeviceProperties props = {};
+    if (vkGetPhysicalDeviceProperties_) {
+        vkGetPhysicalDeviceProperties_(dev, &props);
+    } else {
+        LOGE("vkGetPhysicalDeviceProperties function pointer is null");
+    }
     return props;
 }
 
@@ -60,10 +83,18 @@ VkPhysicalDeviceLimits vk_get_physical_device_limits(VkPhysicalDevice dev){
 }
 
 std::vector<VkExtensionProperties> vk_get_physical_device_extension_properties(VkPhysicalDevice dev){
-    uint32_t count;
-    vkEnumerateDeviceExtensionProperties_(dev, nullptr, &count, nullptr);
+    if (!vkEnumerateDeviceExtensionProperties_) return {};
+    uint32_t count = 0;
+    if (vkEnumerateDeviceExtensionProperties_(dev, nullptr, &count, nullptr) != VK_SUCCESS) {
+        LOGE("vkEnumerateDeviceExtensionProperties (count) failed");
+        return {};
+    }
+    if (count == 0) return {};
     std::vector<VkExtensionProperties> props(count);
-    vkEnumerateDeviceExtensionProperties_(dev, nullptr, &count, props.data());
+    if (vkEnumerateDeviceExtensionProperties_(dev, nullptr, &count, props.data()) != VK_SUCCESS) {
+        LOGE("vkEnumerateDeviceExtensionProperties (fetch) failed");
+        return {};
+    }
     std::sort(props.begin(), props.end(), [](const VkExtensionProperties& a, const VkExtensionProperties& b) {
          return strcmp(a.extensionName, b.extensionName) < 0;
     });
@@ -71,19 +102,26 @@ std::vector<VkExtensionProperties> vk_get_physical_device_extension_properties(V
 }
 
 int vk_get_queue_family_properties_count(VkPhysicalDevice dev) {
-    uint32_t count;
+    if (!vkGetPhysicalDeviceQueueFamilyProperties_) return 0;
+    uint32_t count = 0;
     vkGetPhysicalDeviceQueueFamilyProperties_(dev, &count, nullptr);
     return count;
 }
 
-VkQueueFamilyProperties vk_get_queue_family_properties(VkPhysicalDevice dev,int index) {
+std::optional<VkQueueFamilyProperties> vk_get_queue_family_properties(VkPhysicalDevice dev,int index) {
     uint32_t count= vk_get_queue_family_properties_count( dev);
+    if (count == 0 || index < 0 || static_cast<uint32_t>(index) >= count)
+        return std::nullopt;
     std::vector<VkQueueFamilyProperties> props(count);
     vkGetPhysicalDeviceQueueFamilyProperties_(dev, &count, props.data());
     return props[index];
 }
 
 std::optional<VkDevice> vk_create_device(VkPhysicalDevice pdev,uint32_t queueFamilyIndex,VkQueueFamilyProperties  props) {
+    if (!vkCreateDevice_) {
+        LOGE("vkCreateDevice function pointer is null");
+        return std::nullopt;
+    }
     float  queue_priority = 0.0f;
     VkDeviceQueueCreateInfo queue_create_info = {
             .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
@@ -114,16 +152,22 @@ std::optional<VkDevice> vk_create_device(VkPhysicalDevice pdev,uint32_t queueFam
 }
 
 void vk_destroy_device(VkDevice dev) {
-    vkDestroyDevice_(dev, nullptr);
+    if (vkDestroyDevice_ && dev != VK_NULL_HANDLE) {
+        vkDestroyDevice_(dev, nullptr);
+    }
 }
 
 std::optional<VkDescriptorSetLayout> vk_create_descriptor_set_layout(VkDevice dev,const std::vector<VkDescriptorSetLayoutBinding>& binds) {
+    if (!vkCreateDescriptorSetLayout_) {
+        LOGE("vkCreateDescriptorSetLayout function pointer is null");
+        return std::nullopt;
+    }
     VkDescriptorSetLayoutCreateInfo descriptor_set_layout_create_info = {
             .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
             .pNext = nullptr,
             .flags = 0,
             .bindingCount = static_cast<uint32_t>(binds.size()),
-            .pBindings = binds .data()
+            .pBindings = binds.data()
     };
     VkDescriptorSetLayout layout;
     if(vkCreateDescriptorSetLayout_( dev, &descriptor_set_layout_create_info, nullptr, &layout)!= VK_SUCCESS){
@@ -134,10 +178,16 @@ std::optional<VkDescriptorSetLayout> vk_create_descriptor_set_layout(VkDevice de
  }
 
   void vk_destroy_descriptor_set_layout(VkDevice dev,VkDescriptorSetLayout layout) {
-     vkDestroyDescriptorSetLayout_(dev,layout, nullptr);
+     if (vkDestroyDescriptorSetLayout_ && layout != VK_NULL_HANDLE) {
+         vkDestroyDescriptorSetLayout_(dev,layout, nullptr);
+     }
  }
 
 std::optional<VkPipelineLayout> vk_create_pipeline_layout(VkDevice dev,VkDescriptorSetLayout descriptor_set_layout) {
+    if (!vkCreatePipelineLayout_) {
+        LOGE("vkCreatePipelineLayout function pointer is null");
+        return std::nullopt;
+    }
     VkPipelineLayoutCreateInfo pipeline_layout_create_info = {
             .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
             .pNext = nullptr,
@@ -156,6 +206,14 @@ std::optional<VkPipelineLayout> vk_create_pipeline_layout(VkDevice dev,VkDescrip
 }
 
 std::optional<VkShaderModule> vk_create_shader_module(VkDevice dev,const std::vector<uint32_t>& code) {
+    if (!vkCreateShaderModule_) {
+        LOGE("vkCreateShaderModule function pointer is null");
+        return std::nullopt;
+    }
+    if (code.empty()) {
+        LOGE("Shader code is empty");
+        return std::nullopt;
+    }
      VkShaderModuleCreateInfo shader_module_create_info = {
             .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
             .pNext = nullptr,
@@ -172,14 +230,22 @@ std::optional<VkShaderModule> vk_create_shader_module(VkDevice dev,const std::ve
 }
 
 void vk_destroy_shader_module(VkDevice dev,VkShaderModule module){
-    vkDestroyShaderModule_(dev, module, nullptr);
+    if (vkDestroyShaderModule_ && module != VK_NULL_HANDLE) {
+        vkDestroyShaderModule_(dev, module, nullptr);
+    }
 }
 
 void vk_destroy_pipeline_layout(VkDevice dev,VkPipelineLayout layout) {
-    vkDestroyPipelineLayout_(dev, layout, nullptr);
+    if (vkDestroyPipelineLayout_ && layout != VK_NULL_HANDLE) {
+        vkDestroyPipelineLayout_(dev, layout, nullptr);
+    }
 }
 
 std::optional <VkPipeline> vk_create_compute_pipeline(VkDevice dev,VkPipelineLayout layout,VkShaderModule module) {
+    if (!vkCreateComputePipelines_) {
+        LOGE("vkCreateComputePipelines function pointer is null");
+        return std::nullopt;
+    }
     VkComputePipelineCreateInfo compute_pipeline_create_info = {
             .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
             .pNext = nullptr,
@@ -205,5 +271,7 @@ std::optional <VkPipeline> vk_create_compute_pipeline(VkDevice dev,VkPipelineLay
 }
 
 void  vk_destroy_pipeline(VkDevice dev,VkPipeline pipeline) {
-    vkDestroyPipeline_(dev, pipeline, nullptr);
+    if (vkDestroyPipeline_ && pipeline != VK_NULL_HANDLE) {
+        vkDestroyPipeline_(dev, pipeline, nullptr);
+    }
 }

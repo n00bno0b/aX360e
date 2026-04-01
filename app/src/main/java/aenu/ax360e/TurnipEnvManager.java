@@ -44,13 +44,23 @@ public class TurnipEnvManager {
             tuDebugFlags.add("noubwc");
         }
 
+        // Sysmem mode - required for Adreno 830 where GMEM is broken
+        if (prefs.getBoolean("TurnipAdvanced|sysmem_mode", false)) {
+            tuDebugFlags.add("sysmem");
+        }
+
+        // Disable Low Resolution Z - fixes Z-fighting and GPU hangs on some Adreno GPUs
+        if (prefs.getBoolean("TurnipAdvanced|nolrz", false)) {
+            tuDebugFlags.add("nolrz");
+        }
+
         if (!tuDebugFlags.isEmpty()) {
             envVars.add(new EnvVar("TU_DEBUG", String.join(",", tuDebugFlags)));
         }
 
         // FD_DEV_FEATURES flags
         if (prefs.getBoolean("TurnipAdvanced|ubwc_flag_hint", false)) {
-            envVars.add(new EnvVar("FD_DEV_FEATURES", "ubwc_flag_hint"));
+            envVars.add(new EnvVar("FD_DEV_FEATURES", "enable_tp_ubwc_flag_hint=1"));
         }
 
         // MESA_DEBUG - general Mesa debugging

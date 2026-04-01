@@ -62,11 +62,40 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
             return true;
         }
     });
+    private static final long MIN_RAM_BYTES = 4L * 1024 * 1024 * 1024; // 4 GB
+
     void on_create(){
+        // Check minimum RAM as proxy for address space availability
+        // Xbox 360 emulation requires 4GB+ virtual address space (xenia maps physical_membase_
+        // at mapping_base_ + 0x100000000). While this checks physical RAM rather than VA space,
+        // devices with <4GB RAM are unlikely to provide sufficient address space for emulation.
+        android.app.ActivityManager am = (android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE);
+        if (am != null) {
+            android.app.ActivityManager.MemoryInfo mi = new android.app.ActivityManager.MemoryInfo();
+            am.getMemoryInfo(mi);
+            if (mi.totalMem < MIN_RAM_BYTES) {
+                long totalMB = mi.totalMem / (1024 * 1024);
+                new AlertDialog.Builder(this)
+                    .setTitle(R.string.insufficient_ram_title)
+                    .setMessage(getString(R.string.insufficient_ram_message, totalMB))
+                    .setPositiveButton(R.string.insufficient_ram_continue_anyway, (d, w) -> continueOnCreate())
+                    .setNegativeButton(R.string.insufficient_ram_exit, (d, w) -> finish())
+                    .setCancelable(false)
+                    .show();
+                return;
+            }
+        }
+        continueOnCreate();
+    }
+
+    private void continueOnCreate(){
         String uri=getIntent().getStringExtra(EXTRA_GAME_URI);
         aenu.emulator.Emulator.Path path=aenu.emulator.Emulator.Path.from(uri,-1);
         Emulator.get.setup_context(this);
-        Emulator.get.setup_document_file_tree(DocumentFile.fromTreeUri(this,MainActivity.load_pref_game_dir( this)));
+        Uri gameDirUri = MainActivity.load_pref_game_dir(this);
+        if (gameDirUri != null) {
+            Emulator.get.setup_document_file_tree(DocumentFile.fromTreeUri(this, gameDirUri));
+        }
         Emulator.get.setup_game_path(path);
         Emulator.get.setup_launch_args(new String[]{
                 "--storage_root="+Application.get_app_data_dir().getAbsolutePath(),

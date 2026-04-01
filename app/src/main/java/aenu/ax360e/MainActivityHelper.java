@@ -1,10 +1,11 @@
 package aenu.ax360e;
 
-import android.app.Activity;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.View;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 
-import androidx.appcompat.widget.SearchView;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -51,16 +52,21 @@ public class MainActivityHelper {
         setupViewToggle();
         setupSortButton();
         setupFilterChips();
+        setupSearchBar(searchBar);
     }
     
     private void setupRecyclerView() {
-        gameListRecycler.setLayoutManager(new LinearLayoutManager(activity));
-        gameListRecycler.setHasFixedSize(true);
+        if (gameListRecycler != null) {
+            gameListRecycler.setLayoutManager(new LinearLayoutManager(activity));
+            gameListRecycler.setHasFixedSize(true);
+        }
     }
     
     public void setAdapter(GameListAdapter adapter) {
         this.adapter = adapter;
-        gameListRecycler.setAdapter(adapter);
+        if (gameListRecycler != null) {
+            gameListRecycler.setAdapter(adapter);
+        }
     }
     
     private void setupSwipeRefresh() {
@@ -77,7 +83,7 @@ public class MainActivityHelper {
         if (viewToggleButton != null) {
             viewToggleButton.setOnClickListener(v -> {
                 isGridView = !isGridView;
-                if (adapter != null) {
+                if (adapter != null && gameListRecycler != null) {
                     adapter.setGridView(isGridView);
                     
                     if (isGridView) {
@@ -130,8 +136,8 @@ public class MainActivityHelper {
             chipAllGames.setOnCheckedChangeListener((buttonView, isChecked) -> {
                 if (isChecked && adapter != null) {
                     adapter.clearFilters();
-                    chipFavorites.setChecked(false);
-                    chipRecent.setChecked(false);
+                    if (chipFavorites != null) chipFavorites.setChecked(false);
+                    if (chipRecent != null) chipRecent.setChecked(false);
                 }
             });
         }
@@ -140,8 +146,8 @@ public class MainActivityHelper {
             chipFavorites.setOnCheckedChangeListener((buttonView, isChecked) -> {
                 if (isChecked && adapter != null) {
                     adapter.filterFavorites();
-                    chipAllGames.setChecked(false);
-                    chipRecent.setChecked(false);
+                    if (chipAllGames != null) chipAllGames.setChecked(false);
+                    if (chipRecent != null) chipRecent.setChecked(false);
                 }
             });
         }
@@ -150,8 +156,8 @@ public class MainActivityHelper {
             chipRecent.setOnCheckedChangeListener((buttonView, isChecked) -> {
                 if (isChecked && adapter != null) {
                     adapter.filterRecent();
-                    chipAllGames.setChecked(false);
-                    chipFavorites.setChecked(false);
+                    if (chipAllGames != null) chipAllGames.setChecked(false);
+                    if (chipFavorites != null) chipFavorites.setChecked(false);
                 }
             });
         }
@@ -159,10 +165,52 @@ public class MainActivityHelper {
     
     public void setupSearchBar(SearchBar searchBar) {
         if (searchBar != null) {
-            searchBar.setOnClickListener(v -> {
-                // TODO: Implement search view expansion
-            });
+            searchBar.setOnClickListener(v -> showSearchDialog());
         }
+    }
+
+    private void showSearchDialog() {
+        final EditText input = new EditText(activity);
+        input.setHint(R.string.search_games);
+        input.setSingleLine(true);
+
+        new MaterialAlertDialogBuilder(activity)
+            .setTitle(R.string.search_games)
+            .setView(input)
+            .setPositiveButton(android.R.string.ok, (dialog, which) -> {
+                String query = input.getText().toString().trim();
+                if (adapter != null) {
+                    adapter.filter(query);
+                }
+                if (searchBar != null) {
+                    searchBar.setText(query.isEmpty() ? null : query);
+                }
+            })
+            .setNegativeButton(android.R.string.cancel, null)
+            .setNeutralButton(R.string.all_games, (dialog, which) -> {
+                if (adapter != null) {
+                    adapter.filter("");
+                }
+                if (searchBar != null) {
+                    searchBar.setText(null);
+                }
+            })
+            .show();
+
+        input.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                if (adapter != null) {
+                    adapter.filter(s.toString());
+                }
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {}
+        });
     }
     
     public void showEmptyState(boolean show) {

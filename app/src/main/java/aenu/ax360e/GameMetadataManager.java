@@ -32,7 +32,7 @@ public class GameMetadataManager {
                     GameMetadata metadata = GameMetadata.fromJson(json);
                     cache.put(gameUri, metadata);
                 } catch (JSONException e) {
-                    e.printStackTrace();
+                    android.util.Log.e("GameMetadata", "Failed to parse metadata for: " + entry.getKey(), e);
                 }
             }
         }
@@ -79,7 +79,7 @@ public class GameMetadataManager {
                 .putString(KEY_METADATA_PREFIX + gameUri, json.toString())
                 .apply();
         } catch (JSONException e) {
-            e.printStackTrace();
+            android.util.Log.e("GameMetadata", "Failed to save metadata for: " + gameUri, e);
         }
     }
     

@@ -24,6 +24,17 @@ public class PatchTomlParser {
     private static final String TAG = "PatchTomlParser";
 
     /**
+     * Check if a line is a TOML key = value assignment for the given key.
+     * Matches "key = ..." or "key=..." but not "key_other = ...".
+     */
+    private static boolean isKeyValue(String line, String key) {
+        if (!line.startsWith(key)) return false;
+        if (line.length() <= key.length()) return false;
+        char next = line.charAt(key.length());
+        return next == '=' || next == ' ' || next == '\t';
+    }
+
+    /**
      * Parse all patch files in a directory
      */
     public static List<PatchInfo.GamePatchFile> getAllPatches(File directory) {
@@ -70,6 +81,7 @@ public class PatchTomlParser {
             String line;
             PatchInfo currentPatch = null;
             String currentDataType = null;
+            String pendingAddress = null;
             boolean inPatchSection = false;
 
             while ((line = reader.readLine()) != null) {
@@ -81,15 +93,15 @@ public class PatchTomlParser {
                 }
 
                 // Parse title_name
-                if (line.startsWith("title_name")) {
+                if (isKeyValue(line, "title_name")) {
                     gamePatch.titleName = extractStringValue(line);
                 }
                 // Parse title_id
-                else if (line.startsWith("title_id")) {
+                else if (isKeyValue(line, "title_id")) {
                     gamePatch.titleId = extractStringValue(line);
                 }
                 // Parse hash
-                else if (line.startsWith("hash")) {
+                else if (isKeyValue(line, "hash")) {
                     gamePatch.hash = extractStringValue(line);
                 }
                 // New patch section
@@ -103,32 +115,33 @@ public class PatchTomlParser {
                     currentPatch.filePath = file.getAbsolutePath();
                     inPatchSection = true;
                     currentDataType = null;
+                    pendingAddress = null;
                 }
                 // Parse patch fields
                 else if (inPatchSection && currentPatch != null) {
-                    if (line.startsWith("name")) {
+                    if (isKeyValue(line, "name")) {
                         currentPatch.patchName = extractStringValue(line);
-                    } else if (line.startsWith("desc")) {
+                    } else if (isKeyValue(line, "desc")) {
                         currentPatch.description = extractStringValue(line);
-                    } else if (line.startsWith("author")) {
+                    } else if (isKeyValue(line, "author")) {
                         currentPatch.author = extractStringValue(line);
-                    } else if (line.startsWith("is_enabled")) {
+                    } else if (isKeyValue(line, "is_enabled")) {
                         currentPatch.isEnabled = extractBooleanValue(line);
                     }
                     // Data type sections
                     else if (line.matches("\\[\\[patch\\.(be8|be16|be32|be64|f32|f64|string|u16string|array)\\]\\]")) {
                         currentDataType = extractDataType(line);
+                        pendingAddress = null;
                     }
-                    // Data entries
-                    else if (currentDataType != null && line.startsWith("address")) {
-                        String address = extractValue(line);
-                        // Read next line for value
-                        String nextLine = reader.readLine();
-                        if (nextLine != null && nextLine.trim().startsWith("value")) {
-                            String value = extractValue(nextLine.trim());
-                            currentPatch.dataEntries.add(
-                                new PatchInfo.PatchDataEntry(currentDataType, address, value));
-                        }
+                    // Data entries - state-based: collect address, then value
+                    else if (currentDataType != null && isKeyValue(line, "address")) {
+                        pendingAddress = extractValue(line);
+                    }
+                    else if (currentDataType != null && pendingAddress != null && isKeyValue(line, "value")) {
+                        String value = extractValue(line);
+                        currentPatch.dataEntries.add(
+                            new PatchInfo.PatchDataEntry(currentDataType, pendingAddress, value));
+                        pendingAddress = null;
                     }
                 }
             }
@@ -141,6 +154,14 @@ public class PatchTomlParser {
         } catch (IOException e) {
             Log.e(TAG, "Error reading patch file: " + file.getName(), e);
             return null;
+        }
+
+        // Ensure titleName has a fallback
+        if (gamePatch.titleName == null || gamePatch.titleName.isEmpty()) {
+            gamePatch.titleName = file.getName().replace(".patch.toml", "");
+        }
+        if (gamePatch.titleId == null) {
+            gamePatch.titleId = "";
         }
 
         return gamePatch;
@@ -169,11 +190,11 @@ public class PatchTomlParser {
                         currentPatchName = null;
                     }
                     // Track current patch name
-                    else if (trimmed.startsWith("name") && currentPatchName == null) {
+                    else if (isKeyValue(trimmed, "name") && currentPatchName == null) {
                         currentPatchName = extractStringValue(trimmed);
                     }
                     // Update is_enabled if this is the target patch
-                    else if (trimmed.startsWith("is_enabled") &&
+                    else if (isKeyValue(trimmed, "is_enabled") &&
                              patchName.equals(currentPatchName)) {
                         line = "    is_enabled = " + enabled;
                         modified = true;

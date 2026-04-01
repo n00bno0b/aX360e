@@ -28,28 +28,29 @@ public class TurnipDriverInfo {
         
         if (icdFile.exists()) {
             info.isInstalled = true;
-            try {
-                BufferedReader reader = new BufferedReader(new FileReader(icdFile));
+            try (BufferedReader reader = new BufferedReader(new FileReader(icdFile))) {
                 StringBuilder sb = new StringBuilder();
                 String line;
                 while ((line = reader.readLine()) != null) {
                     sb.append(line);
                 }
-                reader.close();
                 
                 JSONObject json = new JSONObject(sb.toString());
                 JSONObject icd = json.getJSONObject("ICD");
                 String libraryPath = icd.getString("library_path");
                 
                 // Check if it's Turnip driver
-                if (libraryPath.contains("turnip") || libraryPath.contains("Turnip")) {
+                if (libraryPath.contains("turnip") || libraryPath.contains("Turnip")
+                        || libraryPath.contains("freedreno") || libraryPath.contains("libvulkan_freedreno")) {
                     info.isTurnip = true;
                     info.driverName = "Mesa Turnip";
                     
                     // Try to extract version from filename
                     File soFile = new File(libraryPath);
                     String filename = soFile.getName();
-                    info.parseVersionFromFilename(filename);
+                    if (filename != null && !filename.isEmpty()) {
+                        info.parseVersionFromFilename(filename);
+                    }
                 }
                 
                 info.driverVersion = icd.optString("api_version", "Unknown");
@@ -122,7 +123,7 @@ public class TurnipDriverInfo {
         }
         
         if (mesaVersion.contains("26.0")) {
-            return "Recommended for Adreno 840, 750";
+            return "Recommended for Adreno 840, 750, 740";
         } else if (mesaVersion.contains("25.2")) {
             return "Recommended for Adreno 750";
         } else if (mesaVersion.contains("25.0")) {
@@ -130,5 +131,24 @@ public class TurnipDriverInfo {
         }
         
         return "Check compatibility";
+    }
+    
+    /**
+     * Returns device-specific TU_DEBUG recommendations based on GPU model.
+     * Research from Mesa Turnip documentation and community reports:
+     * - Adreno 830: GMEM broken, must use sysmem mode + nolrz
+     * - Adreno 710/720: gmem mode recommended for better performance
+     * - Samsung OneUI devices: noubwc recommended
+     */
+    public static String getRecommendedTuDebug(String gpuName) {
+        if (gpuName == null) return "";
+        String gpuLower = gpuName.toLowerCase();
+        if (gpuLower.contains("830") || gpuLower.contains("a830")) {
+            return "sysmem,nolrz";
+        } else if (gpuLower.contains("710") || gpuLower.contains("720")
+                || gpuLower.contains("a710") || gpuLower.contains("a720")) {
+            return "gmem";
+        }
+        return "";
     }
 }

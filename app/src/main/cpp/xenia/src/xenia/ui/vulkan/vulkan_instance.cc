@@ -51,7 +51,17 @@ std::unique_ptr<VulkanInstance> VulkanInstance::Create(
   bool functions_loaded = true;
 #if XE_PLATFORM_LINUX
 #if XE_PLATFORM_ANDROID||XE_PLATFORM_AX360E
-  const char* const loader_library_name = "libvulkan.so";
+  // On Android, check for a custom Turnip driver installed via CustomDriverUtils.
+  // The Java layer sets CUSTOM_DRIVER_PATH to the direct .so path since
+  // Android's Vulkan loader does not honor VK_ICD_FILENAMES.
+  const char* custom_driver_path = std::getenv("CUSTOM_DRIVER_PATH");
+  const char* loader_library_name;
+  if (custom_driver_path && custom_driver_path[0] != '\0') {
+    loader_library_name = custom_driver_path;
+    XELOGI("Using custom Vulkan driver: {}", loader_library_name);
+  } else {
+    loader_library_name = "libvulkan.so";
+  }
 #else
   const char* const loader_library_name = "libvulkan.so.1";
 #endif

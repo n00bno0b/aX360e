@@ -22,6 +22,9 @@ public class CustomDriverUtils {
 
     private static final String TAG = "CustomDriverUtils";
     private static final String DRIVER_DIR_NAME = "custom_drivers";
+    // Decompression bomb limits to prevent OOM from malicious zip files
+    private static final long MAX_TOTAL_UNCOMPRESSED_SIZE = 100 * 1024 * 1024; // 100MB total
+    private static final long MAX_SINGLE_FILE_SIZE = 50 * 1024 * 1024; // 50MB per file
 
     public static File getDriverDirectory(Context context) {
         return context.getDir(DRIVER_DIR_NAME, Context.MODE_PRIVATE);
@@ -46,11 +49,20 @@ public class CustomDriverUtils {
                 return false;
             }
 
-            try (ZipInputStream zis = new ZipInputStream(is)) {
+            try (InputStream isGuard = is; ZipInputStream zis = new ZipInputStream(isGuard)) {
                 ZipEntry entry;
                 String canonicalStagingPath = stagingDir.getCanonicalPath();
+                long totalBytesExtracted = 0;
                 while ((entry = zis.getNextEntry()) != null) {
                     if (!entry.isDirectory()) {
+                        // Check for decompression bomb - individual file size
+                        if (entry.getSize() > MAX_SINGLE_FILE_SIZE) {
+                            Log.e(TAG, "Zip entry too large: " + entry.getName()
+                                    + " (" + entry.getSize() + " bytes, max " + MAX_SINGLE_FILE_SIZE + ")");
+                            deleteRecursive(stagingDir);
+                            return false;
+                        }
+
                         File file = new File(stagingDir, entry.getName());
                         String canonicalFilePath = file.getCanonicalPath();
                         if (!canonicalFilePath.startsWith(canonicalStagingPath + File.separator)) {
@@ -58,12 +70,27 @@ public class CustomDriverUtils {
                         }
 
                         // Create parent directories if needed
-                        file.getParentFile().mkdirs();
+                        File parentDir = file.getParentFile();
+                        if (parentDir != null) parentDir.mkdirs();
 
                         try (FileOutputStream fos = new FileOutputStream(file)) {
-                            byte[] buffer = new byte[1024];
+                            byte[] buffer = new byte[4096];
                             int length;
+                            long fileBytesWritten = 0;
                             while ((length = zis.read(buffer)) > 0) {
+                                fileBytesWritten += length;
+                                totalBytesExtracted += length;
+                                // Check limits during extraction (handles unknown sizes)
+                                if (fileBytesWritten > MAX_SINGLE_FILE_SIZE) {
+                                    Log.e(TAG, "File exceeded max size during extraction: " + entry.getName());
+                                    deleteRecursive(stagingDir);
+                                    return false;
+                                }
+                                if (totalBytesExtracted > MAX_TOTAL_UNCOMPRESSED_SIZE) {
+                                    Log.e(TAG, "Total extraction exceeded max size: " + totalBytesExtracted + " bytes");
+                                    deleteRecursive(stagingDir);
+                                    return false;
+                                }
                                 fos.write(buffer, 0, length);
                             }
                         }
@@ -75,8 +102,6 @@ public class CustomDriverUtils {
                 }
 
                 if (driverSoName != null) {
-                    generateIcdManifest(stagingDir, driverSoName);
-
                     // Validation succeeded, atomically swap staging into place
                     if (dir.exists()) {
                         deleteRecursive(dir);
@@ -86,6 +111,8 @@ public class CustomDriverUtils {
                         deleteRecursive(stagingDir);
                         return false;
                     }
+                    // Generate ICD manifest AFTER rename so paths point to final location
+                    generateIcdManifest(dir, driverSoName);
                     return true;
                 } else {
                     Log.e(TAG, "No vulkan .so file found in zip.");
@@ -122,13 +149,62 @@ public class CustomDriverUtils {
         File icdFile = new File(dir, "vk_icd.json");
         if (icdFile.exists()) {
             try {
+                // Set ICD env vars (used by desktop Vulkan loaders, informational on Android)
                 Os.setenv("VK_ICD_FILENAMES", icdFile.getAbsolutePath(), true);
                 Os.setenv("VK_DRIVER_FILES", icdFile.getAbsolutePath(), true);
+
+                // On Android the system Vulkan loader ignores VK_ICD_FILENAMES,
+                // so we also export the direct .so path for native code to dlopen.
+                String soPath = findDriverSoPath(dir);
+                if (soPath != null) {
+                    Os.setenv("CUSTOM_DRIVER_PATH", soPath, true);
+                    Log.i(TAG, "Custom GPU driver path set: " + soPath);
+                }
+
                 Log.i(TAG, "Custom GPU driver environment variables set.");
             } catch (ErrnoException e) {
                 Log.e(TAG, "Failed to set custom driver env variables", e);
             }
         }
+    }
+
+    /**
+     * Find the Vulkan .so path inside the installed driver directory.
+     * Returns null if no valid driver .so is found.
+     */
+    private static String findDriverSoPath(File dir) {
+        // First try parsing vk_icd.json for library_path
+        File icdFile = new File(dir, "vk_icd.json");
+        if (icdFile.exists()) {
+            try (FileInputStream fis = new FileInputStream(icdFile)) {
+                byte[] data = new byte[(int) icdFile.length()];
+                fis.read(data);
+                JSONObject root = new JSONObject(new String(data));
+                JSONObject icd = root.getJSONObject("ICD");
+                String path = icd.getString("library_path");
+                if (new File(path).exists()) {
+                    return path;
+                }
+            } catch (IOException | JSONException e) {
+                Log.w(TAG, "Failed to parse vk_icd.json for library_path", e);
+            }
+        }
+        // Fallback: scan directory for vulkan .so files
+        return findSoRecursive(dir);
+    }
+
+    private static String findSoRecursive(File dir) {
+        File[] files = dir.listFiles();
+        if (files == null) return null;
+        for (File f : files) {
+            if (f.isDirectory()) {
+                String result = findSoRecursive(f);
+                if (result != null) return result;
+            } else if (f.getName().endsWith(".so") && f.getName().contains("vulkan")) {
+                return f.getAbsolutePath();
+            }
+        }
+        return null;
     }
 
     public static void removeDriver(Context context) {

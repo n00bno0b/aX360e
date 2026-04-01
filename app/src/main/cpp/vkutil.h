@@ -24,9 +24,9 @@ std::vector<VkExtensionProperties> vk_get_physical_device_extension_properties(V
 
 void vk_destroy_instance(VkInstance inst);
 
-int vk_get_queue_family_count(VkPhysicalDevice dev);
+int vk_get_queue_family_properties_count(VkPhysicalDevice dev);
 
-VkQueueFamilyProperties vk_get_queue_family_properties(VkPhysicalDevice dev,int index);
+std::optional<VkQueueFamilyProperties> vk_get_queue_family_properties(VkPhysicalDevice dev,int index);
 
 std::optional<VkDevice> vk_create_device(VkPhysicalDevice pdev,uint32_t queueFamilyIndex,VkQueueFamilyProperties  props);
 
@@ -37,8 +37,6 @@ std::optional<VkDescriptorSetLayout> vk_create_descriptor_set_layout(VkDevice de
 void vk_destroy_descriptor_set_layout(VkDevice dev,VkDescriptorSetLayout layout);
 
 std::optional<VkPipelineLayout> vk_create_pipeline_layout(VkDevice dev,VkDescriptorSetLayout descriptor_set_layout);
-
-std::optional<std::vector<uint32_t>> vk_compile_glsl_to_spv(VkDevice dev,const std::string& source,VkPhysicalDeviceLimits limits);
 
 std::optional<VkShaderModule> vk_create_shader_module(VkDevice dev,const std::vector<uint32_t>& code);
 

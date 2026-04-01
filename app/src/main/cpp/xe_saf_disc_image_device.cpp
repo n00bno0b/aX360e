@@ -9,6 +9,7 @@
 #include "xe_saf_disc_image_device.h"
 #include "xe_saf_disc_image_entry.h"
 
+#include <unistd.h>
 #include "xenia/base/literals.h"
 #include "xenia/base/logging.h"
 #include "xenia/base/math.h"
@@ -35,6 +36,7 @@ namespace xe {
             mmap_ = MappedMemory::OpenForUnixFd(header_file_fd);
             if (!mmap_) {
                 XELOGE("Disc image could not be mapped");
+                close(header_file_fd);
                 return false;
             }
 

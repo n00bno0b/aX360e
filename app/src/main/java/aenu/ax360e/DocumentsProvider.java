@@ -156,7 +156,10 @@ public class DocumentsProvider extends android.provider.DocumentsProvider{
             final File file = pending.removeFirst();
             if (file.isDirectory()) {
                 // If it's a directory, add all its children to the unprocessed list
-                Collections.addAll(pending, file.listFiles());
+                File[] children = file.listFiles();
+                if (children != null) {
+                    Collections.addAll(pending, children);
+                }
             } else {
                 // If it's a file and it matches, add it to the result cursor.
                 if (file.getName().toLowerCase().contains(query)) {
@@ -196,8 +199,11 @@ public class DocumentsProvider extends android.provider.DocumentsProvider{
 
         final MatrixCursor result = new MatrixCursor(resolveDocumentProjection(projection));
         final File parent = getFileForDocId(parentDocumentId);
-        for (File file : parent.listFiles()) {
-            includeFile(result, null, file);
+        File[] children = parent.listFiles();
+        if (children != null) {
+            for (File file : children) {
+                includeFile(result, null, file);
+            }
         }
         return result;
     }
@@ -305,14 +311,13 @@ public class DocumentsProvider extends android.provider.DocumentsProvider{
     }*/
 
     void copy_file(File src_file,File dst_file) throws IOException {
-        FileInputStream in=new FileInputStream(src_file);
-        FileOutputStream out=new FileOutputStream(dst_file);
-        byte buf[]=new byte[16384];
-        int n;
-        while((n=in.read(buf))!=-1)
-            out.write(buf,0,n);
-        in.close();
-        out.close();
+        try (FileInputStream in=new FileInputStream(src_file);
+             FileOutputStream out=new FileOutputStream(dst_file)) {
+            byte buf[]=new byte[16384];
+            int n;
+            while((n=in.read(buf))!=-1)
+                out.write(buf,0,n);
+        }
     }
     void recursive_copy_sub_files(File src_dir,File dst_dir) throws IOException {
         File[] files = src_dir.listFiles();

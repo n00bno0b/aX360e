@@ -50,6 +50,11 @@ void vk_load(const char* lib_path, bool is_adreno_custom) {
         return;
     }
 
+    if (!lib_path) {
+        LOGE("Vulkan library path is null");
+        return;
+    }
+
     // Set environment variables before loading driver
     if (is_adreno_custom) {
         LOGI("Loading custom Adreno driver (likely Mesa Turnip)");
@@ -72,6 +77,17 @@ void vk_load(const char* lib_path, bool is_adreno_custom) {
 #include "vksym.h"
 #undef VKFN
 
+    // Validate critical function pointers
+    if (!vkCreateInstance_ || !vkDestroyInstance_ || !vkEnumeratePhysicalDevices_) {
+        LOGE("Critical Vulkan function pointers not found in loaded library - driver may be corrupt");
+        dlclose(lib_handle);
+        lib_handle = nullptr;
+#define VKFN(func) func##_=nullptr
+#include "vksym.h"
+#undef VKFN
+        return;
+    }
+
     if (is_adreno_custom) {
         LOGI("Custom Adreno driver loaded - TBDR optimizations should be active");
     }
@@ -92,4 +108,8 @@ void vk_unload() {
 #undef VKFN
 
     LOGI("Vulkan library unloaded successfully");
+}
+
+bool vk_is_loaded() {
+    return lib_handle != nullptr;
 }

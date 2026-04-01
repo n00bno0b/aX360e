@@ -16,5 +16,6 @@
 
 void vk_load(const char* lib_path,bool is_adreno_custom=false);
 void vk_unload();
+bool vk_is_loaded();
 
 #endif //APS3E_VKAPI_H
