@@ -30,11 +30,6 @@ jobs:
         run: |
           sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
-      - name: Prepare app build.gradle
-        run: |
-          cp app/build.gradle.bak app/build.gradle
-          sed -i "s/signingConfig signingConfigs.release/signingConfig signingConfigs.debug/" app/build.gradle
-
       - name: Build debug APK
         run: |
           chmod +x gradlew
