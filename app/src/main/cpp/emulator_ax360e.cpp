@@ -42,8 +42,10 @@ static void j_setup_launch_args(JNIEnv* env,jobject self,jobjectArray args ){
     for(int i=0;i<env->GetArrayLength(args);i++){
         jstring arg=(jstring)env->GetObjectArrayElement(args,i);
         const char* str = env->GetStringUTFChars(arg,NULL);
-        g_launch_args.push_back(str);
-        env->ReleaseStringUTFChars(arg, str);
+        if (str != NULL) {
+            g_launch_args.push_back(std::string(str));
+            env->ReleaseStringUTFChars(arg, str);
+        }
     }
 }
 
