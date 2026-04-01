@@ -35,7 +35,6 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
-import android.widget.ArrayAdapter;
 import android.widget.BaseAdapter;
 import android.widget.ImageView;
 import android.widget.ListView;
@@ -53,7 +52,6 @@ import androidx.documentfile.provider.DocumentFile;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.w3c.dom.Text;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -65,6 +63,7 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -91,10 +90,13 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
-    ListView list_view;
+    ListView list_view; // Legacy field, kept for compatibility
     ProgressBar progress;
     ProgressTask progress_task;
     Emulator.Config config;
+    MainActivityHelper helper;
+    GameListAdapter gameListAdapter;
+    GameMetadataManager metadataManager;
     Dialog delay_dialog=null;
     final Handler delay_on_create=new Handler(new Handler.Callback() {
         @Override
@@ -135,26 +137,41 @@ public class MainActivity extends AppCompatActivity {
     }
 
     void _on_create(){
-        /*Emulator.get.setup_context(this);
-        //FIXME
-        Emulator.get.setup_document_file_tree(DocumentFile.fromTreeUri(this,MainActivity.load_pref_game_dir( this)));
-        Emulator.get.setup_launch_args(new String[]{
-                "--storage_root=/storage/emulated/0/Download/ax360e",
-                "--log_file=/storage/emulated/0/Download/ax360e/xe.log",
-        });*/
         setContentView(R.layout.activity_main);
-        list_view=findViewById(R.id.game_list);
-        list_view.setOnItemClickListener(item_click_l);
-        list_view.setEmptyView(findViewById(R.id.game_list_is_empty));
 
-        if(getPackageName().equals("aenu.ax360e"))
-        registerForContextMenu(list_view);
-        //refresh_game_list();
+        // Initialize metadata manager and adapter
+        metadataManager = new GameMetadataManager(this);
+        gameListAdapter = new GameListAdapter(this, metadataManager);
+        gameListAdapter.setOnGameClickListener(new GameListAdapter.OnGameClickListener() {
+            @Override
+            public void onGameClick(Emulator.GameInfo game) {
+                Intent intent = new Intent("aenu.intent.action.AX360E");
+                intent.setPackage(getPackageName());
+                intent.putExtra(EmulatorActivity.EXTRA_GAME_URI, game.uri);
+                startActivity(intent);
+            }
+
+            @Override
+            public void onGameLongClick(Emulator.GameInfo game) {
+                // Long-click handling done via context menu
+            }
+        });
+
+        // Initialize Material3 helper and wire up all UI components
+        helper = new MainActivityHelper(this);
+        helper.initializeViews(findViewById(android.R.id.content));
+        helper.setAdapter(gameListAdapter);
+
+        // Wire up the "Set Game Directory" button in the empty state
+        View btnSetGameDir = findViewById(R.id.btn_set_game_dir);
+        if (btnSetGameDir != null) {
+            btnSetGameDir.setOnClickListener(v -> request_game_dir_select(MainActivity.this));
+        }
+
+        if(getPackageName().equals("aenu.ax360e")) {
+            // Context menu registered on adapter items via long-click above
+        }
         show_game_list();
-        /*if(!new File(Application.get_app_data_dir(),"xenia.config.toml").exists()) return;
-        String config_str=Emulator.get.generate_config_xml(new File(Application.get_app_data_dir(),"xenia.config.toml").getAbsolutePath());
-        File config_file=new File(Application.get_app_data_dir(),"xenia.config.xml");
-        Utils.save_string(config_file,config_str);*/
     }
 
     void on_create(){
@@ -330,7 +347,7 @@ public class MainActivity extends AppCompatActivity {
         activity.startActivityForResult(intent, REQUEST_SELECT_GAME_DIR);
     }
     GameMetaInfoAdapter adapter=null;
-    private void refresh_game_list(){
+    void refresh_game_list(){
 
         (progress_task=new ProgressTask( this)
                 .set_progress_message(getString( R.string.game_list_loading))
@@ -363,7 +380,14 @@ public class MainActivity extends AppCompatActivity {
             refresh_game_list();
             return;
         }
-        ((ListView)findViewById(R.id.game_list)).setAdapter(adapter);
+        // Convert to list and set on RecyclerView adapter
+        if (gameListAdapter != null) {
+            gameListAdapter.setGameList(adapter.metas);
+        }
+        // Show/hide empty state
+        if (helper != null) {
+            helper.showEmptyState(adapter.metas == null || adapter.metas.isEmpty());
+        }
     }
     static void save_pref_game_dir(Context ctx,Uri uri){
         try{

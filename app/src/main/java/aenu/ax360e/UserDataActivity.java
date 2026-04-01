@@ -13,7 +13,8 @@ public class UserDataActivity extends AppCompatActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        //open_file_manager();
+        open_file_manager(this);
+        finish();
     }
 
     static Intent get_file_manager_intent(String action)
