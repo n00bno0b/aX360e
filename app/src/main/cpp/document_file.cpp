@@ -98,6 +98,9 @@ std::unique_ptr<DocumentFile> DocumentFile::getParentFile() const{
         return nullptr;
     }
     jobject parentFileObj = env_->CallObjectMethod(documentFileObj_, getParentFileMethod);
+    if (parentFileObj == nullptr) {
+        return nullptr;
+    }
     std::unique_ptr<DocumentFile> parentFile = std::make_unique<DocumentFile>(jvm_, parentFileObj);
     env_->DeleteLocalRef(parentFileObj);
     return parentFile;
@@ -211,6 +214,10 @@ int64_t DocumentFile::length(){
     JNIEnv *env_ = get_env(jvm_);
     jclass documentFileClass = env_->GetObjectClass(documentFileObj_);
     jmethodID lengthMethod = env_->GetMethodID(documentFileClass, "length", "()J");
+    if (lengthMethod == nullptr) {
+        LOGE("Cannot find length method");
+        return -1;
+    }
     return env_->CallLongMethod(documentFileObj_, lengthMethod);
 }
 
@@ -219,6 +226,10 @@ int64_t DocumentFile::lastModified(){
     JNIEnv *env_ = get_env(jvm_);
     jclass documentFileClass = env_->GetObjectClass(documentFileObj_);
     jmethodID lastModifiedMethod = env_->GetMethodID(documentFileClass, "lastModified", "()J");
+    if (lastModifiedMethod == nullptr) {
+        LOGE("Cannot find lastModified method");
+        return -1;
+    }
     return env_->CallLongMethod(documentFileObj_, lastModifiedMethod);
 }
 

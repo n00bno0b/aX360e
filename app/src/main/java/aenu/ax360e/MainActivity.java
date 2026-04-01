@@ -348,7 +348,7 @@ public class MainActivity extends AppCompatActivity {
             editor.apply();
         }
         catch(Exception e){
-            e.printStackTrace();
+            android.util.Log.e("ax360e", "Failed to save game dir preference", e);
         }
     }
 
@@ -362,7 +362,7 @@ public class MainActivity extends AppCompatActivity {
             return uri;
         }
         catch(Exception e){
-            e.printStackTrace();
+            android.util.Log.e("ax360e", "Failed to load game dir preference", e);
             return null;
         }
     }
@@ -443,12 +443,10 @@ public class MainActivity extends AppCompatActivity {
         }
 
         static void save_game_list_to_json_file(File json,ArrayList<Emulator.GameInfo> metas){
-            try {
-                FileOutputStream fos=new FileOutputStream(json);
+            try (FileOutputStream fos=new FileOutputStream(json)) {
                 fos.write(save_game_list_to_json(metas).getBytes());
-                fos.close();
             } catch (IOException | JSONException e) {
-                e.printStackTrace();
+                android.util.Log.e("ax360e", "Failed to save game list", e);
             }
         }
 

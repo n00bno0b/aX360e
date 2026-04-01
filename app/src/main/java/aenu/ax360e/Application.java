@@ -34,7 +34,7 @@ public class Application extends android.app.Application{
             in.read(buffer);
             return buffer;
         } catch (IOException e) {
-            e.printStackTrace();
+            android.util.Log.e("Application", "Failed to load asset: " + asset_file_path, e);
             return null;
         }
     }
@@ -75,7 +75,7 @@ public class Application extends android.app.Application{
         try {
             gpu_device_name_vk = ProcessorInfo.gpu_get_physical_device_name_vk();
         } catch (Exception e) {
-            e.printStackTrace();
+            android.util.Log.e("Application", "Failed to get Vulkan GPU device name", e);
             gpu_device_name_vk = null;
         }
 

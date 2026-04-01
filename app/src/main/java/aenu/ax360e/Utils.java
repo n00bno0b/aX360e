@@ -32,18 +32,18 @@ public class Utils {
     }
     static String getFileNameFromUri(Uri uri) {
         String fileName = null;
-        Cursor cursor = Application.ctx.getContentResolver().query(
+        try (Cursor cursor = Application.ctx.getContentResolver().query(
                 uri,
                 new String[]{DocumentsContract.Document.COLUMN_DISPLAY_NAME},
                 null, null, null
-        );
-        if (cursor != null) {
-            if (cursor.moveToFirst()) {
+        )) {
+            if (cursor != null && cursor.moveToFirst()) {
                 fileName = cursor.getString(cursor.getColumnIndexOrThrow(
                         DocumentsContract.Document.COLUMN_DISPLAY_NAME
                 ));
             }
-            cursor.close();
+        } catch (Exception e) {
+            android.util.Log.e("Utils", "Failed to get file name from URI", e);
         }
         return fileName;
     }
@@ -52,7 +52,7 @@ public class Utils {
         try(FileOutputStream fos=new FileOutputStream(file)){
             fos.write(str.getBytes());
         }catch(Exception e){
-            e.printStackTrace();
+            android.util.Log.e("Utils", "Failed to save string to " + file.getPath(), e);
         }
     }
 
@@ -62,7 +62,7 @@ public class Utils {
             fis.read(buf);
             return new String(buf);
         }catch(Exception e){
-            e.printStackTrace();
+            android.util.Log.e("Utils", "Failed to load string from " + file.getPath(), e);
             return null;
         }
     }
@@ -76,7 +76,7 @@ public class Utils {
                 out.write(buf,0,len);
             }
         }catch(Exception e){
-            e.printStackTrace();
+            android.util.Log.e("Utils", "Failed to copy " + src_file.getPath() + " to " + dst_file.getPath(), e);
         }
     }
 
@@ -122,7 +122,7 @@ public class Utils {
                 }
             }
         } catch (IOException e) {
-            e.printStackTrace();
+            android.util.Log.e("Utils", "Failed to extract assets dir: " + assertDir, e);
         }
     }
 }

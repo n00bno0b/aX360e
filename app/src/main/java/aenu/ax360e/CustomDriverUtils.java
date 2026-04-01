@@ -49,7 +49,7 @@ public class CustomDriverUtils {
                 return false;
             }
 
-            try (ZipInputStream zis = new ZipInputStream(is)) {
+            try (InputStream isGuard = is; ZipInputStream zis = new ZipInputStream(isGuard)) {
                 ZipEntry entry;
                 String canonicalStagingPath = stagingDir.getCanonicalPath();
                 long totalBytesExtracted = 0;
