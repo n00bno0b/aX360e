@@ -29,14 +29,28 @@ public class Application extends android.app.Application{
 
     public  static byte[] load_assets_file(Context ctx,String asset_file_path) {
         try (InputStream in = ctx.getAssets().open(asset_file_path)) {
-            int size = in.available();
-            if (size > 10 * 1024 * 1024) { // 10 MB safety limit for asset files
-                android.util.Log.e("Application", "Asset file too large: " + asset_file_path + " (" + size + " bytes)");
+            int sizeEstimate = in.available();
+            if (sizeEstimate > 10 * 1024 * 1024) { // 10 MB safety limit for asset files
+                android.util.Log.e("Application", "Asset file too large (estimated): " + asset_file_path + " (" + sizeEstimate + " bytes)");
                 return null;
             }
-            byte[] buffer = new byte[size];
-            in.read(buffer);
-            return buffer;
+
+            // Read file in chunks until EOF, enforcing 10MB total cap
+            java.io.ByteArrayOutputStream buffer = new java.io.ByteArrayOutputStream();
+            byte[] chunk = new byte[8192];
+            int totalRead = 0;
+            int bytesRead;
+
+            while ((bytesRead = in.read(chunk)) != -1) {
+                totalRead += bytesRead;
+                if (totalRead > 10 * 1024 * 1024) {
+                    android.util.Log.e("Application", "Asset file exceeds 10MB limit: " + asset_file_path);
+                    return null;
+                }
+                buffer.write(chunk, 0, bytesRead);
+            }
+
+            return buffer.toByteArray();
         } catch (IOException e) {
             android.util.Log.e("Application", "Failed to load asset: " + asset_file_path, e);
             return null;

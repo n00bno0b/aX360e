@@ -58,14 +58,30 @@ public class Utils {
 
     static String load_string(File file){
         try(FileInputStream fis=new FileInputStream(file)){
-            int size = fis.available();
-            if (size > 10 * 1024 * 1024) { // 10 MB safety limit for config/text files
-                android.util.Log.e("Utils", "File too large to load as string: " + file.getPath() + " (" + size + " bytes)");
+            long fileSize = file.length();
+            if (fileSize > 10 * 1024 * 1024) { // 10 MB safety limit for config/text files
+                android.util.Log.e("Utils", "File too large to load as string: " + file.getPath() + " (" + fileSize + " bytes)");
                 return null;
             }
-            byte[] buf=new byte[size];
-            fis.read(buf);
-            return new String(buf);
+            if (fileSize > Integer.MAX_VALUE) {
+                android.util.Log.e("Utils", "File size exceeds maximum array size: " + file.getPath());
+                return null;
+            }
+
+            // Read file in a loop to ensure complete read
+            byte[] buf = new byte[(int) fileSize];
+            int totalRead = 0;
+            int bytesRead;
+            while (totalRead < fileSize && (bytesRead = fis.read(buf, totalRead, (int) fileSize - totalRead)) != -1) {
+                totalRead += bytesRead;
+            }
+
+            if (totalRead < fileSize) {
+                android.util.Log.e("Utils", "Incomplete read: expected " + fileSize + " bytes, got " + totalRead + " bytes from " + file.getPath());
+                return null;
+            }
+
+            return new String(buf, java.nio.charset.StandardCharsets.UTF_8);
         }catch(Exception e){
             android.util.Log.e("Utils", "Failed to load string from " + file.getPath(), e);
             return null;

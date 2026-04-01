@@ -35,17 +35,26 @@ public class Emulator extends aenu.emulator.Emulator{
     public native String simple_device_info();
     public native String generate_config_xml(String config_path);
     public static int nc_open_uri_fd(Context ctx,Uri uri) {
+        ParcelFileDescriptor pfd_ = null;
         try {
-            ParcelFileDescriptor pfd_ = ctx.getContentResolver().openFileDescriptor(uri, "r");
+            pfd_ = ctx.getContentResolver().openFileDescriptor(uri, "r");
             if (pfd_ == null) {
                 Log.e("ax360e", "openFileDescriptor returned null for: " + uri);
                 return -1;
             }
-            int game_fd=pfd_.detachFd();
+            int game_fd = pfd_.detachFd();
             return game_fd;
         } catch (Exception e) {
-            Log.e("ax360e",e.toString());
+            Log.e("ax360e", "Failed to open URI fd", e);
             return -1;
+        } finally {
+            if (pfd_ != null) {
+                try {
+                    pfd_.close();
+                } catch (Exception e) {
+                    Log.e("ax360e", "Failed to close ParcelFileDescriptor", e);
+                }
+            }
         }
     }
 

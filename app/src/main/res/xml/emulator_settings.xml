@@ -524,6 +524,12 @@
             <aenu.preference.CheckBoxPreference app:title="@string/turnip_gmem_mode"
                 app:key="TurnipAdvanced|gmem_mode"
                 app:summary="@string/turnip_gmem_mode_hint" />
+            <aenu.preference.CheckBoxPreference app:title="@string/turnip_sysmem_mode"
+                app:key="TurnipAdvanced|sysmem_mode"
+                app:summary="@string/turnip_sysmem_mode_hint" />
+            <aenu.preference.CheckBoxPreference app:title="@string/turnip_nolrz"
+                app:key="TurnipAdvanced|nolrz"
+                app:summary="@string/turnip_nolrz_hint" />
             <aenu.preference.CheckBoxPreference app:title="@string/turnip_ubwc_flag_hint"
                 app:key="TurnipAdvanced|ubwc_flag_hint"
                 app:summary="@string/turnip_ubwc_flag_hint_hint" />

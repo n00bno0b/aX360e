@@ -65,7 +65,10 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
     private static final long MIN_RAM_BYTES = 4L * 1024 * 1024 * 1024; // 4 GB
 
     void on_create(){
-        // Check minimum RAM before attempting to boot emulator
+        // Check minimum RAM as proxy for address space availability
+        // Xbox 360 emulation requires 4GB+ virtual address space (xenia maps physical_membase_
+        // at mapping_base_ + 0x100000000). While this checks physical RAM rather than VA space,
+        // devices with <4GB RAM are unlikely to provide sufficient address space for emulation.
         android.app.ActivityManager am = (android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE);
         if (am != null) {
             android.app.ActivityManager.MemoryInfo mi = new android.app.ActivityManager.MemoryInfo();
@@ -73,12 +76,10 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
             if (mi.totalMem < MIN_RAM_BYTES) {
                 long totalMB = mi.totalMem / (1024 * 1024);
                 new AlertDialog.Builder(this)
-                    .setTitle("Insufficient RAM")
-                    .setMessage("This device has " + totalMB + " MB of RAM. " +
-                                "Xbox 360 emulation requires at least 4 GB. " +
-                                "The app may crash or run very poorly.")
-                    .setPositiveButton("Continue Anyway", (d, w) -> continueOnCreate())
-                    .setNegativeButton("Exit", (d, w) -> finish())
+                    .setTitle(R.string.insufficient_ram_title)
+                    .setMessage(getString(R.string.insufficient_ram_message, totalMB))
+                    .setPositiveButton(R.string.insufficient_ram_continue_anyway, (d, w) -> continueOnCreate())
+                    .setNegativeButton(R.string.insufficient_ram_exit, (d, w) -> finish())
                     .setCancelable(false)
                     .show();
                 return;

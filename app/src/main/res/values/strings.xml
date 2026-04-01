@@ -25,6 +25,12 @@
     <string name="quit">Quit</string>
     <string name="device_unsupport_vulkan_msg">Your device does not support Vulkan and cannot meet the minimum requirements to run this application, please exit.</string>
 
+    <!-- RAM Warning Dialog -->
+    <string name="insufficient_ram_title">Insufficient RAM</string>
+    <string name="insufficient_ram_message">This device has %d MB of RAM. Xbox 360 emulation requires at least 4 GB of RAM for adequate virtual address space. The app may crash or run very poorly.</string>
+    <string name="insufficient_ram_continue_anyway">Continue Anyway</string>
+    <string name="insufficient_ram_exit">Exit</string>
+
     <string name="loading">Loading...</string>
     <string name="msg_processing">Processing...</string>
     <string name="empty_game_list">The list of games is empty,  please setting the game directory</string>
@@ -561,13 +567,17 @@ This Config requires you to pair an analog and digitial flag together while digi
     <string name="turnip_env_variables">Environment Variables</string>
     <string name="turnip_gmem_mode">Force GMEM Mode</string>
     <string name="turnip_gmem_mode_hint">Forces GMEM mode for Adreno 710/720 GPUs (TU_DEBUG=gmem)</string>
+    <string name="turnip_sysmem_mode">Force Sysmem Mode</string>
+    <string name="turnip_sysmem_mode_hint">Required for Adreno 830 where GMEM is broken (TU_DEBUG=sysmem)</string>
+    <string name="turnip_nolrz">Disable Low Resolution Z</string>
+    <string name="turnip_nolrz_hint">Fixes Z-fighting and GPU hangs on some Adreno GPUs (TU_DEBUG=nolrz)</string>
     <string name="turnip_ubwc_flag_hint">Enable UBWC Flag Hint</string>
     <string name="turnip_ubwc_flag_hint_hint">Fixes graphical bugs on OneUI devices (FD_DEV_FEATURES=enable_tp_ubwc_flag_hint=1)</string>
     <string name="turnip_debug_logging">Enable Debug Logging</string>
     <string name="turnip_debug_logging_hint">Enable verbose Turnip driver logging (MESA_DEBUG=1)</string>
     <string name="turnip_noubwc">Disable UBWC Compression</string>
     <string name="turnip_noubwc_hint">Disable UBWC compression for debugging (TU_DEBUG=noubwc)</string>
-    
+
     <!-- Performance Monitoring -->
     <string name="perf_monitoring">Performance Monitoring</string>
     <string name="show_gmem_stats">Show GMEM Statistics</string>

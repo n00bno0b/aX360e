@@ -108,7 +108,13 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onGameLongClick(Emulator.GameInfo game) {
-                // Long-click handling done via context menu
+                // Handle long-click directly since context menus are not wired for RecyclerView items
+                AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
+                builder.setTitle(game.name);
+                String uriDisplay = game.uri != null ? game.uri : "No URI";
+                builder.setMessage(uriDisplay);
+                builder.setPositiveButton(android.R.string.ok, null);
+                builder.show();
             }
         });
 
