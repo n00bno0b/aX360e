@@ -1,10 +1,11 @@
 package aenu.ax360e;
 
-import android.app.Activity;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.View;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 
-import androidx.appcompat.widget.SearchView;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -51,6 +52,7 @@ public class MainActivityHelper {
         setupViewToggle();
         setupSortButton();
         setupFilterChips();
+        setupSearchBar(searchBar);
     }
     
     private void setupRecyclerView() {
@@ -162,10 +164,26 @@ public class MainActivityHelper {
     }
     
     public void setupSearchBar(SearchBar searchBar) {
+        // SearchBar's built-in EditText handles text input
         if (searchBar != null) {
-            searchBar.setOnClickListener(v -> {
-                // TODO: Implement search view expansion
-            });
+            EditText searchEditText = searchBar.findViewById(
+                    com.google.android.material.R.id.open_search_view_edit_text);
+            if (searchEditText != null) {
+                searchEditText.addTextChangedListener(new TextWatcher() {
+                    @Override
+                    public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+                    @Override
+                    public void onTextChanged(CharSequence s, int start, int before, int count) {
+                        if (adapter != null) {
+                            adapter.filter(s.toString());
+                        }
+                    }
+
+                    @Override
+                    public void afterTextChanged(Editable s) {}
+                });
+            }
         }
     }
     

@@ -1,6 +1,5 @@
 package aenu.ax360e;
 
-import android.annotation.TargetApi;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.Dialog;
@@ -8,25 +7,16 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.content.pm.PackageManager;
 import android.content.pm.ShortcutInfo;
 import android.content.pm.ShortcutManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.graphics.Canvas;
-import android.graphics.ColorMatrix;
-import android.graphics.ColorMatrixColorFilter;
-import android.graphics.Paint;
 import android.graphics.drawable.Icon;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.Environment;
 import android.os.Handler;
 import android.os.Message;
-import android.os.ParcelFileDescriptor;
 import android.preference.PreferenceManager;
-import android.provider.DocumentsContract;
-import android.util.Log;
 import android.view.ContextMenu;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
@@ -37,60 +27,25 @@ import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.BaseAdapter;
 import android.widget.ImageView;
-import android.widget.ListView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
-import androidx.activity.EdgeToEdge;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.graphics.Insets;
-import androidx.core.view.ViewCompat;
-import androidx.core.view.WindowInsetsCompat;
 import androidx.documentfile.provider.DocumentFile;
 
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileFilter;
 import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.Base64;
-import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
 
     public static final int REQUEST_SELECT_GAME_DIR=6004;
     static final int DELAY_ON_CREATE=0xaeae0000;
     public static final String PREF_GAME_DIR="game_dir";
-    /*public static File get_game_list_file(){
-        return new File(Application.get_app_data_dir(),"game_list.json");
-    }*/
 
-
-    private final AdapterView.OnItemClickListener item_click_l=new AdapterView.OnItemClickListener(){
-        @Override
-        public void onItemClick(AdapterView<?> l, View v, int position,long id)
-        {
-
-            Emulator.GameInfo meta_info=((GameMetaInfoAdapter)l.getAdapter()).getMetaInfo(position);
-
-            Intent intent = new Intent("aenu.intent.action.AX360E");
-            intent.setPackage(getPackageName());
-
-            intent.putExtra(EmulatorActivity.EXTRA_GAME_URI,meta_info.uri);
-            startActivity(intent);
-        }
-    };
-
-    ListView list_view; // Legacy field, kept for compatibility
     ProgressBar progress;
     ProgressTask progress_task;
     Emulator.Config config;
@@ -211,11 +166,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
-    protected void onStart() {
-        super.onStart();
-    }
-
-    @Override
     protected void onDestroy() {
         super.onDestroy();
         if(progress_task!=null){
@@ -315,6 +265,7 @@ public class MainActivity extends AppCompatActivity {
         }
         else if(item_id==R.id.menu_about){
             startActivity(new Intent(this,AboutActivity.class));
+            return true;
         }
         else if(item_id==R.id.menu_settings){
             startActivity(new Intent(this,EmulatorSettings.class));
