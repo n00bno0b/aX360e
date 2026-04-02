@@ -18,4 +18,5 @@ aps3e.jks
 app/release/
 app/.cxx/
 app/src/main/cpp/bin/
+hs_err_pid*.log
 app/src/main/cpp/build/
