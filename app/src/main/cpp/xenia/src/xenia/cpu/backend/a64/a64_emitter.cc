@@ -24,6 +24,7 @@
 #include "xenia/base/math.h"
 #include "xenia/base/memory.h"
 #include "xenia/base/profiling.h"
+#include "xenia/base/threading.h"
 #include "xenia/base/vec128.h"
 #include "xenia/cpu/backend/a64/a64_backend.h"
 #include "xenia/cpu/backend/a64/a64_code_cache.h"
@@ -772,7 +773,11 @@ uint64_t UndefinedCallExtern(void* raw_context, uint64_t function_ptr) {
     XELOGE("undefined extern call to {:08X} {}", function->address(),
            function->name());
   }
-  return 0;
+  // Return a generic failure code (0x80004005 = E_FAIL) so games don't
+  // interpret the result as success and spin in tight polling loops.
+  // Also sleep briefly to prevent CPU-burning retry loops.
+  xe::threading::Sleep(std::chrono::milliseconds(16));
+  return 0x80004005;
 }
 void A64Emitter::CallExtern(const hir::Instr* instr, const Function* function) {
   bool undefined = true;

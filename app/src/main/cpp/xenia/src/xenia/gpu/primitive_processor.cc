@@ -367,7 +367,6 @@ bool PrimitiveProcessor::Process(ProcessingResult& result_out) {
           "Primitive processor: Unsupported tessellation mode {} for primitive "
           "type {}. Report the game to Xenia developers!",
           uint32_t(tessellation_mode), uint32_t(guest_primitive_type));
-      assert_always();
       return false;
     }
   } else {
@@ -413,7 +412,6 @@ bool PrimitiveProcessor::Process(ProcessingResult& result_out) {
             "Primitive processor: Unsupported primitive type {}. Report the "
             "game to Xenia developers!",
             uint32_t(guest_primitive_type));
-        assert_always();
         return false;
     }
   }

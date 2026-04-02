@@ -2,55 +2,38 @@
 // SPDX-License-Identifier: WTFPL
 #include <stdlib.h>
 #include <jni.h>
-#include <vector>
-#include <vulkan/vulkan.h>
+#include <string>
+#include <fstream>
+#include <android/log.h>
 
+#define HWTAG "ax360e_hwinfo"
+#define HWLOG(...) __android_log_print(ANDROID_LOG_INFO, HWTAG, __VA_ARGS__)
+
+// Read GPU name from sysfs (Qualcomm Adreno) without creating a VkInstance.
+// Do NOT use Vulkan here: loading libvulkan.so triggers Adreno driver
+// initialization that corrupts a static mutex (FORTIFY crash on debug builds).
 extern "C" JNIEXPORT jstring JNICALL  Java_aenu_hardware_ProcessorInfo_gpu_1get_1physical_1device_1name_1vk(JNIEnv*  env,jclass cls){
-
-    VkApplicationInfo appinfo = {};
-    appinfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    appinfo.pNext = nullptr;
-    appinfo.pApplicationName = "aps3e-cfg-test";
-    appinfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-    appinfo.pEngineName = "nul";
-    appinfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    appinfo.apiVersion = VK_API_VERSION_1_0;
-
-    VkInstanceCreateInfo inst_create_info = {};
-    inst_create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    inst_create_info.pApplicationInfo = &appinfo;
-
-    VkInstance inst;
-    if (vkCreateInstance(&inst_create_info, nullptr, &inst)!= VK_SUCCESS) {
-        return nullptr;
+    // Qualcomm Adreno: /sys/class/kgsl/kgsl-3d0/gpu_model
+    std::ifstream f("/sys/class/kgsl/kgsl-3d0/gpu_model");
+    if (f.is_open()) {
+        std::string name;
+        std::getline(f, name);
+        if (!name.empty()) {
+            HWLOG("GPU name from sysfs: %s", name.c_str());
+            return env->NewStringUTF(name.c_str());
+        }
     }
-
-    uint32_t physicalDeviceCount = 0;
-    if (vkEnumeratePhysicalDevices(inst, &physicalDeviceCount, nullptr) != VK_SUCCESS || physicalDeviceCount == 0) {
-        vkDestroyInstance(inst, nullptr);
-        return nullptr;
+    // Fallback: try SoC ID
+    std::ifstream f2("/sys/devices/soc0/soc_id");
+    if (f2.is_open()) {
+        std::string soc;
+        std::getline(f2, soc);
+        if (!soc.empty()) {
+            HWLOG("SoC ID from sysfs: %s", soc.c_str());
+            std::string name = "Adreno (SoC " + soc + ")";
+            return env->NewStringUTF(name.c_str());
+        }
     }
-
-    std::vector<VkPhysicalDevice> physicalDevices(physicalDeviceCount);
-    if (vkEnumeratePhysicalDevices(inst, &physicalDeviceCount, physicalDevices.data()) != VK_SUCCESS) {
-        vkDestroyInstance(inst, nullptr);
-        return nullptr;
-    }
-
-    if(physicalDevices.empty()){
-        vkDestroyInstance(inst, nullptr);
-        return nullptr;
-    }
-
-    VkPhysicalDeviceProperties physicalDeviceProperties;
-    vkGetPhysicalDeviceProperties(physicalDevices[0], &physicalDeviceProperties);
-
-    // Copy deviceName into a Java string before destroying the instance.
-    // VkPhysicalDeviceProperties is a value type; deviceName is stored directly
-    // in the struct as a char array, not as a pointer to driver-internal memory.
-    jstring result = env->NewStringUTF(physicalDeviceProperties.deviceName);
-
-    vkDestroyInstance(inst, nullptr);
-
-    return result;
+    HWLOG("sysfs failed, returning unknown");
+    return env->NewStringUTF("Unknown GPU");
 }

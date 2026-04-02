@@ -51,6 +51,7 @@
 
 #define LOG_TAG "ax360e_native"
 #define LOGW(...) __android_log_print(ANDROID_LOG_WARN, LOG_TAG,__VA_ARGS__);
+#define LOGD(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG,__VA_ARGS__);
 
 DEFINE_string(apu, "aaudio", "Audio system. Use: [any, nop, opensles, aaudio]", "APU");
 DEFINE_string(gpu, "vulkan", "Graphics system. Use: [vulkan, null]",
@@ -116,12 +117,7 @@ pthread_mutex_unlock(&mutex);
 }
 
 void AndroidWindowedAppContext::request_paint() {
-    pthread_mutex_lock(&mutex);
-    event=EVENT_PAINT;
-    while(event){
-        pthread_cond_wait(&cond, &mutex);
-    }
-    pthread_mutex_unlock(&mutex);
+    paint_requested.store(true, std::memory_order_release);
 }
 
 void AndroidWindowedAppContext::setup_ui_thr_id(std::thread::id id){
@@ -131,10 +127,27 @@ void AndroidWindowedAppContext::setup_ui_thr_id(std::thread::id id){
 void paint();
 void AndroidWindowedAppContext::main_loop(){
     assert(WindowedAppContext::ui_thread_id_==std::this_thread::get_id());
+    LOGD("main_loop: entered");
+    XELOGI("main_loop: entered, ui_thread running");
+    int loop_count = 0;
     while(!WindowedAppContext::HasQuitFromUIThread()){
+        loop_count++;
+        if(loop_count == 1) {
+            LOGD("main_loop: first iteration, paint_requested=%d, event=%d",
+                 (int)paint_requested.load(std::memory_order_relaxed), (int)event);
+        }
+        if(loop_count == 1000) {
+            LOGD("main_loop: 1000 iterations, paint_requested=%d, event=%d",
+                 (int)paint_requested.load(std::memory_order_relaxed), (int)event);
+            XELOGI("main_loop: 1000 iterations, paint_requested={}, event={}",
+                   paint_requested.load(std::memory_order_relaxed), (int)event);
+        }
         if(event==0){
-            //std::this_thread::yield();
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            if(paint_requested.exchange(false, std::memory_order_acquire)){
+                paint();
+            } else {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
         }
         else if(event==EVENT_EXECUTE_PENDING_FUNCTIONS){
             pthread_mutex_lock(&mutex);
@@ -142,13 +155,10 @@ void AndroidWindowedAppContext::main_loop(){
             event=0;
             pthread_cond_signal(&cond);
             pthread_mutex_unlock(&mutex);
-        }
-        else if(event==EVENT_PAINT){
-            pthread_mutex_lock(&mutex);
-            paint();
-            event=0;
-            pthread_cond_signal(&cond);
-            pthread_mutex_unlock(&mutex);
+            // Process any paint requests triggered during pending functions
+            if(paint_requested.exchange(false, std::memory_order_acquire)){
+                paint();
+            }
         }
         else if(event==EVENT_QUIT){
             pthread_mutex_lock(&mutex);
@@ -192,24 +202,41 @@ namespace xe {
             }
 
             std::unique_ptr<Surface> CreateSurfaceImpl(Surface::TypeFlags allowed_types) override {
-                XELOGI("Creating Android surface...");
+                LOGD("CreateSurfaceImpl: ae::window=%p, allowed_types=%u",
+                       (void*)ae::window, (uint32_t)allowed_types);
+                XELOGI("Creating Android surface... ae::window={}, allowed_types={}",
+                       (void*)ae::window, (uint32_t)allowed_types);
                 if(allowed_types&Surface::kTypeFlag_AndroidNativeWindow) {
-                    ANativeWindow *window = ae::window;//static_cast<android_windowed_app_context &>(app_context()).wnd_surface;
+                    ANativeWindow *window = ae::window;
+                    if(!window) {
+                        LOGD("CreateSurfaceImpl: FAILED ae::window is null!");
+                        XELOGE("ae::window is null, cannot create surface!");
+                        return nullptr;
+                    }
+                    LOGD("CreateSurfaceImpl: SUCCESS creating AndroidNativeWindowSurface");
                     return std::make_unique<AndroidNativeWindowSurface>(window);
                 }
+                LOGD("CreateSurfaceImpl: FAILED no AndroidNativeWindow type in allowed_types");
                 return nullptr;
             }
 
             void RequestPaintImpl() override {
-                XELOGI("Requesting Android window paint...");
-                //paint();
+                static int rpi_count = 0;
+                rpi_count++;
+                if(rpi_count <= 5) {
+                    LOGD("RequestPaintImpl called, count=%d", rpi_count);
+                    XELOGI("RequestPaintImpl called, count={}", rpi_count);
+                }
                 AndroidWindowedAppContext* context=static_cast<AndroidWindowedAppContext*>(&app_context());
-                //context->request_paint();
+                context->request_paint();
             }
 
         public:
             void UpdateSurface(){
                 OnSurfaceChanged(true);
+            }
+            void DoPaint(){
+                OnPaint(true);
             }
         };
 
@@ -444,18 +471,24 @@ namespace xe {
                 xe::threading::set_name("Emulator");
                 Profiler::ThreadEnter("Emulator");
 
+                LOGD("emu_thr_main: starting Setup...");
                 // Setup and initialize all subsystems. If we can't do something
                 // (unsupported system, memory issues, etc) this will fail early.
                 X_STATUS result = emu->Setup(
                         emu_window->window(), emu_window->imgui_drawer(), true,
                         create_audio_system, create_graphics_system, create_input_drivers);
                 if (XFAILED(result)) {
+                    LOGD("emu_thr_main: Setup FAILED result=0x%08X", (unsigned)result);
                     XELOGE("Failed to setup emulator: {:08X}", result);
                     app_context().RequestDeferredQuit();
                     return;
                 }
+                LOGD("emu_thr_main: Setup succeeded, calling SetupGraphicsSystemPresenterPainting");
+                XELOGI("emu_thr_main: Setup succeeded, calling SetupGraphicsSystemPresenterPainting on UI thread...");
                 app_context().CallInUIThread(
                         [this]() { emu_window->SetupGraphicsSystemPresenterPainting(); });
+                LOGD("emu_thr_main: SetupGraphicsSystemPresenterPainting dispatched");
+                XELOGI("emu_thr_main: SetupGraphicsSystemPresenterPainting returned");
 
                 if (cvars::mount_scratch) {
                     auto scratch_device = std::make_unique<xe::vfs::HostPathDevice>(
@@ -571,6 +604,8 @@ namespace xe {
                 }
 
                 if (!path.empty()) {
+                    LOGD("emu_thr_main: launching game path=%s", path.c_str());
+                    XELOGI("emu_thr_main: launching game path={}", path);
                     jclass uri_class = env->FindClass("android/net/Uri");
                     jmethodID parse_method = env->GetStaticMethodID(uri_class, "parse", "(Ljava/lang/String;)Landroid/net/Uri;");
                     jstring uri_string = env->NewStringUTF(path.c_str());
@@ -603,10 +638,13 @@ namespace xe {
                     /*result = emu->LaunchPath(abs_path);*//*app_context().CallInUIThread(
                             [this, abs_path]() { return emu_window->RunTitle(abs_path); });*/
                     if (XFAILED(result)) {
+                        LOGD("emu_thr_main: game launch FAILED result=0x%08X", (unsigned)result);
                         xe::FatalError(fmt::format("Failed to launch target: {:08X}", result));
                         app_context().RequestDeferredQuit();
                         return;
                     }
+                    LOGD("emu_thr_main: game launched OK result=0x%08X", (unsigned)result);
+                    XELOGI("emu_thr_main: game launched successfully, result={:08X}", result);
                 }
 
                 /*auto xam = emu->kernel_state()->GetKernelModule<kernel::xam::XamModule>(
@@ -651,8 +689,23 @@ XE_DEFINE_WINDOWED_APP(ax36e,xe::app::EmulatorApp::create);
 
 void paint(){
     auto  e=dynamic_cast<xe::app::EmulatorApp*>(ae::g_windowed_app.get());
-    //if(!e->app_context().IsInUIThread())
-    e->emu_window->window()->RequestPaint();
+    if(!e || !e->emu_window || !e->emu_window->window()) {
+        static int paint_null = 0;
+        if(paint_null++ < 5) {
+            LOGD("paint(): null check failed e=%p emu_window=%d window=%d",
+                 (void*)e,
+                 e ? (e->emu_window ? 1 : 0) : -1,
+                 (e && e->emu_window) ? (e->emu_window->window() ? 1 : 0) : -1);
+        }
+        return;
+    }
+    static int paint_count = 0;
+    paint_count++;
+    if(paint_count <= 10) {
+        LOGD("paint() called, count=%d", paint_count);
+        XELOGI("paint() called, count={}", paint_count);
+    }
+    static_cast<xe::ui::AndroidWindow*>(e->emu_window->window())->DoPaint();
 }
 namespace ae{
 
@@ -712,10 +765,13 @@ namespace ae{
 
         prctl(PR_SET_TIMERSLACK,1,0,0,0);
 
+        LOGD("main_thr: creating AndroidWindowedAppContext");
         AndroidWindowedAppContext wnd_ctx;
         wnd_ctx.setup_ui_thr_id(std::this_thread::get_id());
+        LOGD("main_thr: creating windowed app");
         g_windowed_app=xe::ui::GetWindowedAppCreator()(wnd_ctx);
         g_windowed_app_ref=dynamic_cast<xe::app::EmulatorApp*>(g_windowed_app.get());
+        LOGD("main_thr: windowed app created, app_ref=%p", (void*)g_windowed_app_ref);
 
         std::vector<char*> args;
         args.push_back(NULL);
@@ -724,17 +780,23 @@ namespace ae{
         }
         static std::string boot_target=std::string("--target=")+ae::boot_game_uri;
         args.push_back((char*)boot_target.c_str());
+        LOGD("main_thr: boot_target=%s", boot_target.c_str());
 
         int argc=args.size();
         char** argv=args.data();
 
         cvar::ParseLaunchArguments(argc, argv, g_windowed_app->GetPositionalOptionsUsage(),
                                    g_windowed_app->GetPositionalOptions());
+        LOGD("main_thr: args parsed, initializing logging");
         xe::InitializeLogging(g_windowed_app->GetName());
+        LOGD("main_thr: logging initialized, calling OnInitialize");
         if(g_windowed_app->OnInitialize()){
+            LOGD("main_thr: OnInitialize succeeded, entering main_loop");
             wnd_ctx.main_loop();
+        } else {
+            LOGD("main_thr: OnInitialize FAILED");
         }
-
+        LOGD("main_thr: exiting");
     }
 
     void key_event(int key_code,bool pressed,int value){
@@ -770,6 +832,14 @@ namespace ae{
         });*/
     }
     void quit(){
+    }
+
+    void notify_surface_changed(){
+        if(!g_windowed_app_ref || !g_windowed_app_ref->emu_window ||
+           !g_windowed_app_ref->emu_window->window())
+            return;
+        static_cast<xe::ui::AndroidWindow*>(
+            g_windowed_app_ref->emu_window->window())->UpdateSurface();
     }
 
     void init(){

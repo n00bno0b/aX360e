@@ -3,6 +3,7 @@
 #ifndef AX360E_AX360E_EMU_H
 #define AX360E_AX360E_EMU_H
 
+#include <atomic>
 #include "xenia/ui/windowed_app_context.h"
 
 class AndroidWindowedAppContext final : public xe::ui::WindowedAppContext {
@@ -11,7 +12,8 @@ public:
     volatile int event=0;
     static const int EVENT_EXECUTE_PENDING_FUNCTIONS = 1;
     static const int EVENT_QUIT = 2;
-    static const int EVENT_PAINT = 3;
+
+    std::atomic<bool> paint_requested{false};
 
     pthread_mutex_t mutex;
     pthread_cond_t cond;

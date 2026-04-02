@@ -17,7 +17,7 @@ public class Emulator extends aenu.emulator.Emulator{
     public static Emulator get=null;
     public static void load_library(){
         if(get!=null)
-            throw new RuntimeException("Emulator already loaded");
+            return;
         get=new Emulator();
         System.loadLibrary("e");
     }

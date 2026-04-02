@@ -78,8 +78,7 @@ public class Application extends android.app.Application{
     static boolean should_delay_load() {
         if(gpu_device_name_vk==null)
             throw new RuntimeException("gpu_device_name_vk==null");
-        return gpu_device_name_vk.contains("Adreno (TM) 5")
-                || gpu_device_name_vk.contains("Adreno (TM) 6");
+        return gpu_device_name_vk.contains("Adreno");
     }
 
     public  static Context ctx;

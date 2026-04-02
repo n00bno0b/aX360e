@@ -454,9 +454,11 @@ dword_result_t NtQueryFullAttributesFile_entry(
       obj_attribs->root_directory != 0) {
     root_file = kernel_state()->object_table()->LookupObject<XFile>(
         obj_attribs->root_directory);
-    assert_not_null(root_file);
-    assert_true(root_file->type() == XObject::Type::File);
-    assert_always();
+    if (!root_file || root_file->type() != XObject::Type::File) {
+      XELOGW("NtQueryFullAttributesFile: invalid root_directory handle 0x{:X}",
+             uint32_t(obj_attribs->root_directory));
+      return X_STATUS_INVALID_HANDLE;
+    }
   }
 
   auto target_path = util::TranslateAnsiPath(kernel_memory(), object_name);
@@ -563,7 +565,8 @@ dword_result_t NtOpenSymbolicLinkObject_entry(
   }
 
   if (object_attrs->root_directory != 0) {
-    assert_always();
+    XELOGW("NtOpenSymbolicLinkObject: root_directory 0x{:X} not supported",
+           uint32_t(object_attrs->root_directory));
   }
 
   if (utf8::starts_with(target_path, "\\??\\")) {
@@ -626,22 +629,23 @@ dword_result_t NtDeviceIoControlFile_entry(
 
   if (io_control_code == X_IOCTL_DISK_GET_DRIVE_GEOMETRY) {
     if (output_buffer_len < 0x8) {
-      assert_always();
+      XELOGW("NtDeviceIoControlFile: DISK_GET_DRIVE_GEOMETRY buffer too small ({})",
+             uint32_t(output_buffer_len));
       return X_STATUS_BUFFER_TOO_SMALL;
     }
     xe::store_and_swap<uint32_t>(output_buffer, cache_size / 512);
     xe::store_and_swap<uint32_t>(output_buffer + 4, 512);
   } else if (io_control_code == X_IOCTL_DISK_GET_PARTITION_INFO) {
     if (output_buffer_len < 0x10) {
-      assert_always();
+      XELOGW("NtDeviceIoControlFile: DISK_GET_PARTITION_INFO buffer too small ({})",
+             uint32_t(output_buffer_len));
       return X_STATUS_BUFFER_TOO_SMALL;
     }
     xe::store_and_swap<uint64_t>(output_buffer, 0);
     xe::store_and_swap<uint64_t>(output_buffer + 8, cache_size);
   } else {
-    XELOGD("NtDeviceIoControlFile(0x{:X}) - unhandled IOCTL!",
+    XELOGW("NtDeviceIoControlFile(0x{:X}) - unhandled IOCTL!",
            uint32_t(io_control_code));
-    assert_always();
     return X_STATUS_INVALID_PARAMETER;
   }
 

@@ -879,7 +879,7 @@ bool VulkanPipelineCache::GetGeometryShaderKey(
           Shader::HostVertexShaderType::kPointListAsTriangleStrip ||
       vertex_shader_modification.vertex.host_vertex_shader_type ==
           Shader::HostVertexShaderType::kRectangleListAsTriangleStrip) {
-    assert_always();
+    XELOGW("GetGeometryShaderKey: unexpected AsTriangleStrip host vertex shader type");
     return false;
   }
   GeometryShaderKey key;

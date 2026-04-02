@@ -653,8 +653,16 @@ struct VECTOR_SHR_V128
         }
       }
       if (all_same) {
-        // Every count is the same, so we can use USHR
-        e.USHR(i.dest.reg().B16(), i.src1.reg().B16(), shamt.u8[0]);
+        unsigned s = shamt.u8[0];
+        if (s == 0) {
+          // Shift by 0 = no-op, just move
+          e.MOV(i.dest.reg().B16(), i.src1.reg().B16());
+        } else if (s > 8) {
+          // Shift >= element width, result is zero
+          e.MOVI(i.dest.reg().B16(), 0);
+        } else {
+          e.USHR(i.dest.reg().B16(), i.src1.reg().B16(), s);
+        }
         return;
       }
       e.LoadConstantV(Q1, i.src2.constant());
@@ -677,8 +685,14 @@ struct VECTOR_SHR_V128
         }
       }
       if (all_same) {
-        // Every count is the same, so we can use USHR
-        e.USHR(i.dest.reg().H8(), i.src1.reg().H8(), shamt.u16[0]);
+        unsigned s = shamt.u16[0];
+        if (s == 0) {
+          e.MOV(i.dest.reg().B16(), i.src1.reg().B16());
+        } else if (s > 16) {
+          e.MOVI(i.dest.reg().B16(), 0);
+        } else {
+          e.USHR(i.dest.reg().H8(), i.src1.reg().H8(), s);
+        }
         return;
       }
       e.LoadConstantV(Q1, i.src2.constant());
@@ -701,8 +715,14 @@ struct VECTOR_SHR_V128
         }
       }
       if (all_same) {
-        // Every count is the same, so we can use USHR
-        e.USHR(i.dest.reg().S4(), i.src1.reg().S4(), shamt.u32[0]);
+        unsigned s = shamt.u32[0];
+        if (s == 0) {
+          e.MOV(i.dest.reg().B16(), i.src1.reg().B16());
+        } else if (s > 32) {
+          e.MOVI(i.dest.reg().B16(), 0);
+        } else {
+          e.USHR(i.dest.reg().S4(), i.src1.reg().S4(), s);
+        }
         return;
       }
       e.LoadConstantV(Q1, i.src2.constant());
@@ -749,8 +769,12 @@ struct VECTOR_SHA_V128
         }
       }
       if (all_same) {
-        // Every count is the same, so we can use SSHR
-        e.SSHR(i.dest.reg().B16(), i.src1.reg().B16(), shamt.u8[0] & 0x7);
+        unsigned s = shamt.u8[0] & 0x7;
+        if (s == 0) {
+          e.MOV(i.dest.reg().B16(), i.src1.reg().B16());
+        } else {
+          e.SSHR(i.dest.reg().B16(), i.src1.reg().B16(), s);
+        }
         return;
       }
       e.LoadConstantV(Q1, i.src2.constant());
@@ -773,8 +797,12 @@ struct VECTOR_SHA_V128
         }
       }
       if (all_same) {
-        // Every count is the same, so we can use SSHR
-        e.SSHR(i.dest.reg().H8(), i.src1.reg().H8(), shamt.u16[0] & 0xF);
+        unsigned s = shamt.u16[0] & 0xF;
+        if (s == 0) {
+          e.MOV(i.dest.reg().B16(), i.src1.reg().B16());
+        } else {
+          e.SSHR(i.dest.reg().H8(), i.src1.reg().H8(), s);
+        }
         return;
       }
       e.LoadConstantV(Q1, i.src2.constant());
@@ -797,8 +825,12 @@ struct VECTOR_SHA_V128
         }
       }
       if (all_same) {
-        // Every count is the same, so we can use SSHR
-        e.SSHR(i.dest.reg().S4(), i.src1.reg().S4(), shamt.u32[0] & 0x1F);
+        unsigned s = shamt.u32[0] & 0x1F;
+        if (s == 0) {
+          e.MOV(i.dest.reg().B16(), i.src1.reg().B16());
+        } else {
+          e.SSHR(i.dest.reg().S4(), i.src1.reg().S4(), s);
+        }
         return;
       }
       e.LoadConstantV(Q1, i.src2.constant());

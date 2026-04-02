@@ -503,7 +503,8 @@ void KeInitializeEvent_entry(pointer_t<X_KEVENT> event_ptr, dword_t event_type,
   auto ev =
       XObject::GetNativeObject<XEvent>(kernel_state(), event_ptr, event_type);
   if (!ev) {
-    assert_always();
+    XELOGW("KeInitializeEvent: GetNativeObject returned null for type {}",
+           uint32_t(event_type));
     return;
   }
 }
@@ -512,7 +513,7 @@ DECLARE_XBOXKRNL_EXPORT1(KeInitializeEvent, kThreading, kImplemented);
 uint32_t xeKeSetEvent(X_KEVENT* event_ptr, uint32_t increment, uint32_t wait) {
   auto ev = XObject::GetNativeObject<XEvent>(kernel_state(), event_ptr);
   if (!ev) {
-    assert_always();
+    XELOGW("xeKeSetEvent: GetNativeObject returned null");
     return 0;
   }
 
@@ -529,7 +530,7 @@ dword_result_t KePulseEvent_entry(pointer_t<X_KEVENT> event_ptr,
                                   dword_t increment, dword_t wait) {
   auto ev = XObject::GetNativeObject<XEvent>(kernel_state(), event_ptr);
   if (!ev) {
-    assert_always();
+    XELOGW("KePulseEvent: GetNativeObject returned null");
     return 0;
   }
 
@@ -541,7 +542,7 @@ DECLARE_XBOXKRNL_EXPORT2(KePulseEvent, kThreading, kImplemented,
 dword_result_t KeResetEvent_entry(pointer_t<X_KEVENT> event_ptr) {
   auto ev = XObject::GetNativeObject<XEvent>(kernel_state(), event_ptr);
   if (!ev) {
-    assert_always();
+    XELOGW("KeResetEvent: GetNativeObject returned null");
     return 0;
   }
 
@@ -673,7 +674,7 @@ void KeInitializeSemaphore_entry(pointer_t<X_KSEMAPHORE> semaphore_ptr,
   auto sem = XObject::GetNativeObject<XSemaphore>(kernel_state(), semaphore_ptr,
                                                   5 /* SemaphoreObject */);
   if (!sem) {
-    assert_always();
+    XELOGW("KeInitializeSemaphore: GetNativeObject returned null");
     return;
   }
 }
@@ -684,7 +685,7 @@ uint32_t xeKeReleaseSemaphore(X_KSEMAPHORE* semaphore_ptr, uint32_t increment,
   auto sem =
       XObject::GetNativeObject<XSemaphore>(kernel_state(), semaphore_ptr);
   if (!sem) {
-    assert_always();
+    XELOGW("xeKeReleaseSemaphore: GetNativeObject returned null");
     return 0;
   }
 
@@ -1524,7 +1525,7 @@ DECLARE_XBOXKRNL_EXPORT2(KeInitializeDpc, kThreading, kImplemented, kSketchy);
 
 dword_result_t KeInsertQueueDpc_entry(pointer_t<XDPC> dpc, dword_t arg1,
                                       dword_t arg2) {
-  assert_always("DPC does not dispatch yet; going to hang!");
+  XELOGW("DPC does not dispatch yet; going to hang!");
 
   uint32_t list_entry_ptr = dpc.guest_address() + 4;
 

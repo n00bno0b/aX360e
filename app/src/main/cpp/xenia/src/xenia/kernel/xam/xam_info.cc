@@ -409,7 +409,7 @@ void XamLoaderLaunchTitle_entry(lpstring_t raw_name_ptr, dword_t flags) {
       }
     }
   } else {
-    assert_always("Game requested exit to dashboard via XamLoaderLaunchTitle");
+    XELOGW("Game requested exit to dashboard via XamLoaderLaunchTitle");
   }
 
   // This function does not return.

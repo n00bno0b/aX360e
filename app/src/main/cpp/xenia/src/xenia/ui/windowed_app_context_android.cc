@@ -80,7 +80,11 @@ AndroidWindowedAppContext::JniActivityInitializeWindowedAppOnCreate(
           "Failed to get the UTF-8 string for the windowed app identifier");
       return nullptr;
     }
+#if XE_UI_WINDOWED_APPS_IN_LIBRARY
     app_creator = WindowedApp::GetCreator(windowed_app_identifier_c_str);
+#else
+    app_creator = GetWindowedAppCreator();
+#endif
     if (!app_creator) {
       __android_log_print(ANDROID_LOG_ERROR, "AndroidWindowedAppContext",
                           "Failed to get the creator for the windowed app %s",

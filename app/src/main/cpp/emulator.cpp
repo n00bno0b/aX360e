@@ -2,6 +2,7 @@
 
 #include "emulator.h"
 #include <android/log.h>
+#include <atomic>
 #include <fstream>
 #include <jni.h>
 #include <thread>
@@ -444,8 +445,20 @@ static void j_setup_game_path(JNIEnv* env,jobject self,jobject path ){
     }
 }
 
+static std::atomic<bool> g_booted{false};
+
 static void j_boot(JNIEnv* env,jobject self){
+    bool expected = false;
+    if (!g_booted.compare_exchange_strong(expected, true)) {
+        __android_log_print(ANDROID_LOG_WARN, "ax360e_native",
+                            "j_boot: already booted, ignoring duplicate call");
+        return;
+    }
     std::thread(ae::main_thr).detach();
+}
+
+static void j_notify_surface_changed(JNIEnv* env,jobject self){
+    ae::notify_surface_changed();
 }
 
 static void j_change_surface(JNIEnv* env,jobject self,jint w,jint h){
@@ -502,6 +515,7 @@ int register_Emulator(JNIEnv* env){
             { "pause", "()V", (void *) j_pause },
             { "resume", "()V", (void *) j_resume },
             { "change_surface", "(II)V", (void *) j_change_surface },
+            { "notify_surface_changed", "()V", (void *) j_notify_surface_changed },
     };
     return env->RegisterNatives(env->FindClass("aenu/emulator/Emulator"),methods, sizeof(methods)/sizeof(methods[0]));
 }

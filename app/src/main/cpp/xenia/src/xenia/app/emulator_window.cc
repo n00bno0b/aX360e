@@ -186,20 +186,27 @@ void EmulatorWindow::SetupGraphicsSystemPresenterPainting() {
   ShutdownGraphicsSystemPresenterPainting();
 
   if (!window_) {
+    XELOGE("SetupGraphicsSystemPresenterPainting: no window!");
     return;
   }
 
   ui::Presenter* presenter = GetGraphicsSystemPresenter();
   if (!presenter) {
+    XELOGE("SetupGraphicsSystemPresenterPainting: no presenter!");
     return;
   }
+
+  XELOGI("SetupGraphicsSystemPresenterPainting: connecting presenter to window...");
 
   ApplyDisplayConfigForCvars();
 
   window_->SetPresenter(presenter);
 
+  XELOGI("SetupGraphicsSystemPresenterPainting: SetPresenter done");
+
   immediate_drawer_ =
       emulator_->graphics_system()->provider()->CreateImmediateDrawer();
+  XELOGI("SetupGraphicsSystemPresenterPainting: immediate_drawer={}", (void*)immediate_drawer_.get());
   if (immediate_drawer_) {
     immediate_drawer_->SetPresenter(presenter);
     imgui_drawer_->SetPresenterAndImmediateDrawer(presenter,
@@ -207,6 +214,7 @@ void EmulatorWindow::SetupGraphicsSystemPresenterPainting() {
     Profiler::SetUserIO(kZOrderProfiler, window_.get(), presenter,
                         immediate_drawer_.get());
   }
+  XELOGI("SetupGraphicsSystemPresenterPainting: complete");
 }
 
 void EmulatorWindow::ShutdownGraphicsSystemPresenterPainting() {

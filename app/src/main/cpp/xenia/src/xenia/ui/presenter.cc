@@ -166,6 +166,9 @@ void Presenter::SetWindowSurfaceFromUIThread(Window* new_window,
                 SurfacePaintConnectionState::kUnconnectedRetryAtStateChange);
     bool request_repaint;
     UpdateSurfacePaintConnectionFromUIThread(&request_repaint, true);
+    XELOGI("SetWindowSurfaceFromUIThread: connection_state={}, paint_mode={}, request_repaint={}",
+           static_cast<int>(surface_paint_connection_state_),
+           static_cast<int>(paint_mode_), request_repaint);
     // Request to paint as soon as possible in the UI thread if connected
     // successfully.
     if (request_repaint) {
@@ -223,6 +226,11 @@ void Presenter::PaintFromUIThread(bool force_paint) {
   // OS (which will still be live even if the window goes outside any monitor).
   // But a surface check still won't cause harm, for simplicity.
   if (!InSurfaceOnMonitorFromUIThread()) {
+    static int nosurface_count = 0;
+    if (nosurface_count++ < 5) {
+      XELOGI("PaintFromUIThread: no surface on monitor (surface_={}, force={})",
+             (void*)surface_, force_paint);
+    }
     return;
   }
 
@@ -286,6 +294,13 @@ void Presenter::PaintFromUIThread(bool force_paint) {
       WaitForUITickFromUIThread();
 
       paint_result = PaintAndPresent(draw_ui);
+      {
+        static int paint_log_count = 0;
+        if (paint_log_count++ < 10) {
+          XELOGI("PaintFromUIThread: PaintAndPresent result={}, draw_ui={}",
+                 static_cast<int>(paint_result), draw_ui);
+        }
+      }
       if (surface_paint_connection_state_ ==
           SurfacePaintConnectionState::kConnectedOutdated) {
         // Request another PaintFromUIThread which will try to recover from the
@@ -426,6 +441,14 @@ bool Presenter::RefreshGuestOutput(
   PaintResult paint_result = PaintResult::kNotPresented;
   {
     std::lock_guard<std::mutex> paint_mode_mutex_lock(paint_mode_mutex_);
+    {
+      static int rgo_log_count = 0;
+      if (rgo_log_count++ < 10) {
+        XELOGI("RefreshGuestOutput: paint_mode={}, connection_state={}",
+               static_cast<int>(paint_mode_),
+               static_cast<int>(surface_paint_connection_state_));
+      }
+    }
     switch (paint_mode_) {
       case PaintMode::kNone:
         // Neither painting nor window paint requesting is accessible.

@@ -190,7 +190,8 @@ void TextureInfo::SetupMemoryInfo(uint32_t base_address, uint32_t mip_address) {
       // Nothing needs to be done.
     } else {
       // WTF?
-      assert_always();
+      XELOGW("TextureInfo: ambiguous mip address layout - base 0x{:08X}, mip 0x{:08X}, min_level {}",
+             base_address, mip_address, mip_min_level);
     }
   }
 

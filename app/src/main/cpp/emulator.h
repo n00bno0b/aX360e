@@ -27,5 +27,6 @@ namespace ae{
     extern void pause();
     extern void resume();
     extern void quit();
+    extern void notify_surface_changed();
 }
 #endif //APS3E_EMULATOR_H

@@ -815,9 +815,10 @@ public class EmulatorSettings extends AppCompatActivity {
                     break;
             }
 
+            final String finalPresetName = presetName;
             new AlertDialog.Builder(requireContext())
                     .setTitle("Apply Preset")
-                    .setMessage("Apply \"" + presetName + "\" preset?\n\nThis will modify multiple settings to optimize for this configuration.")
+                    .setMessage("Apply \"" + finalPresetName + "\" preset?\n\nThis will modify multiple settings to optimize for this configuration.")
                     .setPositiveButton(android.R.string.ok, new DialogInterface.OnClickListener() {
                         @Override
                         public void onClick(DialogInterface dialog, int which) {
@@ -825,7 +826,7 @@ public class EmulatorSettings extends AppCompatActivity {
                             envManager.applyPreset(presetKey, config);
 
                             Toast.makeText(requireContext(),
-                                    "Applied " + presetName + " preset",
+                                    "Applied " + finalPresetName + " preset",
                                     Toast.LENGTH_SHORT).show();
 
                             // Restart the settings activity to refresh all preference values

@@ -47,7 +47,7 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
     private int activeControllerDeviceId = NO_ACTIVE_CONTROLLER;
     private int hatXState = 0;
     private int hatYState = 0;
-    boolean started=false;
+    static boolean started=false;
     Dialog delay_dialog=null;
     final Handler delay_on_create=new Handler(new Handler.Callback(){
         @Override
@@ -100,9 +100,7 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
         Emulator.get.setup_launch_args(new String[]{
                 "--storage_root="+Application.get_app_data_dir().getAbsolutePath(),
                 "--config="+Application.get_global_config_file().getAbsolutePath(),
-                "--log_file="+Application.get_app_data_dir().getAbsolutePath()+"/xe.log",
-                /*"--storage_root=/storage/emulated/0/Download/ax360e",
-                "--log_file=/storage/emulated/0/Download/ax360e/xe.log",*/
+                // log_file cvar is not defined on AX360E - logging goes to logcat via log_to_logcat
         });
         Emulator.get.setup_uri_info_list_file(Application.get_uri_info_list_file().getAbsolutePath());
         setContentView(R.layout.activity_emulator);
@@ -222,7 +220,11 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
     {
         releaseControllerState();
         super.onDestroy();
-        System.exit(0);
+        if (isFinishing()) {
+            // The emulator's native state cannot be cleanly restarted in the same process.
+            // Kill the :emu process so the next launch starts fresh.
+            android.os.Process.killProcess(android.os.Process.myPid());
+        }
     }
 
     final int KEY_NO_MAPPED = -1;
@@ -291,6 +293,7 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
         }
         else{
             Emulator.get.setup_surface(holder.getSurface());
+            Emulator.get.notify_surface_changed();
             if(Emulator.get.is_paused())
                 Emulator.get.resume();
         }

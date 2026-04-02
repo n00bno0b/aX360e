@@ -1239,7 +1239,11 @@ static void ParseAluInstructionOperand(const AluInstruction& op, uint32_t i,
     out_op.components[0] = GetSwizzledAluSourceComponent(swizzle, 3);
     out_op.components[1] = GetSwizzledAluSourceComponent(swizzle, 0);
   } else if (swizzle_component_count == 3) {
-    assert_always();
+    // Unsupported 3-component swizzle - use W, X, Y as fallback.
+    XELOGW("ShaderTranslator: 3-component ALU swizzle unsupported, using fallback");
+    out_op.components[0] = GetSwizzledAluSourceComponent(swizzle, 3);
+    out_op.components[1] = GetSwizzledAluSourceComponent(swizzle, 0);
+    out_op.components[2] = GetSwizzledAluSourceComponent(swizzle, 1);
   } else if (swizzle_component_count == 4) {
     for (uint32_t j = 0; j < swizzle_component_count; ++j) {
       out_op.components[j] = GetSwizzledAluSourceComponent(swizzle, j);
@@ -1331,7 +1335,6 @@ void ParseAluInstruction(const AluInstruction& op,
       }
     }
     if (storage_target == InstructionStorageTarget::kNone) {
-      assert_always();
       XELOGE(
           "ShaderTranslator::ParseAluInstruction: Unsupported write to export "
           "{}",

@@ -2,6 +2,8 @@
     <string name="app_name">aX360e Free</string>
 
     <string name="create_shortcut">Create Shortcut</string>
+    <string name="create_shortcut_label">Create Shortcut</string>
+    <string name="game_info_label">Game Info</string>
     <string name="disable_virtual_keyboard">Disable the virtual keyboard</string>
     <string name="joystick">Joystick</string>
 

@@ -428,8 +428,8 @@ object_ref<XObject> XObject::GetNativeObject(KernelState* kernel_state,
       case 23:  // ProfileObject
       case 24:  // ThreadedDpcObject
       default:
-        assert_always();
-        result = nullptr;
+        XELOGW("GetNativeObject: unhandled kernel object type {}", as_type);
+        object = nullptr;
     }
     // Stash pointer in struct.
     // FIXME: This assumes the object contains a dispatch header (some don't!)

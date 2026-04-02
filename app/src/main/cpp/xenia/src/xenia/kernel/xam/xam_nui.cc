@@ -466,6 +466,16 @@ void XamNuiPlayerEngagementUpdate_entry(qword_t unk1, unknown_t unk2,
 }
 DECLARE_XAM_EXPORT1(XamNuiPlayerEngagementUpdate, kNone, kStub);
 
+dword_result_t XamXStudioRequest_entry(dword_t request_id, lpdword_t result) {
+  // Xbox debug/development studio request - not available on consumer devices.
+  // Return failure to prevent games from spinning in a polling loop.
+  if (result) {
+    *result = 0;
+  }
+  return static_cast<uint32_t>(-1);  // E_FAIL
+}
+DECLARE_XAM_EXPORT1(XamXStudioRequest, kNone, kStub);
+
 }  // namespace xam
 }  // namespace kernel
 }  // namespace xe

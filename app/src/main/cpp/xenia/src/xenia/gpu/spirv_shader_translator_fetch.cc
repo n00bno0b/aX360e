@@ -548,7 +548,6 @@ void SpirvShaderTranslator::ProcessTextureFetchInstruction(
     case ucode::FetchOpcode::kGetTextureBorderColorFrac:
       // TODO(Triang3l): Bind a black texture with a white border to calculate
       // the border color fraction (in the X component of the result).
-      assert_always();
       EmitTranslationError("getBCF is unimplemented", false);
       used_result_nonzero_components = 0;
       break;
@@ -638,7 +637,6 @@ void SpirvShaderTranslator::ProcessTextureFetchInstruction(
         (is_pixel_shader() || instr.attributes.use_register_gradients);
     if (instr.opcode == ucode::FetchOpcode::kGetTextureComputedLod &&
         (!use_computed_lod || instr.attributes.use_register_gradients)) {
-      assert_always();
       EmitTranslationError(
           "getCompTexLOD used with explicit LOD or gradients - contradicts "
           "MSDN",

@@ -559,24 +559,30 @@ void XThread::Execute()  {
     want_exit_code = true;
   }
   uint32_t next_address;
-  try {
+  reenter_address_ = 0;
+  if (setjmp(reenter_jmp_buf_) == 0) {
     exit_code = static_cast<int>(kernel_state()->processor()->Execute(
         thread_state_, address, args.data(), args.size()));
     next_address = 0;
-  } catch (const reenter_exception& ree) {
-    next_address = ree.address();
+  } else {
+    // Returned here via longjmp from Reenter().
+    next_address = reenter_address_;
+    reenter_address_ = 0;
   }
 
   // See XThread::Reenter comments.
   while (next_address != 0) {
-    try {
+    reenter_address_ = 0;
+    if (setjmp(reenter_jmp_buf_) == 0) {
       kernel_state()->processor()->ExecuteRaw(thread_state_, next_address);
       next_address = 0;
       if (want_exit_code) {
         exit_code = static_cast<int>(thread_state_->context()->r[3]);
       }
-    } catch (const reenter_exception& ree) {
-      next_address = ree.address();
+    } else {
+      // Returned here via longjmp from Reenter().
+      next_address = reenter_address_;
+      reenter_address_ = 0;
     }
   }
   // If we got here it means the execute completed without an exit being called.
@@ -585,11 +591,10 @@ void XThread::Execute()  {
 }
 
 void XThread::Reenter(uint32_t address) {
-  // TODO(gibbed): Maybe use setjmp/longjmp on Windows?
-  // https://docs.microsoft.com/en-us/cpp/c-runtime-library/reference/longjmp#remarks
-  // On Windows with /EH, setjmp/longjmp do stack unwinding.
-  // Is there a better solution than exceptions for stack unwinding?
-  throw reenter_exception(address);
+  // Use longjmp to unwind back to Execute() — C++ exceptions cannot traverse
+  // JIT-compiled code on ARM64 Android (no unwind tables in the code cache).
+  reenter_address_ = address;
+  std::longjmp(reenter_jmp_buf_, 1);
 }
 
 void XThread::EnterCriticalRegion() {

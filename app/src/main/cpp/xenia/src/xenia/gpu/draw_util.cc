@@ -941,7 +941,6 @@ bool GetResolveInfo(const RegisterFile& regs, const Memory& memory,
         "Unsupported resolve copy command {}. Report the game to Xenia "
         "developers",
         uint32_t(rb_copy_control.copy_command));
-    assert_always();
     return false;
   }
 
@@ -951,7 +950,6 @@ bool GetResolveInfo(const RegisterFile& regs, const Memory& memory,
   xenos::xe_gpu_vertex_fetch_t fetch = regs.GetVertexFetch(0);
   if (fetch.type != xenos::FetchConstantType::kVertex || fetch.size != 3 * 2) {
     XELOGE("Unsupported resolve vertex buffer format");
-    assert_always();
     return false;
   }
   trace_writer.WriteMemoryRead(fetch.address * sizeof(uint32_t),
@@ -1056,8 +1054,9 @@ bool GetResolveInfo(const RegisterFile& regs, const Memory& memory,
   // x0 is 0, x1 is 0x100, y0 is 0x100, y1 is 0x100
   assert_true(x0 <= x1 && y0 <= y1);
   if (x0 >= x1 || y0 >= y1) {
-    XELOGE("Resolve region is empty");
-    return false;
+    // Return true with width_div_8/height_div_8 still 0 (from initialization).
+    // The caller (Resolve) checks for zero dimensions and treats as a no-op.
+    return true;
   }
 
   info_out.coordinate_info.width_div_8 =
@@ -1377,7 +1376,6 @@ ResolveCopyShaderIndex ResolveInfo::GetCopyShader(
                         shader_info.group_size_y_log2;
   } else {
     XELOGE("No resolve copy compute shader for the provided configuration");
-    assert_always();
     group_count_x_out = 0;
     group_count_y_out = 0;
   }

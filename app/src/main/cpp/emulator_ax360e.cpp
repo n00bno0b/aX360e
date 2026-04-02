@@ -13,9 +13,17 @@
 
 #include "cpuinfo.h"
 #include "vkapi.h"
+#include <fstream>
 #include "vkutil.h"
 
 #include "cpptoml/include/cpptoml.h"
+
+#include <android/log.h>
+#define LOG_TAG "aX360e_Emulator"
+#define LOGE(...) { \
+    __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "%s : %d", __FILE__, __LINE__); \
+    __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__); \
+}
 
 jclass g_class_DocumentFile;
 jclass g_class_Emulator;
@@ -55,6 +63,23 @@ static jstring j_simple_device_info(JNIEnv* env, jobject thiz)
     std::string info;
 
     auto get_gpu_info=[]()->std::string {
+        // Try sysfs first to avoid creating a VkInstance that conflicts with
+        // HWUI's Vulkan on Adreno drivers (mutex corruption / FORTIFY crash)
+        {
+            std::ifstream f("/sys/class/kgsl/kgsl-3d0/gpu_model");
+            if (f.is_open()) {
+                std::string name;
+                std::getline(f, name);
+                if (!name.empty()) {
+                    return "GPU [" + name + "] (from sysfs)";
+                }
+            }
+        }
+
+        // Fallback: use Vulkan (may cause issues on some Adreno drivers)
+        static VkInstance s_gpu_info_instance = VK_NULL_HANDLE;
+        static bool s_vk_loaded = false;
+
         // Check if a custom Turnip driver is installed via CUSTOM_DRIVER_PATH env var
         const char* custom_path = std::getenv("CUSTOM_DRIVER_PATH");
         std::pair<std::string,bool> lib_info;
@@ -63,31 +88,20 @@ static jstring j_simple_device_info(JNIEnv* env, jobject thiz)
         } else {
             lib_info = {"libvulkan.so", false};
         }
-        vk_load(lib_info.first.c_str(),lib_info.second);
-
-        struct clean_t{
-            std::vector<std::function<void()>> funcs;
-            ~clean_t(){
-                for(auto it=funcs.rbegin();it!=funcs.rend();it++){
-                    (*it)();
-                }
-            }
-        }clean;
-
-        clean.funcs.push_back([](){
-            vk_unload();
-        });
-
-        std::optional<VkInstance> inst=vk_create_instance("ax360e-gpu_info");
-        if(!inst) {
-            return "获取gpu信息失败";
+        if (!s_vk_loaded) {
+            vk_load(lib_info.first.c_str(),lib_info.second);
+            s_vk_loaded = true;
         }
 
-        clean.funcs.push_back([=](){
-            vk_destroy_instance(*inst);
-        });
+        if (s_gpu_info_instance == VK_NULL_HANDLE) {
+            std::optional<VkInstance> inst=vk_create_instance("ax360e-gpu_info");
+            if(!inst) {
+                return "获取gpu信息失败";
+            }
+            s_gpu_info_instance = *inst;
+        }
 
-        if(int count=vk_get_physical_device_count(*inst);count!=1) {
+        if(int count=vk_get_physical_device_count(s_gpu_info_instance);count!=1) {
 
             if(count<1){
                 return "获取gpu信息失败";
@@ -96,7 +110,7 @@ static jstring j_simple_device_info(JNIEnv* env, jobject thiz)
                 return "多个gpu!";
             }
         }
-        if(auto pdev=vk_get_physical_device(*inst);pdev) {
+        if(auto pdev=vk_get_physical_device(s_gpu_info_instance);pdev) {
             std::string gpu_name=vk_get_physical_device_properties(*pdev).deviceName;
             std::string gpu_vk_ver=[](uint32_t v) {
                 std::ostringstream oss;

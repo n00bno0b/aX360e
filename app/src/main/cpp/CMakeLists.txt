@@ -16,7 +16,7 @@ add_compile_options(-stdlib=libc++)
 add_compile_options(-fPIC)
 
 add_library(hardware_ProcessorInfo SHARED hardware_ProcessorInfo.cpp)
-target_link_libraries(hardware_ProcessorInfo PRIVATE vulkan)
+target_link_libraries(hardware_ProcessorInfo PRIVATE log)
 
 add_compile_options(-fno-omit-frame-pointer)
 add_compile_options(-funwind-tables)
@@ -79,6 +79,14 @@ target_sources(emu
 # python xenia-build premake --target_os=android --devenv=cmake
 #add_subdirectory(xenia/ab EXCLUDE_FROM_ALL)
 
+# Remap Gradle's CMAKE_BUILD_TYPE to what premake generated
+set(_ORIG_BUILD_TYPE ${CMAKE_BUILD_TYPE})
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  set(CMAKE_BUILD_TYPE "Android-ARM64-Debug")
+elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
+  set(CMAKE_BUILD_TYPE "Android-ARM64-Release")
+endif()
+
 include(build/xenia-app-discord.cmake)
 include(build/xenia-apu.cmake)
 include(build/xenia-apu-nop.cmake)
@@ -92,6 +100,11 @@ include(build/xenia-gpu.cmake)
 include(build/xenia-gpu-null.cmake)
 #include(build/xenia-gpu-shader-compiler.cmake)
 include(build/xenia-gpu-vulkan.cmake)
+# Workaround: clang ICE on vulkan_render_target_cache.cc — change optimization and disable debug info
+set_source_files_properties(
+  xenia/src/xenia/gpu/vulkan/vulkan_render_target_cache.cc
+  PROPERTIES COMPILE_FLAGS "-O1 -g0"
+)
 include(build/xenia-hid.cmake)
 include(build/xenia-hid-nop.cmake)
 include(build/xenia-hid-skylander.cmake)
@@ -119,6 +132,9 @@ include(build/xxhash.cmake)
 include(build/zarchive.cmake)
 #include(build/zlib.cmake)
 include(build/zstd.cmake)
+
+# Restore original build type
+set(CMAKE_BUILD_TYPE ${_ORIG_BUILD_TYPE})
 
 # TODO -O2/-O3会导致XThread::Reenter抛出c++异常后无法正常展开
 # 找到更好的解决方案后优化这里
@@ -173,7 +189,6 @@ target_link_libraries(emu
         android
         dl
         log
-        vulkan
         OpenSLES
         aaudio
         z

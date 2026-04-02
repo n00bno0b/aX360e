@@ -33,7 +33,7 @@
 #include "xenia/base/threading.h"
 
 // TODO(benvanik): generic API? logging_win.cc?
-#if XE_PLATFORM_ANDROID
+#if XE_PLATFORM_ANDROID || XE_PLATFORM_AX360E
 #include <android/log.h>
 #elif XE_PLATFORM_WIN32
 // For MessageBox:
@@ -42,7 +42,7 @@
 
 #include "third_party/fmt/include/fmt/format.h"
 
-#if XE_PLATFORM_ANDROID
+#if XE_PLATFORM_ANDROID || XE_PLATFORM_AX360E
 DEFINE_bool(log_to_logcat, true, "Write log output to Android Logcat.",
             "Logging");
 #else
@@ -107,7 +107,7 @@ void DebugPrintLogSink::Write(const char* buf, size_t size) {
   debugging::DebugPrint("{}", std::string_view(buf, size));
 }
 
-#if XE_PLATFORM_ANDROID
+#if XE_PLATFORM_ANDROID || XE_PLATFORM_AX360E
 class AndroidLogSink final : public LogSink {
  public:
   explicit AndroidLogSink(const std::string_view tag) : tag_(tag) {}
@@ -215,7 +215,7 @@ void AndroidLogSink::WriteLineBuffer() {
   __android_log_write(current_priority_, tag_.c_str(), line_buffer_);
   line_buffer_used_ = 0;
 }
-#endif  // XE_PLATFORM_ANDROID
+#endif  // XE_PLATFORM_ANDROID || XE_PLATFORM_AX360E
 
 class Logger {
  public:
@@ -431,7 +431,7 @@ void InitializeLogging(const std::string_view app_name) {
   auto mem = memory::AlignedAlloc<Logger>(0x10);
   logger_ = new (mem) Logger(app_name);
 
-#if XE_PLATFORM_ANDROID
+#if XE_PLATFORM_ANDROID || XE_PLATFORM_AX360E
   // TODO(Triang3l): Enable file logging, but not by default as logs may be
   // huge.
   if (cvars::log_to_logcat) {
@@ -457,7 +457,7 @@ void InitializeLogging(const std::string_view app_name) {
   if (cvars::log_to_debugprint) {
     logger_->AddLogSink(std::make_unique<DebugPrintLogSink>());
   }
-#endif  // XE_PLATFORM_ANDROID
+#endif  // XE_PLATFORM_ANDROID || XE_PLATFORM_AX360E
 }
 
 void ShutdownLogging() {

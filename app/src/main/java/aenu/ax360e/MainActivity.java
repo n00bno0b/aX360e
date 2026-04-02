@@ -17,14 +17,12 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 import android.preference.PreferenceManager;
-import android.view.ContextMenu;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.AdapterView;
 import android.widget.BaseAdapter;
 import android.widget.ImageView;
 import android.widget.ProgressBar;
@@ -94,6 +92,10 @@ public class MainActivity extends AppCompatActivity {
     void _on_create(){
         setContentView(R.layout.activity_main);
 
+        // Set the MaterialToolbar as the support action bar so the options menu appears
+        com.google.android.material.appbar.MaterialToolbar toolbar = findViewById(R.id.toolbar);
+        setSupportActionBar(toolbar);
+
         // Initialize metadata manager and adapter
         metadataManager = new GameMetadataManager(this);
         gameListAdapter = new GameListAdapter(this, metadataManager);
@@ -108,13 +110,25 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onGameLongClick(Emulator.GameInfo game) {
-                // Handle long-click directly since context menus are not wired for RecyclerView items
-                AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
-                builder.setTitle(game.name);
-                String uriDisplay = game.uri != null ? game.uri : "No URI";
-                builder.setMessage(uriDisplay);
-                builder.setPositiveButton(android.R.string.ok, null);
-                builder.show();
+                String[] options = {
+                    getString(R.string.create_shortcut_label),
+                    getString(R.string.game_info_label)
+                };
+                new AlertDialog.Builder(MainActivity.this)
+                    .setTitle(game.name)
+                    .setItems(options, (dialog, which) -> {
+                        if (which == 0) {
+                            createShortcutForGame(game);
+                        } else if (which == 1) {
+                            String uriDisplay = game.uri != null ? game.uri : "No URI";
+                            new AlertDialog.Builder(MainActivity.this)
+                                .setTitle(game.name)
+                                .setMessage(uriDisplay)
+                                .setPositiveButton(android.R.string.ok, null)
+                                .show();
+                        }
+                    })
+                    .show();
             }
         });
 
@@ -187,41 +201,23 @@ public class MainActivity extends AppCompatActivity {
         return true;
     }
 
-    @Override
-    public void onCreateContextMenu(ContextMenu menu, View v, ContextMenu.ContextMenuInfo menuInfo) {
-        super.onCreateContextMenu(menu, v, menuInfo);
-        AdapterView.AdapterContextMenuInfo info = (AdapterView.AdapterContextMenuInfo) menuInfo;
-        getMenuInflater().inflate(R.menu.game_options, menu);
-    }
+    void createShortcutForGame(Emulator.GameInfo meta_info) {
+        ShortcutManager shortcutManager=getSystemService(ShortcutManager.class);
+        Bitmap icon;
+        if(meta_info.icon!=null)
+            icon=BitmapFactory.decodeByteArray(meta_info.icon,0,meta_info.icon.length);
+        else
+            icon=BitmapFactory.decodeResource(getResources(),R.drawable.app_icon);
 
-    @Override
-    public boolean onContextItemSelected(MenuItem item) {
-        AdapterView.AdapterContextMenuInfo info = (AdapterView.AdapterContextMenuInfo) item.getMenuInfo();
+        Intent intent=new Intent(this,EmulatorActivity.class);
+        intent.setAction(Intent.ACTION_VIEW);
+        intent.putExtra(EmulatorActivity.EXTRA_GAME_URI, meta_info.uri);
 
-        int position = info.position;
-        int item_id = item.getItemId();
-        if(item_id==R.id.create_shortcut){
-            ShortcutManager shortcutManager=getSystemService(ShortcutManager.class);
-            Emulator.GameInfo meta_info=adapter.getMetaInfo(position);
-            Bitmap icon;
-            if(meta_info.icon!=null)
-                icon=BitmapFactory.decodeByteArray(meta_info.icon,0,meta_info.icon.length);
-            else
-                icon=BitmapFactory.decodeResource(getResources(),R.drawable.app_icon);
-
-            Intent intent=new Intent(this,EmulatorActivity.class);
-            {
-                intent.setAction(Intent.ACTION_VIEW);
-                intent.putExtra(EmulatorActivity.EXTRA_GAME_URI, meta_info.uri);
-            }
-            shortcutManager.requestPinShortcut(new ShortcutInfo.Builder(this, meta_info.name)
-                    .setShortLabel(meta_info.name)
-                    .setIcon(Icon.createWithBitmap( icon))
-                    .setIntent(intent)
-                    .build(), null);
-        }
-
-        return super.onContextItemSelected(item);
+        shortcutManager.requestPinShortcut(new ShortcutInfo.Builder(this, meta_info.name)
+                .setShortLabel(meta_info.name)
+                .setIcon(Icon.createWithBitmap(icon))
+                .setIntent(intent)
+                .build(), null);
     }
 
 

@@ -11,6 +11,7 @@
 #define XENIA_KERNEL_XTHREAD_H_
 
 #include <atomic>
+#include <csetjmp>
 #include <string>
 
 #include "xenia/base/mutex.h"
@@ -466,6 +467,11 @@ class XThread : public XObject, public cpu::Thread {
   bool running_ = false;
 
   int32_t priority_ = 0;
+
+  // setjmp/longjmp-based reenter mechanism (exceptions can't unwind through
+  // JIT code on ARM64 Android due to missing unwind tables).
+  std::jmp_buf reenter_jmp_buf_ = {};
+  uint32_t reenter_address_ = 0;
 };
 
 class XHostThread : public XThread {

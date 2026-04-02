@@ -119,4 +119,6 @@ public class Emulator {
 
     public native void change_surface(int w,int h);
 
+    public native void notify_surface_changed();
+
 }
