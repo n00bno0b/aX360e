@@ -920,6 +920,9 @@ void KernelState::RegisterNotifyListener(XNotifyListener* listener) {
 
     listener->EnqueueNotification(kXNotificationSystemTrayStateChanged,
                                   X_DVD_DISC_STATE::XBOX_360_GAME_DISC);
+    // XN_SYS_STORAGEDEVICESCHANGED - notify that storage devices are available.
+    // Some games (e.g., Forza Horizon 2) wait for this before proceeding.
+    listener->EnqueueNotification(kXNotificationSystemStorageDevicesChanged, 0);
   }
   if (!has_notified_live_startup_ && listener->mask() & kXNotifyLive) {
     has_notified_live_startup_ = true;

@@ -37,6 +37,13 @@ dword_result_t XUsbcamGetState_entry() {
 }
 DECLARE_XBOXKRNL_EXPORT1(XUsbcamGetState, kNone, kStub);
 
+dword_result_t PsCamDeviceRequest_entry(lpvoid_t request_buffer) {
+  // Kinect/PlayStation camera device request.
+  // Return device-not-connected so games stop polling and move on.
+  return X_E_DEVICE_NOT_CONNECTED;
+}
+DECLARE_XBOXKRNL_EXPORT1(PsCamDeviceRequest, kNone, kStub);
+
 }  // namespace xboxkrnl
 }  // namespace kernel
 }  // namespace xe

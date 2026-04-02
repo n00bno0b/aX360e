@@ -172,18 +172,6 @@ dword_result_t NtReadFile_entry(dword_t file_handle, dword_t event_handle,
       // we have written the info out.
       signal_event = true;
     } else {
-      // TODO(benvanik): async.
-
-      // X_STATUS_PENDING if not returning immediately.
-      // XFile is waitable and signalled after each async req completes.
-      // reset the input event (->Reset())
-      /*xeNtReadFileState* call_state = new xeNtReadFileState();
-      XAsyncRequest* request = new XAsyncRequest(
-      state, file,
-      (XAsyncRequest::CompletionCallback)xeNtReadFileCompleted,
-      call_state);*/
-      // result = file->Read(buffer.guest_address(), buffer_length, byte_offset,
-      //                     request);
       if (io_status_block) {
         io_status_block->status = X_STATUS_PENDING;
         io_status_block->information = 0;
@@ -255,21 +243,6 @@ dword_result_t NtReadFileScatter_entry(
       // we have written the info out.
       signal_event = true;
     } else {
-      // TODO(benvanik): async.
-
-      // TODO: On Windows it might be worth trying to use Win32 ReadFileScatter
-      // here instead of handling it ourselves
-
-      // X_STATUS_PENDING if not returning immediately.
-      // XFile is waitable and signalled after each async req completes.
-      // reset the input event (->Reset())
-      /*xeNtReadFileState* call_state = new xeNtReadFileState();
-      XAsyncRequest* request = new XAsyncRequest(
-      state, file,
-      (XAsyncRequest::CompletionCallback)xeNtReadFileCompleted,
-      call_state);*/
-      // result = file->Read(buffer.guest_address(), buffer_length, byte_offset,
-      //                     request);
       if (io_status_block) {
         io_status_block->status = X_STATUS_PENDING;
         io_status_block->information = 0;
@@ -347,7 +320,6 @@ dword_result_t NtWriteFile_entry(dword_t file_handle, dword_t event_handle,
       // we have written the info out.
       signal_event = true;
     } else {
-      // X_STATUS_PENDING if not returning immediately.
       result = X_STATUS_PENDING;
 
       if (io_status_block) {
@@ -735,6 +707,12 @@ void IoDeleteDevice_entry(dword_t device_ptr, const ppc_context_t& ctx) {
 }
 
 DECLARE_XBOXKRNL_EXPORT1(IoDeleteDevice, kFileSystem, kStub);
+
+dword_result_t IoDismountVolumeByFileHandle_entry(dword_t file_handle) {
+  // Dismount volume by file handle - stub returning success.
+  return X_STATUS_SUCCESS;
+}
+DECLARE_XBOXKRNL_EXPORT1(IoDismountVolumeByFileHandle, kFileSystem, kStub);
 
 }  // namespace xboxkrnl
 }  // namespace kernel

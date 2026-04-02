@@ -921,6 +921,43 @@ static std::string format_version(xex2_version version) {
     file_system_->RegisterDevice(std::move(null_device));
   }
 
+  // Mount cache devices so games can use cache:, cache0:, cache1: paths.
+  // Must register cache0/cache1 BEFORE cache due to substring matching in
+  // VirtualFileSystem::ResolvePath.
+  {
+    auto cache0_path = cache_root_ / "cache0";
+    std::filesystem::create_directories(cache0_path);
+    auto cache0_device = std::make_unique<vfs::HostPathDevice>(
+        "\\CACHE0", cache0_path, false);
+    if (cache0_device->Initialize()) {
+      if (file_system_->RegisterDevice(std::move(cache0_device))) {
+        file_system_->RegisterSymbolicLink("cache0:", "\\CACHE0");
+      }
+    }
+
+    auto cache1_path = cache_root_ / "cache1";
+    std::filesystem::create_directories(cache1_path);
+    auto cache1_device = std::make_unique<vfs::HostPathDevice>(
+        "\\CACHE1", cache1_path, false);
+    if (cache1_device->Initialize()) {
+      if (file_system_->RegisterDevice(std::move(cache1_device))) {
+        file_system_->RegisterSymbolicLink("cache1:", "\\CACHE1");
+      }
+    }
+
+    auto cache_path = cache_root_ / "cache";
+    std::filesystem::create_directories(cache_path);
+    auto cache_device = std::make_unique<vfs::HostPathDevice>(
+        "\\CACHE", cache_path, false);
+    if (cache_device->Initialize()) {
+      if (file_system_->RegisterDevice(std::move(cache_device))) {
+        file_system_->RegisterSymbolicLink("cache:", "\\CACHE");
+      }
+    }
+
+    XELOGI("Mounted cache devices under {}", xe::path_to_utf8(cache_root_));
+  }
+
   // Reset state.
   title_id_ = std::nullopt;
   title_name_ = "";

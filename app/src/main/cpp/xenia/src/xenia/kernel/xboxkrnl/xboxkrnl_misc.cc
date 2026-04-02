@@ -125,6 +125,13 @@ static qword_result_t KeQueryInterruptTime_entry(const ppc_context_t& ctx) {
   return xe::load_and_swap<uint64_t>(&bundle->interrupt_time);
 }
 DECLARE_XBOXKRNL_EXPORT1(KeQueryInterruptTime, kNone, kImplemented);
+
+dword_result_t EtxProducerRegister_entry(lpvoid_t provider_info) {
+  // ETW-like event tracing producer registration. No-op stub.
+  return X_STATUS_SUCCESS;
+}
+DECLARE_XBOXKRNL_EXPORT1(EtxProducerRegister, kNone, kStub);
+
 }  // namespace xboxkrnl
 }  // namespace kernel
 }  // namespace xe

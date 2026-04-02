@@ -476,6 +476,19 @@ dword_result_t XamXStudioRequest_entry(dword_t request_id, lpdword_t result) {
 }
 DECLARE_XAM_EXPORT1(XamXStudioRequest, kNone, kStub);
 
+dword_result_t XamNuiCameraTiltSetCallback_entry(lpvoid_t callback,
+                                                 lpvoid_t context) {
+  // Kinect camera tilt motor callback registration.
+  // No Kinect hardware - return device not connected.
+  return X_E_DEVICE_NOT_CONNECTED;
+}
+DECLARE_XAM_EXPORT1(XamNuiCameraTiltSetCallback, kNone, kStub);
+
+void XamLrcLogError_entry(dword_t error_code, lpvoid_t error_data) {
+  // XAM error logging - no-op stub.
+}
+DECLARE_XAM_EXPORT1(XamLrcLogError, kNone, kStub);
+
 }  // namespace xam
 }  // namespace kernel
 }  // namespace xe

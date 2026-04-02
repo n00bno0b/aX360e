@@ -8,6 +8,7 @@
  */
 
 #include "xenia/kernel/xboxkrnl/xboxkrnl_threading.h"
+#include <atomic>
 #include "xenia/base/atomic.h"
 #include "xenia/base/clock.h"
 #include "xenia/cpu/processor.h"
@@ -424,10 +425,18 @@ dword_result_t KeDelayExecutionThread_entry(dword_t processor_mode,
 DECLARE_XBOXKRNL_EXPORT3(KeDelayExecutionThread, kThreading, kImplemented,
                          kBlocking, kHighFrequency);
 
-dword_result_t NtYieldExecution_entry() {
+dword_result_t NtYieldExecution_entry(const ppc_context_t& ctx) {
   auto thread = XThread::GetCurrentThread();
+  // Deliver pending APCs - the real kernel delivers APCs on kernel-to-user
+  // transitions which we don't emulate, so do it here to prevent games from
+  // stalling when APCs are the only completion notification mechanism.
+  xeProcessUserApcs(ctx.value());
   thread->Delay(0, 0, 0);
-  return 0;
+  // Return STATUS_NO_YIELD_PERFORMED (0x40000024) like the real Xbox 360
+  // kernel does when there are no other ready threads. Games (e.g., Forza
+  // Horizon 2) check this return value to decide when to proceed past their
+  // worker-thread sync loops.
+  return 0x40000024;
 }
 DECLARE_XBOXKRNL_EXPORT2(NtYieldExecution, kThreading, kImplemented,
                          kHighFrequency);
