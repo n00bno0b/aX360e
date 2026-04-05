@@ -387,11 +387,13 @@ public class MainActivity extends AppCompatActivity {
             }
 
             static boolean is_iso_file(String file_name){
-                return file_name.endsWith(".iso");
+                String lower = file_name.toLowerCase();
+                return lower.endsWith(".iso");
             }
 
             static boolean is_zar_file(String file_name){
-                return file_name.endsWith(".zar");
+                String lower = file_name.toLowerCase();
+                return lower.endsWith(".zar");
             }
 
             static DocumentFile get_default_xex_file(DocumentFile dir){
@@ -471,35 +473,41 @@ public class MainActivity extends AppCompatActivity {
             if(iso_dir==null||!iso_dir.exists())
                 return metas;
             DocumentFile[] files=iso_dir.listFiles();
+            if(files==null)
+                return metas;
             for(DocumentFile file:files){
-                String fileName = file.getName();
-                if(fileName == null) continue;
-                if(file.isDirectory()){
-                    DocumentFile default_xex_file=Filter.get_default_xex_file(file);
-                    if(default_xex_file==null) continue;
-                    Emulator.GameInfo meta=new Emulator.GameInfo();
-                    meta.uri=default_xex_file.getUri().toString();
-                    meta.name=fileName;
-                    metas.add(meta);
-                }
-                else{
-                    if(Filter.is_iso_file(fileName)){
+                try {
+                    String fileName = file.getName();
+                    if(fileName == null) continue;
+                    if(file.isDirectory()){
+                        DocumentFile default_xex_file=Filter.get_default_xex_file(file);
+                        if(default_xex_file==null) continue;
                         Emulator.GameInfo meta=new Emulator.GameInfo();
-                        meta.name=fileName.length()>=4?fileName.substring(0,fileName.length()-4):fileName;
-                        meta.uri=file.getUri().toString();
+                        meta.uri=default_xex_file.getUri().toString();
+                        meta.name=fileName;
                         metas.add(meta);
                     }
-                    if(Filter.is_zar_file(fileName)){
-                        Emulator.GameInfo meta=new Emulator.GameInfo();
-                        meta.name=fileName.length()>=4?fileName.substring(0,fileName.length()-4):fileName;
-                        meta.uri=file.getUri().toString();
-                        metas.add(meta);
+                    else{
+                        if(Filter.is_iso_file(fileName)){
+                            Emulator.GameInfo meta=new Emulator.GameInfo();
+                            meta.name=fileName.length()>=4?fileName.substring(0,fileName.length()-4):fileName;
+                            meta.uri=file.getUri().toString();
+                            metas.add(meta);
+                        }
+                        else if(Filter.is_zar_file(fileName)){
+                            Emulator.GameInfo meta=new Emulator.GameInfo();
+                            meta.name=fileName.length()>=4?fileName.substring(0,fileName.length()-4):fileName;
+                            meta.uri=file.getUri().toString();
+                            metas.add(meta);
+                        }
+                        else if(Filter.is_god_game(fileName)){
+                            Emulator.GameInfo meta=Emulator.get.meta_info_from_god_game(context,file.getUri().toString());
+                            if(meta!=null)
+                                metas.add(meta);
+                        }
                     }
-                    else if(Filter.is_god_game(fileName)){
-                        Emulator.GameInfo meta=Emulator.get.meta_info_from_god_game(context,file.getUri().toString());
-                        if(meta!=null)
-                        metas.add(meta);
-                    }
+                } catch (Exception e) {
+                    android.util.Log.e("ax360e", "Failed to process game entry: " + file.getName(), e);
                 }
             }
 

@@ -37,6 +37,11 @@
     <string name="msg_processing">Processing...</string>
     <string name="empty_game_list">The list of games is empty,  please setting the game directory</string>
 
+    <!-- Game loading errors -->
+    <string name="error_no_game_uri">Failed to load game: no game file specified</string>
+    <string name="error_emulator_not_ready">Failed to load game: emulator engine not initialized</string>
+    <string name="error_boot_failed">Failed to start game: emulator boot error</string>
+
     <string name="enable_vibrator">Enable Vibrator</string>
 
     <string name="set_game_dir">Set Game Directory</string>

@@ -90,6 +90,18 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
 
     private void continueOnCreate(){
         String uri=getIntent().getStringExtra(EXTRA_GAME_URI);
+        if(uri==null || uri.isEmpty()){
+            Log.e("ax360e", "No game URI provided in intent");
+            Toast.makeText(this, R.string.error_no_game_uri, Toast.LENGTH_LONG).show();
+            finish();
+            return;
+        }
+        if(Emulator.get==null){
+            Log.e("ax360e", "Emulator not initialized");
+            Toast.makeText(this, R.string.error_emulator_not_ready, Toast.LENGTH_LONG).show();
+            finish();
+            return;
+        }
         aenu.emulator.Emulator.Path path=aenu.emulator.Emulator.Path.from(uri,-1);
         Emulator.get.setup_context(this);
         Uri gameDirUri = MainActivity.load_pref_game_dir(this);
@@ -279,6 +291,11 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
     @Override
     public void surfaceCreated(@NonNull SurfaceHolder holder) {
 
+        if(Emulator.get==null){
+            Log.e("ax360e", "surfaceCreated: Emulator not initialized");
+            return;
+        }
+
         if(!started){
             started=true;
 
@@ -288,7 +305,13 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
             try {
                 Emulator.get.boot();
             } catch (aenu.emulator.Emulator.BootException e) {
-                throw new RuntimeException(e);
+                Log.e("ax360e", "Failed to boot emulator", e);
+                started=false;
+                runOnUiThread(() -> {
+                    Toast.makeText(this, R.string.error_boot_failed, Toast.LENGTH_LONG).show();
+                    finish();
+                });
+                return;
             }
         }
         else{
