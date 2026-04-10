@@ -112,7 +112,9 @@ public class MainActivity extends AppCompatActivity {
             public void onGameLongClick(Emulator.GameInfo game) {
                 String[] options = {
                     getString(R.string.create_shortcut_label),
-                    getString(R.string.game_info_label)
+                    getString(R.string.game_info_label),
+                    "Download Cover Art",
+                    "Set Cover Art from URL"
                 };
                 new AlertDialog.Builder(MainActivity.this)
                     .setTitle(game.name)
@@ -126,6 +128,10 @@ public class MainActivity extends AppCompatActivity {
                                 .setMessage(uriDisplay)
                                 .setPositiveButton(android.R.string.ok, null)
                                 .show();
+                        } else if (which == 2) {
+                            downloadCoverArt(game);
+                        } else if (which == 3) {
+                            showCoverArtUrlDialog(game);
                         }
                     })
                     .show();
@@ -218,6 +224,104 @@ public class MainActivity extends AppCompatActivity {
                 .setIcon(Icon.createWithBitmap(icon))
                 .setIntent(intent)
                 .build(), null);
+    }
+
+    void downloadCoverArt(Emulator.GameInfo game) {
+        CoverArtScraper scraper = new CoverArtScraper(this);
+
+        // Show progress dialog
+        AlertDialog progressDialog = new AlertDialog.Builder(this)
+            .setTitle("Downloading Cover Art")
+            .setMessage("Please wait...")
+            .setCancelable(false)
+            .create();
+        progressDialog.show();
+
+        scraper.downloadCoverArt(game.name, game.uri, new CoverArtScraper.CoverArtCallback() {
+            @Override
+            public void onSuccess(File coverArtFile) {
+                runOnUiThread(() -> {
+                    progressDialog.dismiss();
+                    metadataManager.setCoverArtPath(game.uri, coverArtFile.getAbsolutePath());
+                    gameListAdapter.notifyDataSetChanged();
+                    new AlertDialog.Builder(MainActivity.this)
+                        .setTitle("Success")
+                        .setMessage("Cover art downloaded successfully")
+                        .setPositiveButton(android.R.string.ok, null)
+                        .show();
+                });
+            }
+
+            @Override
+            public void onFailure(String error) {
+                runOnUiThread(() -> {
+                    progressDialog.dismiss();
+                    new AlertDialog.Builder(MainActivity.this)
+                        .setTitle("Download Failed")
+                        .setMessage("Could not download cover art automatically. You can try setting it from a URL instead.")
+                        .setPositiveButton(android.R.string.ok, null)
+                        .setNegativeButton("Set from URL", (dialog, which) -> showCoverArtUrlDialog(game))
+                        .show();
+                });
+            }
+        });
+    }
+
+    void showCoverArtUrlDialog(Emulator.GameInfo game) {
+        android.widget.EditText input = new android.widget.EditText(this);
+        input.setHint("Enter image URL");
+
+        new AlertDialog.Builder(this)
+            .setTitle("Set Cover Art from URL")
+            .setMessage("Enter the URL of the cover art image:")
+            .setView(input)
+            .setPositiveButton("Download", (dialog, which) -> {
+                String url = input.getText().toString().trim();
+                if (!url.isEmpty()) {
+                    downloadCoverArtFromUrl(game, url);
+                }
+            })
+            .setNegativeButton(android.R.string.cancel, null)
+            .show();
+    }
+
+    void downloadCoverArtFromUrl(Emulator.GameInfo game, String imageUrl) {
+        CoverArtScraper scraper = new CoverArtScraper(this);
+
+        AlertDialog progressDialog = new AlertDialog.Builder(this)
+            .setTitle("Downloading Cover Art")
+            .setMessage("Please wait...")
+            .setCancelable(false)
+            .create();
+        progressDialog.show();
+
+        scraper.downloadCoverArtFromUrl(imageUrl, game.uri, new CoverArtScraper.CoverArtCallback() {
+            @Override
+            public void onSuccess(File coverArtFile) {
+                runOnUiThread(() -> {
+                    progressDialog.dismiss();
+                    metadataManager.setCoverArtPath(game.uri, coverArtFile.getAbsolutePath());
+                    gameListAdapter.notifyDataSetChanged();
+                    new AlertDialog.Builder(MainActivity.this)
+                        .setTitle("Success")
+                        .setMessage("Cover art downloaded successfully")
+                        .setPositiveButton(android.R.string.ok, null)
+                        .show();
+                });
+            }
+
+            @Override
+            public void onFailure(String error) {
+                runOnUiThread(() -> {
+                    progressDialog.dismiss();
+                    new AlertDialog.Builder(MainActivity.this)
+                        .setTitle("Download Failed")
+                        .setMessage("Failed to download image: " + error)
+                        .setPositiveButton(android.R.string.ok, null)
+                        .show();
+                });
+            }
+        });
     }
 
 

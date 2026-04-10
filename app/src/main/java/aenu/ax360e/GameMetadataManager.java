@@ -71,6 +71,12 @@ public class GameMetadataManager {
         metadata.compatibilityRating = rating;
         updateMetadata(gameUri, metadata);
     }
+
+    public void setCoverArtPath(String gameUri, String coverArtPath) {
+        GameMetadata metadata = getMetadata(gameUri);
+        metadata.coverArtPath = coverArtPath;
+        updateMetadata(gameUri, metadata);
+    }
     
     private void saveMetadata(String gameUri, GameMetadata metadata) {
         try {
