@@ -102,7 +102,7 @@ public class Application extends android.app.Application{
             return;
         }
 
-        String[] entry={"cache","cache0","cache1",};
+        String[] entry={"cache","cache0","cache1","cover_art"};
         for(String e:entry){
             File f=new File(get_app_data_dir(),e);
             f.mkdirs();

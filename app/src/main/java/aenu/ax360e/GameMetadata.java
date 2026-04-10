@@ -9,12 +9,14 @@ public class GameMetadata {
     public long totalPlayTime;
     public boolean isFavorite;
     public String compatibilityRating;
+    public String coverArtPath;
     
     public GameMetadata() {
         this.lastPlayed = 0;
         this.totalPlayTime = 0;
         this.isFavorite = false;
         this.compatibilityRating = "unknown";
+        this.coverArtPath = null;
     }
     
     public GameMetadata(String gameUri) {
@@ -29,6 +31,9 @@ public class GameMetadata {
         json.put("totalPlayTime", totalPlayTime);
         json.put("isFavorite", isFavorite);
         json.put("compatibilityRating", compatibilityRating);
+        if (coverArtPath != null) {
+            json.put("coverArtPath", coverArtPath);
+        }
         return json;
     }
     
@@ -39,6 +44,7 @@ public class GameMetadata {
         metadata.totalPlayTime = json.optLong("totalPlayTime", 0);
         metadata.isFavorite = json.optBoolean("isFavorite", false);
         metadata.compatibilityRating = json.optString("compatibilityRating", "unknown");
+        metadata.coverArtPath = json.optString("coverArtPath", null);
         return metadata;
     }
     
