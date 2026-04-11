@@ -88,8 +88,11 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
         continueOnCreate();
     }
 
+    private String gameUri; // Store for environment resolution
+
     private void continueOnCreate(){
         String uri=getIntent().getStringExtra(EXTRA_GAME_URI);
+        this.gameUri = uri; // Store for later use
         aenu.emulator.Emulator.Path path=aenu.emulator.Emulator.Path.from(uri,-1);
         Emulator.get.setup_context(this);
         Uri gameDirUri = MainActivity.load_pref_game_dir(this);
@@ -282,7 +285,9 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
         if(!started){
             started=true;
 
-            CustomDriverUtils.setupDriverEnv(this);
+            // Resolve and apply launch environment (driver + Turnip vars)
+            LaunchEnvironmentResolver envResolver = new LaunchEnvironmentResolver(this);
+            envResolver.resolveAndApply(gameUri);
 
             Emulator.get.setup_surface(holder.getSurface());
             try {
