@@ -15,20 +15,20 @@
         android:layout_height="match_parent" />
 
     <TextView
-        android:id="@+id/perf_overlay_text"
+        android:id="@+id/performance_overlay"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="top|start"
-        android:layout_margin="16dp"
-        android:textColor="?android:attr/textColorPrimary"
-        android:textSize="14sp"
-        android:shadowColor="?android:attr/colorBackground"
-        android:shadowDx="1.0"
-        android:shadowDy="1.0"
-        android:shadowRadius="2.0"
-        android:visibility="gone"
-        android:background="?android:attr/colorBackground"
+        android:layout_margin="8dp"
         android:padding="8dp"
-        android:alpha="0.8"/>
+        android:textColor="#FFFFFF"
+        android:textSize="12sp"
+        android:shadowColor="#000000"
+        android:shadowDx="1"
+        android:shadowDy="1"
+        android:shadowRadius="2"
+        android:background="#80000000"
+        android:fontFamily="monospace"
+        android:visibility="gone" />
 
 </FrameLayout>

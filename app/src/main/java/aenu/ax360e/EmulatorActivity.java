@@ -48,10 +48,6 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
     private int hatXState = 0;
     private int hatYState = 0;
     static boolean started=false;
-    private PerformanceMonitor performanceMonitor;
-    private android.widget.TextView perfOverlayText;
-    private Handler perfHandler;
-    private Runnable perfRunnable;
     Dialog delay_dialog=null;
     final Handler delay_on_create=new Handler(new Handler.Callback(){
         @Override
@@ -92,8 +88,15 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
         continueOnCreate();
     }
 
+    private String gameUri; // Store for environment resolution
+    private PerformanceMonitor performanceMonitor;
+    private Handler metricsHandler;
+    private Runnable metricsUpdateRunnable;
+    private android.widget.TextView performanceOverlay;
+
     private void continueOnCreate(){
         String uri=getIntent().getStringExtra(EXTRA_GAME_URI);
+        this.gameUri = uri; // Store for later use
         aenu.emulator.Emulator.Path path=aenu.emulator.Emulator.Path.from(uri,-1);
         Emulator.get.setup_context(this);
         Uri gameDirUri = MainActivity.load_pref_game_dir(this);
@@ -107,28 +110,6 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
                 // log_file cvar is not defined on AX360E - logging goes to logcat via log_to_logcat
         });
 
-        GameMetadataManager metaManager = new GameMetadataManager(this);
-        GameMetadata meta = metaManager.getMetadata(uri);
-        Emulator.Config config = null;
-        try {
-            config = Emulator.Config.open_config_file(Application.get_global_config_file().getAbsolutePath());
-            EngineProfileManager engineManager = new EngineProfileManager();
-            // TODO: Extract actual title ID from game file instead of hardcoded "UNKNOWN"
-            String detectedEngine = engineManager.detectEngine("UNKNOWN");
-            String engineToApply = meta.engineProfileOverride != null && !meta.engineProfileOverride.isEmpty() ? meta.engineProfileOverride : detectedEngine;
-            engineManager.applyEngineProfile(engineToApply, config);
-        } catch (Exception e) {
-            Log.e("EmulatorActivity", "Failed to apply engine profile", e);
-        } finally {
-            if (config != null) {
-                try {
-                    config.close_config_file();
-                } catch (Exception e) {
-                    Log.e("EmulatorActivity", "Failed to close config file", e);
-                }
-            }
-        }
-
         Emulator.get.setup_uri_info_list_file(Application.get_uri_info_list_file().getAbsolutePath());
         setContentView(R.layout.activity_emulator);
         sf = (SurfaceView) findViewById(R.id.surface_view);
@@ -139,46 +120,44 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
         sf.requestFocus();
         sf.setOnGenericMotionListener(this);
 
-        perfOverlayText = findViewById(R.id.perf_overlay_text);
-        performanceMonitor = new PerformanceMonitor(this);
+        load_key_map_and_vibrator();
 
+        // Initialize performance overlay
+        performanceOverlay = findViewById(R.id.performance_overlay);
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
-        boolean showOverlay = prefs.getBoolean("UI|show_fps_counter", true) ||
-                              prefs.getBoolean("UI|show_cpu_usage", true) ||
-                              prefs.getBoolean("UI|show_memory_usage", true) ||
-                              prefs.getBoolean("PerfMonitoring|show_thermal_status", true);
+        boolean showOverlay = prefs.getBoolean("Performance|show_performance_overlay", false);
+        performanceOverlay.setVisibility(showOverlay ? android.view.View.VISIBLE : android.view.View.GONE);
 
-        if (showOverlay) {
-            perfOverlayText.setVisibility(View.VISIBLE);
-            perfHandler = new Handler();
-            perfRunnable = new Runnable() {
-                @Override
-                public void run() {
+        // Initialize performance monitoring
+        performanceMonitor = new PerformanceMonitor(this);
+        metricsHandler = new Handler();
+        metricsUpdateRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (started && Emulator.get != null) {
                     performanceMonitor.updateMetrics();
                     performanceMonitor.pushMetricsToNative();
-
-                    StringBuilder sb = new StringBuilder();
-                    if (prefs.getBoolean("UI|show_fps_counter", true)) {
-                        sb.append(String.format("FPS: %.1f\n", performanceMonitor.getAverageFps()));
-                    }
-                    if (prefs.getBoolean("UI|show_cpu_usage", true)) {
-                        sb.append(String.format("CPU: %.1f%%\n", performanceMonitor.getCpuUsage()));
-                    }
-                    if (prefs.getBoolean("UI|show_memory_usage", true)) {
-                        sb.append(String.format("MEM: %s\n", performanceMonitor.getFormattedMemoryUsage()));
-                    }
-                    if (prefs.getBoolean("PerfMonitoring|show_thermal_status", true)) {
-                        sb.append(String.format("THRM: %s\n", performanceMonitor.getFormattedThermalStatus()));
-                    }
-
-                    perfOverlayText.setText(sb.toString());
-                    perfHandler.postDelayed(this, 1000);
+                    updatePerformanceOverlay();
                 }
-            };
-            perfHandler.postDelayed(perfRunnable, 1000);
+                metricsHandler.postDelayed(this, 2000); // Update every 2 seconds
+            }
+        };
+        metricsHandler.postDelayed(metricsUpdateRunnable, 2000);
+    }
+
+    private void updatePerformanceOverlay() {
+        if (performanceOverlay.getVisibility() != android.view.View.VISIBLE) {
+            return;
         }
 
-        load_key_map_and_vibrator();
+        StringBuilder sb = new StringBuilder();
+        sb.append("FPS: ").append(String.format("%.1f", performanceMonitor.getCurrentFps())).append("\n");
+        sb.append("Frame: ").append(String.format("%.1f", 1000.0f / Math.max(performanceMonitor.getCurrentFps(), 1.0f))).append("ms\n");
+        sb.append("Memory: ").append(performanceMonitor.getFormattedMemoryUsage()).append("\n");
+        sb.append("Thermal: ").append(performanceMonitor.getFormattedThermalStatus()).append("\n");
+        sb.append("State: ").append(performanceMonitor.getPerformanceState().name());
+
+        performanceOverlay.setText(sb.toString());
     }
     void vibrator(){
         if(vibrator!=null) {
@@ -285,8 +264,8 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
     protected void onPause() {
         super.onPause();
         // Stop performance overlay updates when activity is paused
-        if (perfHandler != null && perfRunnable != null) {
-            perfHandler.removeCallbacks(perfRunnable);
+        if (metricsHandler != null && metricsUpdateRunnable != null) {
+            metricsHandler.removeCallbacks(metricsUpdateRunnable);
         }
     }
 
@@ -294,19 +273,20 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
     protected void onResume() {
         super.onResume();
         // Resume performance overlay updates when activity is resumed
-        if (perfHandler != null && perfRunnable != null && perfOverlayText.getVisibility() == View.VISIBLE) {
-            perfHandler.postDelayed(perfRunnable, 1000);
+        if (metricsHandler != null && metricsUpdateRunnable != null && performanceOverlay != null && performanceOverlay.getVisibility() == View.VISIBLE) {
+            metricsHandler.postDelayed(metricsUpdateRunnable, 2000);
         }
     }
 
     @Override
     protected void onDestroy()
     {
-        releaseControllerState();
-        // Clean up performance overlay
-        if (perfHandler != null && perfRunnable != null) {
-            perfHandler.removeCallbacks(perfRunnable);
+        // Stop performance monitoring
+        if (metricsHandler != null && metricsUpdateRunnable != null) {
+            metricsHandler.removeCallbacks(metricsUpdateRunnable);
         }
+
+        releaseControllerState();
         super.onDestroy();
         if (isFinishing()) {
             // The emulator's native state cannot be cleanly restarted in the same process.
@@ -370,7 +350,9 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
         if(!started){
             started=true;
 
-            CustomDriverUtils.setupDriverEnv(this);
+            // Resolve and apply launch environment (driver + Turnip vars)
+            LaunchEnvironmentResolver envResolver = new LaunchEnvironmentResolver(this);
+            envResolver.resolveAndApply(gameUri);
 
             Emulator.get.setup_surface(holder.getSurface());
             try {
