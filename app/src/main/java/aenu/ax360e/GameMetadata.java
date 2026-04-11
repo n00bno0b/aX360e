@@ -10,6 +10,8 @@ public class GameMetadata {
     public boolean isFavorite;
     public String compatibilityRating;
     public String coverArtPath;
+    public int customDriverMode; // 0 = Default, 1 = Specific Custom Driver, 2 = Force System Driver
+    public String engineProfileOverride; // null = use detected
     
     public GameMetadata() {
         this.lastPlayed = 0;
@@ -17,6 +19,8 @@ public class GameMetadata {
         this.isFavorite = false;
         this.compatibilityRating = "unknown";
         this.coverArtPath = null;
+        this.customDriverMode = 0;
+        this.engineProfileOverride = null;
     }
     
     public GameMetadata(String gameUri) {
@@ -30,9 +34,13 @@ public class GameMetadata {
         json.put("lastPlayed", lastPlayed);
         json.put("totalPlayTime", totalPlayTime);
         json.put("isFavorite", isFavorite);
+        json.put("customDriverMode", customDriverMode);
         json.put("compatibilityRating", compatibilityRating);
         if (coverArtPath != null) {
             json.put("coverArtPath", coverArtPath);
+        }
+        if (engineProfileOverride != null) {
+            json.put("engineProfileOverride", engineProfileOverride);
         }
         return json;
     }
@@ -41,10 +49,12 @@ public class GameMetadata {
         GameMetadata metadata = new GameMetadata();
         metadata.gameUri = json.getString("gameUri");
         metadata.lastPlayed = json.optLong("lastPlayed", 0);
+        metadata.customDriverMode = json.optInt("customDriverMode", 0);
         metadata.totalPlayTime = json.optLong("totalPlayTime", 0);
         metadata.isFavorite = json.optBoolean("isFavorite", false);
         metadata.compatibilityRating = json.optString("compatibilityRating", "unknown");
         metadata.coverArtPath = json.optString("coverArtPath", null);
+        metadata.engineProfileOverride = json.optString("engineProfileOverride", null);
         return metadata;
     }
     

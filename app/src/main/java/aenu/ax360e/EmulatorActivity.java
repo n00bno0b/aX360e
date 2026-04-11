@@ -109,6 +109,7 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
                 "--config="+Application.get_global_config_file().getAbsolutePath(),
                 // log_file cvar is not defined on AX360E - logging goes to logcat via log_to_logcat
         });
+
         Emulator.get.setup_uri_info_list_file(Application.get_uri_info_list_file().getAbsolutePath());
         setContentView(R.layout.activity_emulator);
         sf = (SurfaceView) findViewById(R.id.surface_view);
@@ -177,6 +178,7 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
             vibrationEffect = VibrationEffect.createOneShot(25, VibrationEffect.DEFAULT_AMPLITUDE);
         }
     }
+
     @Override
     protected void onCreate(android.os.Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -202,7 +204,6 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
         }.start();
         return;
     }
-
     @Override
     public void onBackPressed()
     {
@@ -258,6 +259,24 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
             if(Emulator.get.is_paused())
                 Emulator.get.resume();
     }*/
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        // Stop performance overlay updates when activity is paused
+        if (metricsHandler != null && metricsUpdateRunnable != null) {
+            metricsHandler.removeCallbacks(metricsUpdateRunnable);
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Resume performance overlay updates when activity is resumed
+        if (metricsHandler != null && metricsUpdateRunnable != null && performanceOverlay != null && performanceOverlay.getVisibility() == View.VISIBLE) {
+            metricsHandler.postDelayed(metricsUpdateRunnable, 2000);
+        }
+    }
 
     @Override
     protected void onDestroy()
