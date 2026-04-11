@@ -1,0 +1,96 @@
+{
+  "version": "1.0",
+  "description": "Title ID to game engine mapping for Xbox 360 games",
+  "mappings": {
+    "comment": "Format: TitleID (8-char hex) -> engine name",
+
+    "Frostbite": {
+      "545407D7": "Battlefield: Bad Company",
+      "45410869": "Battlefield: Bad Company 2",
+      "4541096D": "Battlefield 3",
+      "545408B4": "Medal of Honor (2010)",
+      "545408FC": "Need for Speed: The Run",
+      "454109D5": "Crysis 2",
+      "454109FF": "Crysis 3"
+    },
+
+    "MT_FRAMEWORK": {
+      "4343082F": "Dragon's Dogma",
+      "4343082D": "Dragon's Dogma: Dark Arisen",
+      "43430841": "Resident Evil 5",
+      "4343083B": "Resident Evil 6",
+      "43430852": "Lost Planet 2",
+      "43430847": "Lost Planet 3",
+      "43430837": "Dead Rising 2",
+      "43430850": "Devil May Cry 4"
+    },
+
+    "GAMEBRYO": {
+      "425307D1": "Fallout 3",
+      "425307E1": "Fallout: New Vegas",
+      "425307D6": "The Elder Scrolls IV: Oblivion",
+      "425307E3": "The Elder Scrolls V: Skyrim"
+    },
+
+    "SOURCE": {
+      "45410914": "Left 4 Dead",
+      "45410915": "Left 4 Dead 2",
+      "45410830": "The Orange Box",
+      "454108CE": "Portal 2"
+    },
+
+    "UNITY": {
+      "4B4E0877": "Frogger: Hyper Arcade Edition",
+      "comment_unity": "Many indie titles use Unity"
+    },
+
+    "ID_TECH": {
+      "425307F1": "RAGE",
+      "425307DB": "DOOM 3 BFG Edition",
+      "425307F8": "Wolfenstein: The New Order"
+    },
+
+    "LITHTECH": {
+      "57520852": "F.E.A.R.",
+      "575208A3": "F.E.A.R. 2: Project Origin",
+      "575208DB": "F.E.A.R. 3",
+      "53510826": "Murdered: Soul Suspect"
+    },
+
+    "UNREAL": {
+      "45410912": "Gears of War",
+      "4D5307D1": "Mass Effect",
+      "4D5307F2": "Mass Effect 2",
+      "4D530404": "Mass Effect 3",
+      "4D53082C": "BioShock",
+      "54540866": "BioShock 2",
+      "545408DD": "BioShock Infinite",
+      "4D530816": "Borderlands",
+      "54540899": "Borderlands 2"
+    },
+
+    "EGO": {
+      "434D082E": "GRID",
+      "434D0834": "GRID 2",
+      "434D083B": "DiRT 2",
+      "434D0866": "DiRT 3",
+      "434D084F": "F1 2010",
+      "434D0892": "F1 2012"
+    },
+
+    "CRYENGINE": {
+      "comment_cryengine": "Besides Crysis (in Frostbite section), few Xbox 360 titles"
+    },
+
+    "PROPRIETARY": {
+      "comment_proprietary": "Many first-party and AAA titles use custom engines"
+    }
+  },
+
+  "notes": [
+    "This is an initial mapping based on documented compatibility issues",
+    "Title IDs are in hexadecimal format (8 characters)",
+    "Add more mappings as games are tested and engines identified",
+    "Manual override via GameProfile.engineOverride takes precedence"
+  ]
+}

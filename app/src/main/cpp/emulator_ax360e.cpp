@@ -14,6 +14,7 @@
 #include "cpuinfo.h"
 #include "vkapi.h"
 #include <fstream>
+#include <chrono>
 #include "vkutil.h"
 
 #include "cpptoml/include/cpptoml.h"
@@ -35,6 +36,10 @@ jmethodID mid_open_uri_fd;
 
 std::vector<std::string> g_launch_args;
 std::string g_uri_info_list_file_path;
+
+// Global performance metrics cache
+PerformanceMetrics g_performance_metrics;
+
 static void j_setup_context(JNIEnv* env,jobject self,jobject context ){
     g_context = env->NewGlobalRef(context);
 }
@@ -713,6 +718,36 @@ static void j_setup_uri_info_list_file(JNIEnv* env,jobject self,jstring jpath ){
     env->ReleaseStringUTFChars(jpath,path);
 }
 
+//public native void push_performance_metrics(float fps, float frameTimeMs, int perfState,
+//                                             float memoryUsedMB, float memoryTotalMB, float temperature);
+static void j_push_performance_metrics(JNIEnv* env, jobject self,
+                                       jfloat fps, jfloat frame_time_ms, jint perf_state,
+                                       jfloat memory_used_mb, jfloat memory_total_mb, jfloat temperature) {
+    // Update global performance metrics cache
+    g_performance_metrics.fps.store(fps, std::memory_order_relaxed);
+    g_performance_metrics.frame_time_ms.store(frame_time_ms, std::memory_order_relaxed);
+    g_performance_metrics.perf_state.store(perf_state, std::memory_order_relaxed);
+    g_performance_metrics.memory_used_mb.store(memory_used_mb, std::memory_order_relaxed);
+    g_performance_metrics.memory_total_mb.store(memory_total_mb, std::memory_order_relaxed);
+    g_performance_metrics.temperature.store(temperature, std::memory_order_relaxed);
+
+    // Get current time in milliseconds
+    auto now = std::chrono::steady_clock::now();
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+    g_performance_metrics.last_update_time_ms.store(ms, std::memory_order_relaxed);
+
+    // Log on state transitions
+    static int last_logged_state = 0;
+    if (perf_state != last_logged_state) {
+        const char* state_names[] = {"NORMAL", "PRESSURED", "THROTTLING", "CRITICAL"};
+        const char* state_name = (perf_state >= 0 && perf_state <= 3) ? state_names[perf_state] : "UNKNOWN";
+        __android_log_print(ANDROID_LOG_INFO, "PerformanceMetrics",
+                          "State: %s, FPS: %.1f, Temp: %.1f°C, Mem: %.0f/%.0f MB",
+                          state_name, fps, temperature, memory_used_mb, memory_total_mb);
+        last_logged_state = perf_state;
+    }
+}
+
 int register_ax360e_Emulator(JNIEnv* env){
 
     jclass localDocFile=env->FindClass("androidx/documentfile/provider/DocumentFile");
@@ -744,8 +779,9 @@ int register_ax360e_Emulator(JNIEnv* env){
             { "setup_launch_args", "([Ljava/lang/String;)V", (void *) j_setup_launch_args },
             { "meta_info_from_god_game", "(Landroid/content/Context;Ljava/lang/String;)Laenu/ax360e/Emulator$GameInfo;", (void *) j_meta_info_from_god_game },
             { "setup_uri_info_list_file", "(Ljava/lang/String;)V", (void *) j_setup_uri_info_list_file },
-            {"simple_device_info", "()Ljava/lang/String;", (void *) j_simple_device_info}
-            ,{"generate_config_xml", "(Ljava/lang/String;)Ljava/lang/String;", (void *) generate_config_xml}
+            {"simple_device_info", "()Ljava/lang/String;", (void *) j_simple_device_info},
+            {"generate_config_xml", "(Ljava/lang/String;)Ljava/lang/String;", (void *) generate_config_xml},
+            {"push_performance_metrics", "(FFIIFFF)V", (void *) j_push_performance_metrics}
     };
     return env->RegisterNatives(g_class_Emulator,methods, sizeof(methods)/sizeof(methods[0]));
 }

@@ -18,7 +18,28 @@ import java.io.RandomAccessFile;
 
 public class PerformanceMonitor {
     private static final String TAG = "PerformanceMonitor";
-    
+
+    /**
+     * Performance state classification for native consumption.
+     * Used to inform dynamic resolution and quality adjustments.
+     */
+    public enum PerformanceState {
+        NORMAL(0),          // Everything running smoothly
+        PRESSURED(1),       // Starting to show strain (low battery, high memory)
+        THROTTLING(2),      // Thermal throttling active
+        CRITICAL(3);        // Critical condition (very low battery + throttling + low memory)
+
+        private final int value;
+
+        PerformanceState(int value) {
+            this.value = value;
+        }
+
+        public int getValue() {
+            return value;
+        }
+    }
+
     private final Context context;
     private long lastCpuTime = 0;
     private long lastAppCpuTime = 0;
@@ -39,11 +60,16 @@ public class PerformanceMonitor {
     private int shadersCompiled = 0;
     private int shaderCacheHits = 0;
     private long shaderCompilationTime = 0;
-    
+
     // eDRAM/GMEM tracking
     private long gmemFlushes = 0;
     private long fsiOverhead = 0;
-    
+
+    // Metrics push tracking
+    private long lastMetricsPushTime = 0;
+    private static final long METRICS_PUSH_INTERVAL_MS = 2000; // Push every 2 seconds
+    private PerformanceState lastPushedState = PerformanceState.NORMAL;
+
     public PerformanceMonitor(Context context) {
         this.context = context;
         this.lastUpdateTime = SystemClock.elapsedRealtime();
@@ -207,20 +233,93 @@ public class PerformanceMonitor {
         // - Thermal throttling is active
         // - Battery is low and we're not charging
         // - Memory is critically low
-        return isThermalThrottling || 
+        return isThermalThrottling ||
                (batteryLevel < 20 && !isCharging()) ||
                (memoryUsed > memoryTotal * 0.9);
     }
-    
+
+    public PerformanceState getPerformanceState() {
+        boolean lowBattery = batteryLevel < 20 && !isCharging();
+        boolean highMemory = memoryUsed > memoryTotal * 0.85;
+
+        // CRITICAL: multiple severe conditions
+        if (isThermalThrottling && (lowBattery || highMemory)) {
+            return PerformanceState.CRITICAL;
+        }
+
+        // THROTTLING: thermal issues
+        if (isThermalThrottling) {
+            return PerformanceState.THROTTLING;
+        }
+
+        // PRESSURED: starting to show strain
+        if (lowBattery || highMemory || (memoryUsed > memoryTotal * 0.75)) {
+            return PerformanceState.PRESSURED;
+        }
+
+        // NORMAL: everything OK
+        return PerformanceState.NORMAL;
+    }
+
+    /**
+     * Push metrics snapshot to native code.
+     * Should be called after updateMetrics().
+     * Pushes on fixed cadence (2s) and on thermal state transitions.
+     */
+    public void pushMetricsToNative() {
+        if (Emulator.get == null) {
+            return;
+        }
+
+        long now = SystemClock.elapsedRealtime();
+        PerformanceState currentState = getPerformanceState();
+
+        // Push on state change or at regular intervals
+        boolean stateChanged = currentState != lastPushedState;
+        boolean intervalElapsed = (now - lastMetricsPushTime) >= METRICS_PUSH_INTERVAL_MS;
+
+        if (stateChanged || intervalElapsed) {
+            float memUsedMB = memoryUsed / (1024.0f * 1024.0f);
+            float memTotalMB = memoryTotal / (1024.0f * 1024.0f);
+            float frameTimeMs = currentFps > 0 ? (1000.0f / currentFps) : 0;
+
+            try {
+                Emulator.get.push_performance_metrics(
+                        currentFps,
+                        frameTimeMs,
+                        currentState.getValue(),
+                        memUsedMB,
+                        memTotalMB,
+                        deviceTemperature
+                );
+
+                lastMetricsPushTime = now;
+                lastPushedState = currentState;
+
+                if (stateChanged) {
+                    Log.i(TAG, "Performance state changed to: " + currentState);
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Failed to push metrics to native", e);
+            }
+        }
+    }
+
     private boolean isCharging() {
         IntentFilter ifilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
         Intent batteryStatus = context.registerReceiver(null, ifilter);
-        
+
         if (batteryStatus != null) {
             int status = batteryStatus.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
             return status == BatteryManager.BATTERY_STATUS_CHARGING ||
                    status == BatteryManager.BATTERY_STATUS_FULL;
         }
         return false;
+    }
+
+    public void pushMetricsToNative() {
+        // Placeholder for JNI bridge to push metrics to native code
+        // This would call a native method to expose Java-side metrics to C++ profiling
+        // For now, this is a no-op until the native bridge is implemented
     }
 }

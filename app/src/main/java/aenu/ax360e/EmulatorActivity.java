@@ -88,8 +88,15 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
         continueOnCreate();
     }
 
+    private String gameUri; // Store for environment resolution
+    private PerformanceMonitor performanceMonitor;
+    private Handler metricsHandler;
+    private Runnable metricsUpdateRunnable;
+    private android.widget.TextView performanceOverlay;
+
     private void continueOnCreate(){
         String uri=getIntent().getStringExtra(EXTRA_GAME_URI);
+        this.gameUri = uri; // Store for later use
         aenu.emulator.Emulator.Path path=aenu.emulator.Emulator.Path.from(uri,-1);
         Emulator.get.setup_context(this);
         Uri gameDirUri = MainActivity.load_pref_game_dir(this);
@@ -102,6 +109,7 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
                 "--config="+Application.get_global_config_file().getAbsolutePath(),
                 // log_file cvar is not defined on AX360E - logging goes to logcat via log_to_logcat
         });
+
         Emulator.get.setup_uri_info_list_file(Application.get_uri_info_list_file().getAbsolutePath());
         setContentView(R.layout.activity_emulator);
         sf = (SurfaceView) findViewById(R.id.surface_view);
@@ -113,6 +121,43 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
         sf.setOnGenericMotionListener(this);
 
         load_key_map_and_vibrator();
+
+        // Initialize performance overlay
+        performanceOverlay = findViewById(R.id.performance_overlay);
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+        boolean showOverlay = prefs.getBoolean("Performance|show_performance_overlay", false);
+        performanceOverlay.setVisibility(showOverlay ? android.view.View.VISIBLE : android.view.View.GONE);
+
+        // Initialize performance monitoring
+        performanceMonitor = new PerformanceMonitor(this);
+        metricsHandler = new Handler();
+        metricsUpdateRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (started && Emulator.get != null) {
+                    performanceMonitor.updateMetrics();
+                    performanceMonitor.pushMetricsToNative();
+                    updatePerformanceOverlay();
+                }
+                metricsHandler.postDelayed(this, 2000); // Update every 2 seconds
+            }
+        };
+        metricsHandler.postDelayed(metricsUpdateRunnable, 2000);
+    }
+
+    private void updatePerformanceOverlay() {
+        if (performanceOverlay.getVisibility() != android.view.View.VISIBLE) {
+            return;
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("FPS: ").append(String.format("%.1f", performanceMonitor.getCurrentFps())).append("\n");
+        sb.append("Frame: ").append(String.format("%.1f", 1000.0f / Math.max(performanceMonitor.getCurrentFps(), 1.0f))).append("ms\n");
+        sb.append("Memory: ").append(performanceMonitor.getFormattedMemoryUsage()).append("\n");
+        sb.append("Thermal: ").append(performanceMonitor.getFormattedThermalStatus()).append("\n");
+        sb.append("State: ").append(performanceMonitor.getPerformanceState().name());
+
+        performanceOverlay.setText(sb.toString());
     }
     void vibrator(){
         if(vibrator!=null) {
@@ -133,6 +178,7 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
             vibrationEffect = VibrationEffect.createOneShot(25, VibrationEffect.DEFAULT_AMPLITUDE);
         }
     }
+
     @Override
     protected void onCreate(android.os.Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -158,7 +204,6 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
         }.start();
         return;
     }
-
     @Override
     public void onBackPressed()
     {
@@ -216,8 +261,31 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
     }*/
 
     @Override
+    protected void onPause() {
+        super.onPause();
+        // Stop performance overlay updates when activity is paused
+        if (metricsHandler != null && metricsUpdateRunnable != null) {
+            metricsHandler.removeCallbacks(metricsUpdateRunnable);
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Resume performance overlay updates when activity is resumed
+        if (metricsHandler != null && metricsUpdateRunnable != null && performanceOverlay != null && performanceOverlay.getVisibility() == View.VISIBLE) {
+            metricsHandler.postDelayed(metricsUpdateRunnable, 2000);
+        }
+    }
+
+    @Override
     protected void onDestroy()
     {
+        // Stop performance monitoring
+        if (metricsHandler != null && metricsUpdateRunnable != null) {
+            metricsHandler.removeCallbacks(metricsUpdateRunnable);
+        }
+
         releaseControllerState();
         super.onDestroy();
         if (isFinishing()) {
@@ -282,7 +350,9 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
         if(!started){
             started=true;
 
-            CustomDriverUtils.setupDriverEnv(this);
+            // Resolve and apply launch environment (driver + Turnip vars)
+            LaunchEnvironmentResolver envResolver = new LaunchEnvironmentResolver(this);
+            envResolver.resolveAndApply(gameUri);
 
             Emulator.get.setup_surface(holder.getSurface());
             try {

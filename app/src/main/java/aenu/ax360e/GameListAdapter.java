@@ -153,6 +153,18 @@ public class GameListAdapter extends RecyclerView.Adapter<GameListAdapter.GameVi
         if (game.icon != null) {
             Bitmap iconBmp = BitmapFactory.decodeByteArray(game.icon, 0, game.icon.length);
             holder.gameIcon.setImageBitmap(iconBmp);
+        } else if (metadata.coverArtPath != null) {
+            // Try to load cover art from cache
+            try {
+                Bitmap coverArt = BitmapFactory.decodeFile(metadata.coverArtPath);
+                if (coverArt != null) {
+                    holder.gameIcon.setImageBitmap(coverArt);
+                } else {
+                    holder.gameIcon.setImageResource(R.drawable.app_icon);
+                }
+            } catch (Exception e) {
+                holder.gameIcon.setImageResource(R.drawable.app_icon);
+            }
         } else {
             holder.gameIcon.setImageResource(R.drawable.app_icon);
         }
