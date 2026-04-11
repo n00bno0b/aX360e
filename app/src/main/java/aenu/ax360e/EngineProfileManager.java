@@ -1,15 +1,9 @@
 package aenu.ax360e;
 
-import android.content.Context;
 import android.util.Log;
 
-import org.json.JSONException;
-import org.json.JSONObject;
-
-import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Scanner;
 
 public class EngineProfileManager {
     private static final String TAG = "EngineProfileManager";
@@ -17,7 +11,7 @@ public class EngineProfileManager {
     // Title ID -> Engine Name static mapping
     private final Map<String, String> titleEngineMap = new HashMap<>();
 
-    public EngineProfileManager(Context context) {
+    public EngineProfileManager() {
         // Load static mapping (e.g. from assets or embedded)
         // Known Title-ID mappings from compatibility doc:
         titleEngineMap.put("4D530A24", "Unreal"); // Murdered: Soul Suspect

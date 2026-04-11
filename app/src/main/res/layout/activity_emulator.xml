@@ -20,14 +20,15 @@
         android:layout_height="wrap_content"
         android:layout_gravity="top|start"
         android:layout_margin="16dp"
-        android:textColor="#00FF00"
+        android:textColor="?android:attr/textColorPrimary"
         android:textSize="14sp"
-        android:shadowColor="#000000"
+        android:shadowColor="?android:attr/colorBackground"
         android:shadowDx="1.0"
         android:shadowDy="1.0"
         android:shadowRadius="2.0"
         android:visibility="gone"
-        android:background="#80000000"
-        android:padding="8dp"/>
+        android:background="?android:attr/colorBackground"
+        android:padding="8dp"
+        android:alpha="0.8"/>
 
 </FrameLayout>

@@ -215,12 +215,18 @@ public class PerformanceMonitor {
     private boolean isCharging() {
         IntentFilter ifilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
         Intent batteryStatus = context.registerReceiver(null, ifilter);
-        
+
         if (batteryStatus != null) {
             int status = batteryStatus.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
             return status == BatteryManager.BATTERY_STATUS_CHARGING ||
                    status == BatteryManager.BATTERY_STATUS_FULL;
         }
         return false;
+    }
+
+    public void pushMetricsToNative() {
+        // Placeholder for JNI bridge to push metrics to native code
+        // This would call a native method to expose Java-side metrics to C++ profiling
+        // For now, this is a no-op until the native bridge is implemented
     }
 }

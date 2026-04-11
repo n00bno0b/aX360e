@@ -109,14 +109,25 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
 
         GameMetadataManager metaManager = new GameMetadataManager(this);
         GameMetadata meta = metaManager.getMetadata(uri);
+        Emulator.Config config = null;
         try {
-            Emulator.Config config = Emulator.Config.open_config_file(Application.get_global_config_file().getAbsolutePath());
-            EngineProfileManager engineManager = new EngineProfileManager(this);
+            config = Emulator.Config.open_config_file(Application.get_global_config_file().getAbsolutePath());
+            EngineProfileManager engineManager = new EngineProfileManager();
+            // TODO: Extract actual title ID from game file instead of hardcoded "UNKNOWN"
             String detectedEngine = engineManager.detectEngine("UNKNOWN");
             String engineToApply = meta.engineProfileOverride != null && !meta.engineProfileOverride.isEmpty() ? meta.engineProfileOverride : detectedEngine;
             engineManager.applyEngineProfile(engineToApply, config);
-            config.close_config_file();
-        } catch (Exception e) {}
+        } catch (Exception e) {
+            Log.e("EmulatorActivity", "Failed to apply engine profile", e);
+        } finally {
+            if (config != null) {
+                try {
+                    config.close_config_file();
+                } catch (Exception e) {
+                    Log.e("EmulatorActivity", "Failed to close config file", e);
+                }
+            }
+        }
 
         Emulator.get.setup_uri_info_list_file(Application.get_uri_info_list_file().getAbsolutePath());
         setContentView(R.layout.activity_emulator);
@@ -134,7 +145,8 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
         boolean showOverlay = prefs.getBoolean("UI|show_fps_counter", true) ||
                               prefs.getBoolean("UI|show_cpu_usage", true) ||
-                              prefs.getBoolean("UI|show_memory_usage", true);
+                              prefs.getBoolean("UI|show_memory_usage", true) ||
+                              prefs.getBoolean("PerfMonitoring|show_thermal_status", true);
 
         if (showOverlay) {
             perfOverlayText.setVisibility(View.VISIBLE);
@@ -270,9 +282,31 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
     }*/
 
     @Override
+    protected void onPause() {
+        super.onPause();
+        // Stop performance overlay updates when activity is paused
+        if (perfHandler != null && perfRunnable != null) {
+            perfHandler.removeCallbacks(perfRunnable);
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Resume performance overlay updates when activity is resumed
+        if (perfHandler != null && perfRunnable != null && perfOverlayText.getVisibility() == View.VISIBLE) {
+            perfHandler.postDelayed(perfRunnable, 1000);
+        }
+    }
+
+    @Override
     protected void onDestroy()
     {
         releaseControllerState();
+        // Clean up performance overlay
+        if (perfHandler != null && perfRunnable != null) {
+            perfHandler.removeCallbacks(perfRunnable);
+        }
         super.onDestroy();
         if (isFinishing()) {
             // The emulator's native state cannot be cleanly restarted in the same process.
