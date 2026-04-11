@@ -12,7 +12,15 @@ import aenu.hardware.ProcessorInfo;
 // SPDX-License-Identifier: WTFPL
 public class Application extends android.app.Application{
     static File get_app_data_dir(){
-        return ctx.getExternalFilesDir("ax360e");
+        File publicDir = new File(android.os.Environment.getExternalStorageDirectory(), "ax360e++");
+        if (!publicDir.exists()) {
+            publicDir.mkdirs();
+        }
+        // Fallback to external files dir if public dir creation fails (e.g. permission not yet granted)
+        if (!publicDir.exists() || !publicDir.canWrite()) {
+            return ctx.getExternalFilesDir("ax360e");
+        }
+        return publicDir;
     }
     public static File get_default_config_file(){
         return new File(Application.get_app_data_dir(),"default_config.toml");
@@ -125,6 +133,9 @@ public class Application extends android.app.Application{
 
         // Extract game patches from assets if needed
         extractGamePatches();
+
+        // Initialize custom driver environment
+        CustomDriverUtils.setupDriverEnv(this);
 
         if(!should_delay_load())
             Emulator.load_library();

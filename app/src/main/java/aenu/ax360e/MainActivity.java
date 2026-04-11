@@ -157,6 +157,35 @@ public class MainActivity extends AppCompatActivity {
 
     void on_create(){
         _on_create();
+        checkStoragePermission();
+    }
+
+    private void checkStoragePermission() {
+        android.util.Log.d("MainActivity", "checkStoragePermission called");
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            boolean isManager = android.os.Environment.isExternalStorageManager();
+            android.util.Log.d("MainActivity", "isExternalStorageManager: " + isManager);
+            if (!isManager) {
+                android.util.Log.d("MainActivity", "Showing storage permission dialog");
+                new AlertDialog.Builder(this)
+                        .setTitle("Storage Permission Required")
+                        .setMessage("This app requires 'All Files Access' to read game files from your internal storage on Android 11 and above.\n\nPlease grant this permission in the next screen.")
+                        .setPositiveButton("Grant", (dialog, which) -> {
+                            try {
+                                Intent intent = new Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+                                intent.addCategory("android.intent.category.DEFAULT");
+                                intent.setData(Uri.parse(String.format("package:%s", getPackageName())));
+                                startActivity(intent);
+                            } catch (Exception e) {
+                                Intent intent = new Intent();
+                                intent.setAction(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
+                                startActivity(intent);
+                            }
+                        })
+                        .setNegativeButton("Cancel", null)
+                        .show();
+            }
+        }
     }
 
 

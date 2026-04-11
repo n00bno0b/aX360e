@@ -4,6 +4,7 @@
 
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <application
@@ -57,7 +58,7 @@
             </intent-filter>
         </activity>
         <activity android:name="aenu.ax360e.EmulatorSettings"
-            android:exported="false"
+            android:exported="true"
             android:label="@string/settings"/>
         <activity android:name="aenu.ax360e.CustomDriverTypeActivity"
             android:exported="false"

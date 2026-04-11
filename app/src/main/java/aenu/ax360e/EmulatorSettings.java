@@ -51,7 +51,6 @@ public class EmulatorSettings extends AppCompatActivity {
 
     static final int WARNING_COLOR=0xffff8000;
 
-    @SuppressLint("ValidFragment")
     public static class SettingsFragment extends PreferenceFragmentCompat implements
             Preference.OnPreferenceClickListener,Preference.OnPreferenceChangeListener{
 
@@ -61,9 +60,16 @@ public class EmulatorSettings extends AppCompatActivity {
         Emulator.Config config;
         PreferenceScreen root_pref;
 
-        SettingsFragment(String config_path,boolean is_global){
-            this.config_path=config_path;
-            this.is_global=is_global;
+        public SettingsFragment(){
+        }
+
+        public static SettingsFragment newInstance(String config_path,boolean is_global){
+            SettingsFragment fragment=new SettingsFragment();
+            Bundle args=new Bundle();
+            args.putString(EXTRA_CONFIG_PATH,config_path);
+            args.putBoolean("is_global",is_global);
+            fragment.setArguments(args);
+            return fragment;
         }
 
         OnBackPressedCallback back_callback=new OnBackPressedCallback(true) {
@@ -207,6 +213,34 @@ public class EmulatorSettings extends AppCompatActivity {
             requireActivity().setTitle(title);
         }
 
+        private void checkStoragePermission() {
+            Log.d("EmulatorSettings", "checkStoragePermission called");
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                boolean isManager = android.os.Environment.isExternalStorageManager();
+                Log.d("EmulatorSettings", "isExternalStorageManager: " + isManager);
+                if (!isManager) {
+                    Log.d("EmulatorSettings", "Showing storage permission dialog");
+                    new AlertDialog.Builder(requireContext())
+                            .setTitle("Storage Permission Required")
+                            .setMessage("Settings require 'All Files Access' to manage configuration and drivers.\n\nPlease grant this permission.")
+                            .setPositiveButton("Grant", (dialog, which) -> {
+                                try {
+                                    Intent intent = new Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+                                    intent.addCategory("android.intent.category.DEFAULT");
+                                    intent.setData(Uri.parse(String.format("package:%s", requireContext().getPackageName())));
+                                    startActivity(intent);
+                                } catch (Exception e) {
+                                    Intent intent = new Intent();
+                                    intent.setAction(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
+                                    startActivity(intent);
+                                }
+                            })
+                            .setNegativeButton("Cancel", null)
+                            .show();
+                }
+            }
+        }
+
         boolean ensure_default_config_exists(){
             try{
                 File default_config_file=Application.get_default_config_file();
@@ -243,6 +277,12 @@ public class EmulatorSettings extends AppCompatActivity {
 
         @Override
         public void onCreatePreferences(@Nullable Bundle savedInstanceState, @Nullable String rootKey) {
+            checkStoragePermission();
+            Bundle args=getArguments();
+            if(args!=null){
+                config_path=args.getString(EXTRA_CONFIG_PATH);
+                is_global=args.getBoolean("is_global");
+            }
 
             if(rootKey!=null) throw new RuntimeException();
 
@@ -732,10 +772,12 @@ public class EmulatorSettings extends AppCompatActivity {
         void setup_custom_driver_gpu(android.net.Uri uri){
             Preference gpu_pref=findPreference(KEY_CUSTOM_DRIVER_GPU);
             if(uri == null){
-                // Determine if driver is installed
-                if (CustomDriverUtils.getDriverDirectory(requireContext()).exists() &&
-                    new java.io.File(CustomDriverUtils.getDriverDirectory(requireContext()), "vk_icd.json").exists()) {
-                    if (gpu_pref != null) gpu_pref.setSummary(getString(R.string.es_hint_custom_driver_installed));
+                // Determine if driver is installed and show its name
+                TurnipDriverInfo driverInfo = TurnipDriverInfo.detect(requireContext());
+                if (driverInfo.isInstalled()) {
+                    if (gpu_pref != null) {
+                        gpu_pref.setSummary("Installed: " + driverInfo.getDriverName() + " (" + driverInfo.getDriverVersion() + ")");
+                    }
                 } else {
                     if (gpu_pref != null) gpu_pref.setSummary(getString(R.string.es_hint_custom_drivers_gpu));
                 }
@@ -744,7 +786,10 @@ public class EmulatorSettings extends AppCompatActivity {
 
             boolean success = CustomDriverUtils.installDriver(requireContext(), uri);
             if (success) {
-                if (gpu_pref != null) gpu_pref.setSummary(getString(R.string.es_hint_custom_driver_installed));
+                TurnipDriverInfo driverInfo = TurnipDriverInfo.detect(requireContext());
+                if (gpu_pref != null) {
+                    gpu_pref.setSummary("Installed: " + driverInfo.getDriverName() + " (" + driverInfo.getDriverVersion() + ")");
+                }
                 Toast.makeText(requireContext(), getString(R.string.custom_driver_installed_success), Toast.LENGTH_SHORT).show();
             } else {
                 Toast.makeText(requireContext(), getString(R.string.custom_driver_installed_failed), Toast.LENGTH_SHORT).show();
@@ -777,7 +822,7 @@ public class EmulatorSettings extends AppCompatActivity {
             TurnipDriverInfo driverInfo = TurnipDriverInfo.detect(requireContext());
 
             String message;
-            if (driverInfo != null) {
+            if (driverInfo.isInstalled()) {
                 message = "Turnip Driver Detected\n\n" +
                          "Driver: " + driverInfo.getDriverName() + "\n" +
                          "Version: " + driverInfo.getDriverVersion() + "\n" +
@@ -838,20 +883,17 @@ public class EmulatorSettings extends AppCompatActivity {
         }
 
         void setup_pref_title_color(Preference preference,String cur_val){
+            String default_val = original_config.load_config_entry(preference.getKey());
+            boolean modify = default_val == null || !default_val.equals(cur_val);
+
             if(preference instanceof CheckBoxPreference){
-                CheckBoxPreference pref=(CheckBoxPreference) preference;
-                boolean modify=!original_config.load_config_entry(pref.getKey()).equals((cur_val));
-                pref.set_is_modify_color(modify);
+                ((CheckBoxPreference) preference).set_is_modify_color(modify);
             }
             else if(preference instanceof SeekBarPreference){
-                SeekBarPreference pref=(SeekBarPreference) preference;
-                boolean modify=!original_config.load_config_entry(pref.getKey()).equals((cur_val));
-                pref.set_is_modify_color(modify);
+                ((SeekBarPreference) preference).set_is_modify_color(modify);
             }
             else if(preference instanceof ListPreference){
-                ListPreference pref=(ListPreference) preference;
-                boolean modify=!original_config.load_config_entry(pref.getKey()).equals((cur_val));
-                pref.set_is_modify_color(modify);
+                ((ListPreference) preference).set_is_modify_color(modify);
             }
         }
 
@@ -900,10 +942,10 @@ public class EmulatorSettings extends AppCompatActivity {
 
 
         if(config_path!=null) {
-            fragment=new SettingsFragment(config_path,false);
+            fragment=SettingsFragment.newInstance(config_path,false);
         }
         else{
-            fragment=new SettingsFragment(Application.get_global_config_file().getAbsolutePath(),true);
+            fragment=SettingsFragment.newInstance(Application.get_global_config_file().getAbsolutePath(),true);
         }
 
         getSupportFragmentManager().beginTransaction().replace(android.R.id.content,fragment).commit();
