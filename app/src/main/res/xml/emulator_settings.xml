@@ -545,6 +545,9 @@
     <!-- Performance Monitoring -->
     <PreferenceScreen app:title="@string/perf_monitoring"
         app:key="PerfMonitoring">
+        <aenu.preference.CheckBoxPreference app:title="Show Performance Overlay"
+            app:key="Performance|show_performance_overlay"
+            app:summary="Display real-time FPS, memory, and thermal status overlay" />
         <aenu.preference.CheckBoxPreference app:title="@string/show_gmem_stats"
             app:key="PerfMonitoring|show_gmem_stats"
             app:summary="@string/show_gmem_stats_hint" />
