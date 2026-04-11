@@ -34,6 +34,27 @@ public class Emulator extends aenu.emulator.Emulator{
     public  native void setup_uri_info_list_file(String path);
     public native String simple_device_info();
     public native String generate_config_xml(String config_path);
+
+    /**
+     * Push performance metrics snapshot to native code.
+     * Called periodically (every 1-2s) and on thermal state transitions.
+     *
+     * @param fps Current frames per second
+     * @param frameTimeMs Average frame time in milliseconds
+     * @param perfState Performance state (0=NORMAL, 1=PRESSURED, 2=THROTTLING, 3=CRITICAL)
+     * @param memoryUsedMB Memory used in MB
+     * @param memoryTotalMB Total memory in MB
+     * @param temperature Device temperature in Celsius
+     */
+    public native void push_performance_metrics(
+            float fps,
+            float frameTimeMs,
+            int perfState,
+            float memoryUsedMB,
+            float memoryTotalMB,
+            float temperature
+    );
+
     public static int nc_open_uri_fd(Context ctx,Uri uri) {
         ParcelFileDescriptor pfd_ = null;
         try {
