@@ -317,9 +317,4 @@ public class PerformanceMonitor {
         return false;
     }
 
-    public void pushMetricsToNative() {
-        // Placeholder for JNI bridge to push metrics to native code
-        // This would call a native method to expose Java-side metrics to C++ profiling
-        // For now, this is a no-op until the native bridge is implemented
-    }
 }

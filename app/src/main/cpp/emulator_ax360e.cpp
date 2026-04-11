@@ -781,7 +781,7 @@ int register_ax360e_Emulator(JNIEnv* env){
             { "setup_uri_info_list_file", "(Ljava/lang/String;)V", (void *) j_setup_uri_info_list_file },
             {"simple_device_info", "()Ljava/lang/String;", (void *) j_simple_device_info},
             {"generate_config_xml", "(Ljava/lang/String;)Ljava/lang/String;", (void *) generate_config_xml},
-            {"push_performance_metrics", "(FFIIFFF)V", (void *) j_push_performance_metrics}
+            {"push_performance_metrics", "(FFIFFF)V", (void *) j_push_performance_metrics}
     };
     return env->RegisterNatives(g_class_Emulator,methods, sizeof(methods)/sizeof(methods[0]));
 }

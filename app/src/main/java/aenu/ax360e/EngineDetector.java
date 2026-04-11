@@ -40,7 +40,8 @@ public class EngineDetector {
         }
 
         try {
-            String json = Application.load_assets_file(MAPPINGS_FILE);
+            byte[] jsonBytes = Application.load_assets_file(context, MAPPINGS_FILE);
+            String json = jsonBytes == null ? null : new String(jsonBytes, java.nio.charset.StandardCharsets.UTF_8);
             if (json == null) {
                 Log.e(TAG, "Failed to load engine mappings file");
                 initialized = true;
@@ -66,7 +67,7 @@ public class EngineDetector {
                 }
 
                 JSONObject engineMappings = mappings.getJSONObject(engineName);
-                for (Iterator<String> titleIt = engineMappings.keys(); it.hasNext(); ) {
+                for (Iterator<String> titleIt = engineMappings.keys(); titleIt.hasNext(); ) {
                     String key = titleIt.next();
 
                     // Skip comments in engine sections
