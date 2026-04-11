@@ -11,15 +11,17 @@ import java.util.List;
 /**
  * Resolves and applies the final launch environment for the emulator.
  * This is the single authoritative path for environment variable setup,
- * combining Turnip driver configuration, per-game driver selection, and global settings.
+ * combining Turnip driver configuration, per-game driver selection, engine profiles, and global settings.
  */
 public class LaunchEnvironmentResolver {
     private static final String TAG = "LaunchEnvResolver";
 
     private final Context context;
+    private final EngineProfileManager engineProfileManager;
 
     public LaunchEnvironmentResolver(Context context) {
         this.context = context;
+        this.engineProfileManager = new EngineProfileManager(context);
     }
 
     /**
@@ -35,11 +37,26 @@ public class LaunchEnvironmentResolver {
         GameProfileManager profileManager = new GameProfileManager(context);
         GameProfile profile = profileManager.getProfile(gameUri);
 
+        // Detect engine and get engine profile
+        EngineProfile engineProfile = engineProfileManager.detectAndGetProfile(
+                gameUri, profile.engineOverride);
+
+        // Log engine detection
+        if (engineProfile != null) {
+            Log.i(TAG, "Engine detected: " + engineProfile.getEngine().getDisplayName());
+            Log.i(TAG, "Engine profile: " + engineProfile.getDescription());
+        } else {
+            Log.i(TAG, "No engine profile applied (unknown or no detection)");
+        }
+
         // Resolve driver selection
         applyDriverSelection(profile);
 
         // Apply Turnip environment variables
         applyTurnipEnvironment();
+
+        // Note: Engine profile config overrides are applied in the native config system
+        // This resolver only handles environment variables
 
         // Log final environment for debugging
         logFinalEnvironment();
