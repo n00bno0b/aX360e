@@ -1,3 +1,4 @@
+cat << 'INNEREOF' > app/src/main/res/layout/activity_emulator.xml
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
@@ -31,3 +32,4 @@
         android:padding="8dp"/>
 
 </FrameLayout>
+INNEREOF
