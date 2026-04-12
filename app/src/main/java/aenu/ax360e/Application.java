@@ -137,6 +137,21 @@ public class Application extends android.app.Application{
         // Initialize custom driver environment
         CustomDriverUtils.setupDriverEnv(this);
 
+        // Apply Turnip environment variables if custom driver is installed.
+        // This must run before Emulator.load_library() so env vars are in place for dlopen.
+        // LaunchEnvironmentResolver re-applies these at game-launch time with per-game overrides.
+        if (CustomDriverUtils.isDriverInstalled(this)) {
+            try {
+                TurnipEnvManager turnipMgr = new TurnipEnvManager(this);
+                for (TurnipEnvManager.EnvVar var : turnipMgr.buildEnvironmentVariables()) {
+                    android.system.Os.setenv(var.name, var.value, true);
+                    android.util.Log.d("Application", "Set Turnip env: " + var.toString());
+                }
+            } catch (android.system.ErrnoException e) {
+                android.util.Log.e("Application", "Failed to set Turnip environment variables", e);
+            }
+        }
+
         if(!should_delay_load())
             Emulator.load_library();
 

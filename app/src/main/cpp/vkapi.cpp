@@ -20,16 +20,6 @@
 
 namespace {
     void* lib_handle = nullptr;
-
-    void set_turnip_environment_variables() {
-        // Essential Mesa Turnip environment variables for Adreno performance
-        // and correctness.
-        setenv("TU_DEBUG", "sysmem,gmem", 1);
-        setenv("FD_DEV_FEATURES", "tile_image", 1);
-        setenv("MESA_VK_WSI_PRESENT_MODE", "mailbox", 1);
-        setenv("MESA_LOADER_DRIVER_OVERRIDE", "zink", 0); // fallback if needed
-        LOGI("Mesa Turnip environment variables configured");
-    }
 }
 
 void vk_load(const char* lib_path, bool is_adreno_custom) {
@@ -45,23 +35,25 @@ void vk_load(const char* lib_path, bool is_adreno_custom) {
 
     LOGI("Loading Vulkan library from path: %s (custom=%d)", lib_path, is_adreno_custom);
 
-    // Set environment variables before loading driver
-    if (is_adreno_custom) {
-        LOGI("Loading custom Adreno driver (likely Mesa Turnip)");
-        set_turnip_environment_variables();
-    }
-
     // On Android 12+, we need to satisfy system dependencies like libcutils.so
     // which are blocked in the default app namespace. By pre-loading our dummy
     // stubs, we satisfy the dynamic linker.
     if (is_adreno_custom) {
-        const char* dummy_libs[] = {"libcutils.so", "libutils.so", "libhardware.so", "libhidlbase.so"};
+        LOGI("Loading custom Adreno driver (likely Mesa Turnip)");
+        // Pre-load Android stub libraries to satisfy dependencies
+        const char* dummy_libs[] = {"libcutils.so", "libutils.so", "libhardware.so", "libhidlbase.so", "libsync.so"};
         for (const char* lib : dummy_libs) {
-            dlopen(lib, RTLD_NOW | RTLD_GLOBAL);
+            void* stub_handle = dlopen(lib, RTLD_NOW | RTLD_GLOBAL);
+            if (stub_handle) {
+                LOGI("Pre-loaded stub library: %s", lib);
+            } else {
+                LOGW("Failed to pre-load stub library %s: %s", lib, dlerror());
+            }
         }
     }
 
-    lib_handle = dlopen(lib_path, RTLD_NOW | RTLD_GLOBAL);
+    // Use RTLD_NODELETE to prevent unloading (GPU drivers maintain global state)
+    lib_handle = dlopen(lib_path, RTLD_NOW | RTLD_GLOBAL | RTLD_NODELETE);
 
     if (!lib_handle) {
         const char* err = dlerror();
@@ -105,6 +97,9 @@ void vk_unload() {
         return;
     }
 
+    // The driver was loaded with RTLD_NODELETE, so dlclose() decrements the
+    // reference count but does NOT unload the image from memory. This is
+    // intentional: GPU drivers maintain global state and must not be evicted.
     dlclose(lib_handle);
     lib_handle = nullptr;
 
@@ -112,7 +107,7 @@ void vk_unload() {
 #include "vksym.h"
 #undef VKFN
 
-    LOGI("Vulkan library unloaded successfully");
+    LOGI("Vulkan driver reference released (library remains resident due to RTLD_NODELETE)");
 }
 
 bool vk_is_loaded() {

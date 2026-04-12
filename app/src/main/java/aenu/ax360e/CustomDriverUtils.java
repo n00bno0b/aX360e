@@ -37,6 +37,9 @@ public class CustomDriverUtils {
     // Decompression bomb limits to prevent OOM from malicious zip files
     private static final long MAX_TOTAL_UNCOMPRESSED_SIZE = 100 * 1024 * 1024; // 100MB total
     private static final long MAX_SINGLE_FILE_SIZE = 50 * 1024 * 1024; // 50MB per file
+    // Saved LD_LIBRARY_PATH value before we prepend custom driver directories,
+    // so clearDriverEnv() can restore it rather than unconditionally unsetting it.
+    private static volatile String savedLdLibraryPath = null;
 
     public static File getDriverDirectory(Context context) {
         return context.getDir(DRIVER_DIR_NAME, Context.MODE_PRIVATE);
@@ -185,21 +188,38 @@ public class CustomDriverUtils {
         File icdFile = new File(dir, "vk_icd.json");
         if (icdFile.exists()) {
             try {
+                // Confirm a valid driver .so exists before mutating the process environment.
+                // On Android the system Vulkan loader ignores VK_ICD_FILENAMES,
+                // so we export the direct .so path for native code to dlopen.
+                String soPath = findDriverSoPath(dir);
+                if (soPath == null) {
+                    Log.w(TAG, "vk_icd.json exists but no valid vulkan .so found; skipping env setup");
+                    return;
+                }
+
                 ensureAndroidStubLibraries(context);
+
+                // Set LD_LIBRARY_PATH to include driver and stub directories so that
+                // the dynamic linker can resolve transitive dependencies.
+                // Save the original value first so clearDriverEnv() can restore it.
+                File stubDir = new File(dir.getParentFile(), ANDROID_STUB_DIR_NAME);
+                String currentPath = System.getenv("LD_LIBRARY_PATH");
+                savedLdLibraryPath = currentPath;
+                StringBuilder newPath = new StringBuilder();
+                newPath.append(dir.getAbsolutePath());
+                newPath.append(":").append(stubDir.getAbsolutePath());
+                if (currentPath != null && !currentPath.isEmpty()) {
+                    newPath.append(":").append(currentPath);
+                }
+                Os.setenv("LD_LIBRARY_PATH", newPath.toString(), true);
+                Log.i(TAG, "LD_LIBRARY_PATH set to include driver and stub directories");
 
                 // Set ICD env vars (used by desktop Vulkan loaders, informational on Android)
                 Os.setenv("VK_ICD_FILENAMES", icdFile.getAbsolutePath(), true);
                 Os.setenv("VK_DRIVER_FILES", icdFile.getAbsolutePath(), true);
 
-                // On Android the system Vulkan loader ignores VK_ICD_FILENAMES,
-                // so we also export the direct .so path for native code to dlopen.
-                String soPath = findDriverSoPath(dir);
-                if (soPath != null) {
-                    Os.setenv("CUSTOM_DRIVER_PATH", soPath, true);
-                    Log.i(TAG, "Custom GPU driver path set: " + soPath);
-                }
-
-                Log.i(TAG, "Custom GPU driver environment variables set.");
+                Os.setenv("CUSTOM_DRIVER_PATH", soPath, true);
+                Log.i(TAG, "Custom GPU driver environment variables set. Driver: " + soPath);
             } catch (ErrnoException e) {
                 Log.e(TAG, "Failed to set custom driver env variables", e);
             }
@@ -217,6 +237,14 @@ public class CustomDriverUtils {
             Os.unsetenv("CUSTOM_DRIVER_PATH");
             Os.unsetenv("VK_ICD_FILENAMES");
             Os.unsetenv("VK_DRIVER_FILES");
+            // Restore LD_LIBRARY_PATH to whatever it was before setupDriverEnv() modified it,
+            // so system or other components' paths are not inadvertently removed.
+            if (savedLdLibraryPath != null) {
+                Os.setenv("LD_LIBRARY_PATH", savedLdLibraryPath, true);
+            } else {
+                Os.unsetenv("LD_LIBRARY_PATH");
+            }
+            savedLdLibraryPath = null;
         } catch (ErrnoException e) {
             Log.w(TAG, "Failed to clear custom driver env vars", e);
         }
