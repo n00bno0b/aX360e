@@ -23,7 +23,6 @@
 #if XE_PLATFORM_LINUX
 #include <dlfcn.h>
 #if XE_PLATFORM_ANDROID || XE_PLATFORM_AX360E
-#include <android/dlext.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdint.h>
@@ -31,16 +30,6 @@
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <unistd.h>
-// android_get_exported_namespace is a bionic private API exported from
-// libdl.so but NOT declared in public NDK headers. Declare it ourselves as a
-// weak symbol so: (a) the compiler accepts the call, (b) if the dynamic linker
-// can resolve it we get a real function pointer, and (c) if it can't we get
-// NULL and fall back to an explicit dlopen("libdl.so") + dlsym lookup.
-extern "C" __attribute__((weak))
-struct android_namespace_t* android_get_exported_namespace(const char* name);
-#ifndef MFD_CLOEXEC
-#define MFD_CLOEXEC 0x0001U
-#endif
 #endif
 #elif XE_PLATFORM_WIN32
 #include "xenia/base/platform_win.h"
@@ -58,8 +47,6 @@ namespace vulkan {
 
 #if XE_PLATFORM_ANDROID || XE_PLATFORM_AX360E
 namespace {
-
-using GetAndroidNamespaceFn = android_namespace_t* (*)(const char* name);
 
 struct AndroidHwModule;
 struct AndroidHwDevice;
@@ -441,98 +428,11 @@ std::unique_ptr<VulkanInstance> VulkanInstance::Create(
   // like libcutils.so that Turnip depends on — these are blocked in the app's
   // classloader namespace (clns-N) on Android 12+.
 #if XE_PLATFORM_ANDROID || XE_PLATFORM_AX360E
-  if (is_custom) {
-    XELOGI("Preparing Android stub preload for custom driver: {}",
-           loader_library_name);
-    PreloadAndroidStubLibraries(loader_library_name);
-    // android_get_exported_namespace is declared in <android/dlext.h> since API
-    // 24 and exported by libdl.so. We can't reach it via dlsym(RTLD_DEFAULT)
-    // from within a dlopen'd library on Android (visibility is scoped to the
-    // caller's linker namespace), so we resolve it two ways:
-    //   1. Directly (strong link through libdl.so at load time).
-    //   2. Via an explicit dlopen("libdl.so") + dlsym fallback, in case the
-    //      NDK we built against had the symbol stripped for our target API.
-    XELOGI("Resolving android_get_exported_namespace for custom driver load");
-    GetAndroidNamespaceFn fn_get_ns = ResolveAndroidGetExportedNamespace();
-    const char* ns_names[] = {"sphal", "vndk", "default", nullptr};
-    if (fn_get_ns) {
-      for (int i = 0; ns_names[i] && !vulkan_instance->loader_; i++) {
-        android_namespace_t* ns = fn_get_ns(ns_names[i]);
-        if (!ns) {
-          XELOGW("Namespace '{}' not found", ns_names[i]);
-          continue;
-        }
-        android_dlextinfo extinfo = {};
-        extinfo.flags = ANDROID_DLEXT_USE_NAMESPACE;
-        extinfo.library_namespace = ns;
-        XELOGI("Attempting android_dlopen_ext for custom driver via '{}' namespace",
-               ns_names[i]);
-        vulkan_instance->loader_ =
-            android_dlopen_ext(loader_library_name, RTLD_NOW | RTLD_GLOBAL, &extinfo);
-        if (vulkan_instance->loader_) {
-          XELOGI("Custom driver loaded via '{}' namespace", ns_names[i]);
-        } else {
-          XELOGW("android_dlopen_ext with '{}' namespace failed: {}",
-                 ns_names[i], dlerror());
-        }
-      }
-    } else {
-      XELOGW(
-          "android_get_exported_namespace unavailable; skipping namespace "
-          "loading and falling back to memfd/direct custom-driver load "
-          "attempts");
-      android_namespace_lookup_unavailable = true;
-    }
-    if (!vulkan_instance->loader_) {
-      if (fn_get_ns) {
-        for (int i = 0; ns_names[i] && !vulkan_instance->loader_; i++) {
-          android_namespace_t* ns = fn_get_ns(ns_names[i]);
-          if (!ns) {
-            continue;
-          }
-          XELOGI("Attempting memfd-backed custom driver load via '{}' namespace",
-                 ns_names[i]);
-          vulkan_instance->loader_ =
-              TryLoadCustomDriverFromMemFd(loader_library_name, ns, ns_names[i]);
-        }
-      }
-      if (!vulkan_instance->loader_) {
-        XELOGI("Attempting memfd-backed custom driver load without explicit namespace");
-        vulkan_instance->loader_ =
-            TryLoadCustomDriverFromMemFd(loader_library_name, nullptr, nullptr);
-      }
-      if (vulkan_instance->loader_) {
-        active_loader_name += " [memfd]";
-      } else {
-        XELOGI(
-            "Memfd-backed custom driver load did not succeed; falling back "
-            "to direct dlopen");
-      }
-    }
-    if (!vulkan_instance->loader_) {
-      XELOGI("Attempting direct dlopen for custom driver after stub preload: {}",
-             loader_library_name);
-      dlerror();
-      vulkan_instance->loader_ =
-          dlopen(loader_library_name, RTLD_NOW | RTLD_GLOBAL);
-      if (vulkan_instance->loader_) {
-        XELOGI("Custom driver loaded via direct dlopen after stub preload");
-      } else {
-        const char* direct_load_error = dlerror();
-        custom_loader_error =
-            direct_load_error ? direct_load_error : "unknown error";
-        XELOGW("Direct dlopen for custom driver failed after stub preload: {}",
-               custom_loader_error);
-      }
-    }
-    if (!vulkan_instance->loader_ && custom_loader_error.empty() &&
-        android_namespace_lookup_unavailable) {
-      custom_loader_error =
-          "android_get_exported_namespace unavailable and memfd/direct custom "
-          "driver load paths failed";
-    }
-  } else {
-    vulkan_instance->loader_ = dlopen(loader_library_name, RTLD_NOW | RTLD_GLOBAL);
+  vulkan_instance->loader_ = dlopen(loader_library_name, RTLD_NOW | RTLD_GLOBAL);
+  if (!vulkan_instance->loader_ && is_custom) {
+      const char* direct_load_error = dlerror();
+      custom_loader_error = direct_load_error ? direct_load_error : "unknown error";
+      XELOGW("Direct dlopen for custom driver failed: {}", custom_loader_error);
   }
 #else
   vulkan_instance->loader_ = dlopen(loader_library_name, RTLD_NOW | RTLD_GLOBAL);
