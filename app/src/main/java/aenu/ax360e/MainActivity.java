@@ -402,6 +402,10 @@ public class MainActivity extends AppCompatActivity {
             startActivity(new Intent(this,AboutActivity.class));
             return true;
         }
+        else if(item_id==R.id.menu_vulkan_test){
+            startActivity(new Intent(this,VulkanTestActivity.class));
+            return true;
+        }
         else if(item_id==R.id.menu_settings){
             startActivity(new Intent(this,EmulatorSettings.class));
             return true;

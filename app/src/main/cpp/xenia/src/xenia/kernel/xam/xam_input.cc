@@ -265,6 +265,12 @@ X_HRESULT_result_t XamInputNonControllerSetRaw_entry(dword_t buffer_length,
 }
 DECLARE_XAM_EXPORT1(XamInputNonControllerSetRaw, kInput, kStub);
 
+dword_result_t XamInputGetUserVibrationLevel_entry(dword_t user_index) {
+  // Returns user vibration level (0-3). Just returning 3 (max).
+  return 3;
+}
+DECLARE_XAM_EXPORT1(XamInputGetUserVibrationLevel, kInput, kStub);
+
 }  // namespace xam
 }  // namespace kernel
 }  // namespace xe

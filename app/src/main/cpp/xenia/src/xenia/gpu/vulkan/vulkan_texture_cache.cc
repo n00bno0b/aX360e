@@ -26,6 +26,22 @@ namespace xe {
 namespace gpu {
 namespace vulkan {
 
+namespace {
+
+bool IsMobileCriticalTextureFormat(xenos::TextureFormat format) {
+  switch (format) {
+    case xenos::TextureFormat::k_2_10_10_10:
+    case xenos::TextureFormat::k_2_10_10_10_AS_16_16_16_16:
+    case xenos::TextureFormat::k_Cr_Y1_Cb_Y0_REP:
+    case xenos::TextureFormat::k_Y1_Cr_Y0_Cb_REP:
+      return true;
+    default:
+      return false;
+  }
+}
+
+}  // namespace
+
 // Generated with `xb buildshaders`.
 namespace shaders {
 #include "xenia/gpu/shaders/bytecode/vulkan_spirv/texture_load_128bpb_cs.h"
@@ -52,6 +68,10 @@ namespace shaders {
 #include "xenia/gpu/shaders/bytecode/vulkan_spirv/texture_load_dxt5_rgba8_cs.h"
 #include "xenia/gpu/shaders/bytecode/vulkan_spirv/texture_load_dxt5a_r8_cs.h"
 #include "xenia/gpu/shaders/bytecode/vulkan_spirv/texture_load_gbgr8_rgb8_cs.h"
+#include "xenia/gpu/shaders/bytecode/vulkan_spirv/texture_load_r10g10b10a2_rgba16_float_cs.h"
+#include "xenia/gpu/shaders/bytecode/vulkan_spirv/texture_load_r10g10b10a2_rgba16_float_scaled_cs.h"
+#include "xenia/gpu/shaders/bytecode/vulkan_spirv/texture_load_r10g10b10a2_rgba16_snorm_float_cs.h"
+#include "xenia/gpu/shaders/bytecode/vulkan_spirv/texture_load_r10g10b10a2_rgba16_snorm_float_scaled_cs.h"
 #include "xenia/gpu/shaders/bytecode/vulkan_spirv/texture_load_r10g11b11_rgba16_cs.h"
 #include "xenia/gpu/shaders/bytecode/vulkan_spirv/texture_load_r10g11b11_rgba16_scaled_cs.h"
 #include "xenia/gpu/shaders/bytecode/vulkan_spirv/texture_load_r10g11b11_rgba16_snorm_cs.h"
@@ -1001,6 +1021,15 @@ std::unique_ptr<TextureCache::Texture> VulkanTextureCache::CreateTexture(
     }
   }
   if (formats[0] == VK_FORMAT_UNDEFINED) {
+    const char* guest_format_name = FormatInfo::GetName(key.format);
+    XELOGGPU(
+        "VulkanTextureCache: Unable to create texture for guest format {} "
+        "(enum={}, {}x{}x{}, signed_separate={}, scaled_resolve={}) because "
+        "no supported host format was selected",
+        guest_format_name ? guest_format_name : "<unknown>",
+        uint32_t(key.format), key.GetWidth(), key.GetHeight(),
+        key.GetDepthOrArraySize(), key.signed_separate ? 1 : 0,
+        key.scaled_resolve ? 1 : 0);
     // TODO(Triang3l): If there's no best format, set that a format unsupported
     // by the emulator completely is used to report at the end of the frame.
     return nullptr;
@@ -1751,8 +1780,36 @@ bool VulkanTextureCache::Initialize() {
                                           VK_FORMAT_R16G16B16A16_SNORM,
                                           &r16g16b16a16_snorm_properties);
   VkFormatProperties format_properties;
-  // TODO(Triang3l): k_2_10_10_10 signed -> filterable R16G16B16A16_SFLOAT
-  // (enough storage precision, possibly unwanted filtering precision change).
+  HostFormatPair& host_format_2_10_10_10 =
+      host_formats_[uint32_t(xenos::TextureFormat::k_2_10_10_10)];
+  assert_true(host_format_2_10_10_10.format_unsigned.format ==
+              VK_FORMAT_A2B10G10R10_UNORM_PACK32);
+  assert_true(host_format_2_10_10_10.format_signed.format ==
+              VK_FORMAT_A2B10G10R10_SNORM_PACK32);
+  ifn.vkGetPhysicalDeviceFormatProperties(
+      physical_device, VK_FORMAT_A2B10G10R10_SNORM_PACK32, &format_properties);
+  if ((format_properties.optimalTilingFeatures & kLinearFilterFeatures) !=
+      kLinearFilterFeatures) {
+    host_format_2_10_10_10.format_signed.load_shader =
+        kLoadShaderIndexR10G10B10A2SNormToRGBA16Float;
+    host_format_2_10_10_10.format_signed.format =
+        VK_FORMAT_R16G16B16A16_SFLOAT;
+    host_format_2_10_10_10.unsigned_signed_compatible = false;
+  }
+  HostFormatPair& host_format_2_10_10_10_as_16_16_16_16 =
+      host_formats_[uint32_t(xenos::TextureFormat::k_2_10_10_10_AS_16_16_16_16)];
+  assert_true(host_format_2_10_10_10_as_16_16_16_16.format_unsigned.format ==
+              VK_FORMAT_A2B10G10R10_UNORM_PACK32);
+  assert_true(host_format_2_10_10_10_as_16_16_16_16.format_signed.format ==
+              VK_FORMAT_A2B10G10R10_SNORM_PACK32);
+  if ((format_properties.optimalTilingFeatures & kLinearFilterFeatures) !=
+      kLinearFilterFeatures) {
+    host_format_2_10_10_10_as_16_16_16_16.format_signed.load_shader =
+        kLoadShaderIndexR10G10B10A2SNormToRGBA16Float;
+    host_format_2_10_10_10_as_16_16_16_16.format_signed.format =
+        VK_FORMAT_R16G16B16A16_SFLOAT;
+    host_format_2_10_10_10_as_16_16_16_16.unsigned_signed_compatible = false;
+  }
   // k_Cr_Y1_Cb_Y0_REP, k_Y1_Cr_Y0_Cb_REP.
   HostFormatPair& host_format_gbgr =
       host_formats_[uint32_t(xenos::TextureFormat::k_Cr_Y1_Cb_Y0_REP)];
@@ -2052,6 +2109,19 @@ bool VulkanTextureCache::Initialize() {
             guest_format_name, uint32_t(best_host_format.format_signed.format));
       }
     }
+    if (IsMobileCriticalTextureFormat(xenos::TextureFormat(i))) {
+      XELOGGPU(
+          "VulkanTextureCache: Mobile audit {} => unsigned(format={}, "
+          "shader={}, filterable={}), signed(format={}, shader={}, "
+          "filterable={})",
+          guest_format_name ? guest_format_name : "<unknown>",
+          uint32_t(host_format.format_unsigned.format),
+          uint32_t(host_format.format_unsigned.load_shader),
+          host_format.format_unsigned.linear_filterable ? 1 : 0,
+          uint32_t(host_format.format_signed.format),
+          uint32_t(host_format.format_signed.load_shader),
+          host_format.format_signed.linear_filterable ? 1 : 0);
+    }
 
     // Signednesses with different load shaders must have the data loaded
     // differently, therefore can't share the image even if the format is the
@@ -2182,6 +2252,13 @@ bool VulkanTextureCache::Initialize() {
   load_shader_code[kLoadShaderIndexBGRG8ToRGB8] =
       std::make_pair(shaders::texture_load_bgrg8_rgb8_cs,
                      sizeof(shaders::texture_load_bgrg8_rgb8_cs));
+  load_shader_code[kLoadShaderIndexR10G10B10A2UNormToRGBA16Float] =
+      std::make_pair(shaders::texture_load_r10g10b10a2_rgba16_float_cs,
+                     sizeof(shaders::texture_load_r10g10b10a2_rgba16_float_cs));
+  load_shader_code[kLoadShaderIndexR10G10B10A2SNormToRGBA16Float] =
+      std::make_pair(shaders::texture_load_r10g10b10a2_rgba16_snorm_float_cs,
+                     sizeof(
+                         shaders::texture_load_r10g10b10a2_rgba16_snorm_float_cs));
   load_shader_code[kLoadShaderIndexR10G11B11ToRGBA16] =
       std::make_pair(shaders::texture_load_r10g11b11_rgba16_cs,
                      sizeof(shaders::texture_load_r10g11b11_rgba16_cs));
@@ -2272,6 +2349,16 @@ bool VulkanTextureCache::Initialize() {
     load_shader_code_scaled[kLoadShaderIndexRGBA4ToARGB4] = std::make_pair(
         shaders::texture_load_r4g4b4a4_a4r4g4b4_scaled_cs,
         sizeof(shaders::texture_load_r4g4b4a4_a4r4g4b4_scaled_cs));
+    load_shader_code_scaled[kLoadShaderIndexR10G10B10A2UNormToRGBA16Float] =
+        std::make_pair(
+            shaders::texture_load_r10g10b10a2_rgba16_float_scaled_cs,
+            sizeof(
+                shaders::texture_load_r10g10b10a2_rgba16_float_scaled_cs));
+    load_shader_code_scaled[kLoadShaderIndexR10G10B10A2SNormToRGBA16Float] =
+        std::make_pair(
+            shaders::texture_load_r10g10b10a2_rgba16_snorm_float_scaled_cs,
+            sizeof(shaders::
+                       texture_load_r10g10b10a2_rgba16_snorm_float_scaled_cs));
     load_shader_code_scaled[kLoadShaderIndexR10G11B11ToRGBA16] = std::make_pair(
         shaders::texture_load_r10g11b11_rgba16_scaled_cs,
         sizeof(shaders::texture_load_r10g11b11_rgba16_scaled_cs));

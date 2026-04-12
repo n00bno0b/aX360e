@@ -75,6 +75,7 @@ target_sources(emu
         cpuinfo.cpp
         vkapi.cpp
         vkutil.cpp
+        vulkan_test_jni.cpp
 )
 # python xenia-build premake --target_os=android --devenv=cmake
 #add_subdirectory(xenia/ab EXCLUDE_FROM_ALL)
@@ -150,6 +151,11 @@ target_compile_options(xenia-cpu-backend-a64 PRIVATE
 )
 endif()
 
+add_library(cutils SHARED dummy_libs.cpp)
+add_library(utils SHARED dummy_libs.cpp)
+add_library(hardware SHARED dummy_libs.cpp)
+add_library(hidlbase SHARED dummy_libs.cpp)
+
 target_include_directories(emu PRIVATE
         xenia
         xenia/src
@@ -195,6 +201,10 @@ target_link_libraries(emu
         pugixml
         xenia-hid-skylander
         xenia-patcher
+        cutils
+        utils
+        hardware
+        hidlbase
 )
 
 #xenia-patcher

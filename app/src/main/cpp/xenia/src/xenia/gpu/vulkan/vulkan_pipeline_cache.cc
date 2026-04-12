@@ -15,6 +15,7 @@
 
 #include "third_party/fmt/include/fmt/format.h"
 #include "xenia/base/assert.h"
+#include "xenia/base/cvar.h"
 #include "xenia/base/filesystem.h"
 #include "xenia/base/logging.h"
 #include "xenia/base/math.h"
@@ -30,6 +31,12 @@
 #include "xenia/gpu/vulkan/vulkan_shader.h"
 #include "xenia/gpu/xenos.h"
 #include "xenia/ui/vulkan/vulkan_util.h"
+
+DEFINE_bool(
+    vulkan_experimental_tile_images, true,
+    "Enable the experimental VK_EXT_shader_tile_image path for Vulkan FSI on "
+    "supported Adreno/Turnip devices.",
+    "GPU");
 
 namespace xe {
 namespace gpu {
@@ -60,6 +67,30 @@ bool VulkanPipelineCache::Initialize() {
       render_target_cache_.msaa_2x_attachments_supported(),
       render_target_cache_.msaa_2x_no_attachments_supported(),
       edram_fragment_shader_interlock);
+
+  bool tile_images_supported =
+      vulkan_device->properties().isAdrenoGPU &&
+      vulkan_device->properties().isTurnipDriver &&
+      vulkan_device->properties().shaderTileImageColorReadAccess;
+  bool tile_images_enabled =
+      edram_fragment_shader_interlock && tile_images_supported &&
+      cvars::vulkan_experimental_tile_images;
+  shader_translator_->set_edram_tile_image_enabled(tile_images_enabled);
+
+  if (edram_fragment_shader_interlock) {
+    if (tile_images_enabled) {
+      XELOGI(
+          "VulkanPipelineCache: experimental tile-image path enabled on "
+          "Adreno/Turnip");
+    } else if (tile_images_supported) {
+      XELOGI(
+          "VulkanPipelineCache: tile-image path supported but disabled; set "
+          "vulkan_experimental_tile_images=true to test on hardware");
+    } else {
+      XELOGI(
+          "VulkanPipelineCache: using stable FSI path without tile images");
+    }
+  }
 
   if (edram_fragment_shader_interlock) {
     std::vector<uint8_t> depth_only_fragment_shader_code =

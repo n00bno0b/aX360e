@@ -6,6 +6,7 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
+import android.provider.DocumentsContract;
 import android.util.Log;
 import android.widget.Toast;
 
@@ -792,13 +793,27 @@ public class EmulatorSettings extends AppCompatActivity {
                 }
                 Toast.makeText(requireContext(), getString(R.string.custom_driver_installed_success), Toast.LENGTH_SHORT).show();
             } else {
-                Toast.makeText(requireContext(), getString(R.string.custom_driver_installed_failed), Toast.LENGTH_SHORT).show();
+                String failureReason = CustomDriverUtils.getLastDriverError();
+                if (gpu_pref != null) {
+                    gpu_pref.setSummary(failureReason != null && !failureReason.isEmpty()
+                            ? "Driver import failed: " + failureReason
+                            : getString(R.string.es_hint_custom_drivers_gpu));
+                }
+                String toastMessage = getString(R.string.custom_driver_installed_failed);
+                if (failureReason != null && !failureReason.isEmpty()) {
+                    toastMessage += ": " + failureReason;
+                }
+                Toast.makeText(requireContext(), toastMessage, Toast.LENGTH_LONG).show();
             }
         }
 
         void open_custom_driver_gpu_picker(){
-            Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
             intent.setType("application/zip");
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            intent.addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+            intent.putExtra(DocumentsContract.EXTRA_EXCLUDE_SELF, true);
             ((AppCompatActivity)requireActivity()).startActivityForResult(intent, REQUEST_CODE_CUSTOM_DRIVER_GPU);
         }
 
@@ -963,8 +978,17 @@ public class EmulatorSettings extends AppCompatActivity {
             if(fragment!=null)
                 fragment.setup_custom_driver_type(type);
         } else if (requestCode==REQUEST_CODE_CUSTOM_DRIVER_GPU) {
-            if (fragment!=null && data.getData() != null)
-                fragment.setup_custom_driver_gpu(data.getData());
+            Uri uri = data.getData();
+            if (uri != null) {
+                int takeFlags = data.getFlags() & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                try {
+                    getContentResolver().takePersistableUriPermission(uri, takeFlags);
+                } catch (SecurityException e) {
+                    Log.w("EmulatorSettings", "Failed to persist custom driver URI permission: " + uri, e);
+                }
+            }
+            if (fragment!=null && uri != null)
+                fragment.setup_custom_driver_gpu(uri);
         }
     }
 }

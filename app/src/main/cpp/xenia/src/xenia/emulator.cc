@@ -1157,7 +1157,8 @@ static std::string format_version(xex2_version version) {
         // to make sure any HostPathDevices are ready beforehand. (see comment above
         // cache:\ device registration for more info about why)
         auto null_paths = {std::string("\\Partition0"), std::string("\\Cache0"),
-                           std::string("\\Cache1")};
+                           std::string("\\Cache1"), std::string("\\Device"),
+                           std::string("\\Media"), std::string("\\update")};
         auto null_device =
                 std::make_unique<vfs::NullDevice>("\\Device\\Harddisk0", null_paths);
         if (null_device->Initialize()) {

@@ -146,8 +146,12 @@ void ImGuiDrawer::Initialize() {
       kProggyTinyCompressedDataBase85, 10.0f, &font_config, font_glyph_ranges);
   // TODO(benvanik): jp font on other platforms?
   // https://github.com/Koruri/kibitaki looks really good, but is 1.5MiB.
+#if XE_PLATFORM_ANDROID || XE_PLATFORM_AX360E
+  const char* jp_font_path = ""; // Disabled on Android to prevent ImGui abort() on unreadable/unparseable system fonts
+#else
   const char* jp_font_path = "C:\\Windows\\Fonts\\msgothic.ttc";
-  if (std::filesystem::exists(jp_font_path)) {
+#endif
+  if (jp_font_path[0] != '\0' && std::filesystem::exists(jp_font_path)) {
     ImFontConfig jp_font_config;
     jp_font_config.MergeMode = true;
     jp_font_config.OversampleH = jp_font_config.OversampleV = 1;

@@ -305,6 +305,21 @@ xesl_float4 XeUnpackR10G10B10A2UNorm(uint p) {
          xesl_float2(1.0 / 1023.0, 1.0 / 3.0).xxxy;
 }
 
+float XeUnpackSNorm10(uint p) {
+  return max(-1.0, float((int(p) << 22) >> 22) * (1.0 / 511.0));
+}
+
+float XeUnpackSNorm2(uint p) {
+  return max(-1.0, float((int(p) << 30) >> 30));
+}
+
+xesl_float4 XeUnpackR10G10B10A2SNorm(uint p) {
+  return xesl_float4(XeUnpackSNorm10(p & 1023u),
+                     XeUnpackSNorm10((p >> 10u) & 1023u),
+                     XeUnpackSNorm10((p >> 20u) & 1023u),
+                     XeUnpackSNorm2(p >> 30u));
+}
+
 xesl_float4 XeUnpackR10FloatX4(xesl_uint4 p) {
   // https://github.com/Microsoft/DirectXTex/blob/master/DirectXTex/DirectXTexConvert.cpp
   xesl_uint4 f10u32 = p & 0x3FFu;
@@ -558,6 +573,36 @@ void XeR11G11B10SNormToRGBA16(xesl_uint4 packed_texels,
                               xesl_function_param_out(xesl_uint4, out_23)) {
   out_01 = XeR11G11B10SNormToRGBA16(packed_texels.xy);
   out_23 = XeR11G11B10SNormToRGBA16(packed_texels.zw);
+}
+
+xesl_uint4 XeR10G10B10A2UNormToRGBA16Float(xesl_uint2 packed_texels) {
+  xesl_float4 texel_0 = XeUnpackR10G10B10A2UNorm(packed_texels.x);
+  xesl_float4 texel_1 = XeUnpackR10G10B10A2UNorm(packed_texels.y);
+  return xesl_uint4(xesl_packHalf2x16(texel_0.rg),
+                    xesl_packHalf2x16(texel_0.ba),
+                    xesl_packHalf2x16(texel_1.rg),
+                    xesl_packHalf2x16(texel_1.ba));
+}
+void XeR10G10B10A2UNormToRGBA16Float(
+    xesl_uint4 packed_texels, xesl_function_param_out(xesl_uint4, out_01),
+    xesl_function_param_out(xesl_uint4, out_23)) {
+  out_01 = XeR10G10B10A2UNormToRGBA16Float(packed_texels.xy);
+  out_23 = XeR10G10B10A2UNormToRGBA16Float(packed_texels.zw);
+}
+
+xesl_uint4 XeR10G10B10A2SNormToRGBA16Float(xesl_uint2 packed_texels) {
+  xesl_float4 texel_0 = XeUnpackR10G10B10A2SNorm(packed_texels.x);
+  xesl_float4 texel_1 = XeUnpackR10G10B10A2SNorm(packed_texels.y);
+  return xesl_uint4(xesl_packHalf2x16(texel_0.rg),
+                    xesl_packHalf2x16(texel_0.ba),
+                    xesl_packHalf2x16(texel_1.rg),
+                    xesl_packHalf2x16(texel_1.ba));
+}
+void XeR10G10B10A2SNormToRGBA16Float(
+    xesl_uint4 packed_texels, xesl_function_param_out(xesl_uint4, out_01),
+    xesl_function_param_out(xesl_uint4, out_23)) {
+  out_01 = XeR10G10B10A2SNormToRGBA16Float(packed_texels.xy);
+  out_23 = XeR10G10B10A2SNormToRGBA16Float(packed_texels.zw);
 }
 
 xesl_uint4 XeRG16UNormToRG16Float(xesl_uint4 packed_texels) {

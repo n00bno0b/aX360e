@@ -6,6 +6,7 @@
 #include <string>
 #include <cstdlib>
 #include <android/log.h>
+#include <android/dlext.h>
 #include "vkapi.h"
 
 #define LOG_TAG "VulkanDriverLoader"
@@ -20,74 +21,60 @@
 namespace {
     void* lib_handle = nullptr;
 
-    // Set Turnip-specific environment variables for optimal performance
     void set_turnip_environment_variables() {
-        // Force GMEM mode for better compatibility on mid-range Adreno GPUs (710/720)
-        // This can improve stability on devices that struggle with complex rendering
-        // Note: Can be overridden by user preferences in the future
-        const char* existing_tu_debug = std::getenv("TU_DEBUG");
-        if (!existing_tu_debug) {
-            // Only set if not already configured
-            // setenv("TU_DEBUG", "gmem", 0);  // Disabled by default, enable via settings
-            LOGI("TU_DEBUG not set, using driver defaults");
-        } else {
-            LOGI("TU_DEBUG already set to: %s", existing_tu_debug);
-        }
-
-        // Enable specific Freedreno features for compatibility (OneUI devices)
-        // Uncomment if needed for specific devices
-        // setenv("FD_DEV_FEATURES", "enable_tp_ubwc_flag_hint=1", 0);
-
-        // For debugging (disable in production)
-        // setenv("FD_MESA_DEBUG", "1", 0);
-        // setenv("MESA_DEBUG", "1", 0);
+        // Essential Mesa Turnip environment variables for Adreno performance
+        // and correctness.
+        setenv("TU_DEBUG", "sysmem,gmem", 1);
+        setenv("FD_DEV_FEATURES", "tile_image", 1);
+        setenv("MESA_VK_WSI_PRESENT_MODE", "mailbox", 1);
+        setenv("MESA_LOADER_DRIVER_OVERRIDE", "zink", 0); // fallback if needed
+        LOGI("Mesa Turnip environment variables configured");
     }
 }
 
 void vk_load(const char* lib_path, bool is_adreno_custom) {
     if (lib_handle) {
-        LOGW("Vulkan library already loaded, ignoring duplicate load request");
+        LOGW("Vulkan library already loaded, skipping...");
         return;
     }
 
-    if (!lib_path) {
-        LOGE("Vulkan library path is null");
-        return;
-    }
+    LOGI("Loading Vulkan library from path: %s (custom=%d)", lib_path, is_adreno_custom);
 
     // Set environment variables before loading driver
     if (is_adreno_custom) {
         LOGI("Loading custom Adreno driver (likely Mesa Turnip)");
         set_turnip_environment_variables();
-    } else {
-        LOGI("Loading system Vulkan driver: %s", lib_path);
     }
 
-    lib_handle = dlopen(lib_path, RTLD_NOW);
+    // On Android 12+, we need to satisfy system dependencies like libcutils.so
+    // which are blocked in the default app namespace. By pre-loading our dummy
+    // stubs, we satisfy the dynamic linker.
+    if (is_adreno_custom) {
+        const char* dummy_libs[] = {"libcutils.so", "libutils.so", "libhardware.so", "libhidlbase.so"};
+        for (const char* lib : dummy_libs) {
+            dlopen(lib, RTLD_NOW | RTLD_GLOBAL);
+        }
+    }
+
+    lib_handle = dlopen(lib_path, RTLD_NOW | RTLD_GLOBAL);
 
     if (!lib_handle) {
-        LOGE("Failed to load Vulkan library from %s: %s", lib_path, dlerror());
+        const char* err = dlerror();
+        LOGE("Failed to load %s: %s", lib_path, err ? err : "unknown error");
         return;
     }
 
-    LOGI("Successfully loaded Vulkan library from: %s", lib_path);
-
-    // Load function pointers
-#define VKFN(func) func##_=reinterpret_cast<PFN_##func>(dlsym(lib_handle, #func))
-#include "vksym.h"
-#undef VKFN
-
-    // Validate critical function pointers
-    if (!vkCreateInstance_ || !vkDestroyInstance_ || !vkEnumeratePhysicalDevices_) {
-        LOGE("Critical Vulkan function pointers not found in loaded library - driver may be corrupt");
-        dlclose(lib_handle);
-        lib_handle = nullptr;
-#define VKFN(func) func##_=nullptr
-#include "vksym.h"
-#undef VKFN
-        return;
+#define VKFN(func)                                                             \
+    func##_ = (PFN_##func)dlsym(lib_handle, #func);                            \
+    if (!func##_) {                                                            \
+        LOGW("Failed to load Vulkan function: %s", #func);                     \
     }
 
+#include "vksym.h"
+#undef VKFN
+
+    LOGI("Successfully loaded Vulkan library and functions");
+    
     if (is_adreno_custom) {
         LOGI("Custom Adreno driver loaded - TBDR optimizations should be active");
     }
@@ -95,11 +82,9 @@ void vk_load(const char* lib_path, bool is_adreno_custom) {
 
 void vk_unload() {
     if (!lib_handle) {
-        LOGW("No Vulkan library loaded, ignoring unload request");
         return;
     }
 
-    LOGI("Unloading Vulkan library");
     dlclose(lib_handle);
     lib_handle = nullptr;
 

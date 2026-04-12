@@ -634,6 +634,8 @@ This Config requires you to pair an analog and digitial flag together while digi
     <string name="driver_global">Global (System/Custom)</string>
     <string name="driver_stock">Stock Qualcomm Driver</string>
     <string name="driver_custom">Custom Turnip Driver</string>
+    <string name="vulkan_test_title">Vulkan 3D Test</string>
+    <string name="vulkan_test">Vulkan GPU Test</string>
 
 </resources>
 

@@ -361,6 +361,11 @@ class SpirvShaderTranslator : public ShaderTranslator {
         edram_fragment_shader_interlock_(edram_fragment_shader_interlock),
         edram_tile_image_enabled_(false) {}
 
+  void set_edram_tile_image_enabled(bool enabled) {
+    edram_tile_image_enabled_ = enabled;
+  }
+  bool edram_tile_image_enabled() const { return edram_tile_image_enabled_; }
+
   uint64_t GetDefaultVertexShaderModification(
       uint32_t dynamic_addressable_register_count,
       Shader::HostVertexShaderType host_vertex_shader_type =
@@ -509,7 +514,7 @@ class SpirvShaderTranslator : public ShaderTranslator {
   // 3. This is a pixel shader
   // Phase 4B TODO: Use this to conditionally emit tile image operations.
   bool CanUseTileImagesForEdram() const {
-    return edram_fragment_shader_interlock_ &&
+    return edram_tile_image_enabled_ && edram_fragment_shader_interlock_ &&
            features_.shader_tile_image_color_read_access &&
            is_pixel_shader();
   }
@@ -866,6 +871,9 @@ class SpirvShaderTranslator : public ShaderTranslator {
 
   spv::Id buffers_shared_memory_;
   spv::Id buffer_edram_;
+
+  // Phase 4B: Input attachments for tile image read access.
+  std::array<spv::Id, 4> input_attachments_tile_image_;
 
   // Not using combined images and samplers because
   // maxPerStageDescriptorSamplers is often lower than

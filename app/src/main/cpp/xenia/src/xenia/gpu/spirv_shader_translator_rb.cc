@@ -1047,16 +1047,28 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
 
             // Load the destination color.
             std::array<spv::Id, 2> dest_packed;
-            dest_packed[0] =
-                builder_->createLoad(rt_access_chain_0, spv::NoPrecision);
-            {
-              SpirvBuilder::IfBuilder if_64bpp(
-                  rt_is_64bpp, spv::SelectionControlDontFlattenMask, *builder_);
-              spv::Id dest_packed_64bpp_high =
-                  builder_->createLoad(rt_access_chain_1, spv::NoPrecision);
-              if_64bpp.makeEndIf();
-              dest_packed[1] = if_64bpp.createMergePhi(dest_packed_64bpp_high,
-                                                       const_uint_0_);
+            if (CanUseTileImagesForEdram()) {
+              // Phase 4B: Load from input attachment using VK_EXT_shader_tile_image.
+              // spv::OpColorAttachmentReadEXT = 4168
+              std::vector<spv::Id> operands = {
+                  input_attachments_tile_image_[color_target_index]};
+              spv::Id tile_image_val = builder_->createOp(
+                  static_cast<spv::Op>(4168), type_float4_, operands);
+              
+              // Pack the float4 back into dest_packed to reuse existing logic.
+              dest_packed = FSI_ClampAndPackColor(tile_image_val, rt_format_with_flags);
+            } else {
+              dest_packed[0] =
+                  builder_->createLoad(rt_access_chain_0, spv::NoPrecision);
+              {
+                SpirvBuilder::IfBuilder if_64bpp(
+                    rt_is_64bpp, spv::SelectionControlDontFlattenMask, *builder_);
+                spv::Id dest_packed_64bpp_high =
+                    builder_->createLoad(rt_access_chain_1, spv::NoPrecision);
+                if_64bpp.makeEndIf();
+                dest_packed[1] = if_64bpp.createMergePhi(dest_packed_64bpp_high,
+                                                         const_uint_0_);
+              }
             }
             std::array<spv::Id, 4> dest_unpacked =
                 FSI_UnpackColor(dest_packed, rt_format_with_flags);

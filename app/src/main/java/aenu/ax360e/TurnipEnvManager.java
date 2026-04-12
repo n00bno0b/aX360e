@@ -4,7 +4,12 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import androidx.preference.PreferenceManager;
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -54,6 +59,13 @@ public class TurnipEnvManager {
             tuDebugFlags.add("nolrz");
         }
 
+        if (tuDebugFlags.isEmpty()) {
+            String recommendedFlags = getRecommendedTuDebugForDevice();
+            if (!recommendedFlags.isEmpty()) {
+                tuDebugFlags.addAll(Arrays.asList(recommendedFlags.split(",")));
+            }
+        }
+
         if (!tuDebugFlags.isEmpty()) {
             envVars.add(new EnvVar("TU_DEBUG", String.join(",", tuDebugFlags)));
         }
@@ -69,6 +81,33 @@ public class TurnipEnvManager {
         }
 
         return envVars;
+    }
+
+    private String getRecommendedTuDebugForDevice() {
+        return TurnipDriverInfo.getRecommendedTuDebug(detectGpuName());
+    }
+
+    private String detectGpuName() {
+        String[] candidatePaths = {
+                "/sys/class/kgsl/kgsl-3d0/gpu_model",
+                "/sys/class/kgsl/kgsl-3d0/gpu_name",
+                "/sys/devices/platform/kgsl-3d0.0/kgsl/kgsl-3d0/gpu_model"
+        };
+        for (String path : candidatePaths) {
+            File file = new File(path);
+            if (!file.exists() || !file.canRead()) {
+                continue;
+            }
+            try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+                String line = reader.readLine();
+                if (line != null && !line.trim().isEmpty()) {
+                    return line.trim();
+                }
+            } catch (IOException ignored) {
+                // Try the next location.
+            }
+        }
+        return "";
     }
 
     /**

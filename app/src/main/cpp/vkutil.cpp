@@ -24,11 +24,38 @@ std::optional<VkInstance> vk_create_instance(const char * name) {
         appinfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
         appinfo.pEngineName = name;
         appinfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-        appinfo.apiVersion = VK_API_VERSION_1_0;
+        appinfo.apiVersion = VK_API_VERSION_1_1;
+
+        std::vector<const char*> extensions = {
+            VK_KHR_SURFACE_EXTENSION_NAME,
+            VK_KHR_ANDROID_SURFACE_EXTENSION_NAME,
+            VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME
+        };
+
+        // Check for portability enumeration extension
+        uint32_t ext_count = 0;
+        vkEnumerateInstanceExtensionProperties_(nullptr, &ext_count, nullptr);
+        std::vector<VkExtensionProperties> available_exts(ext_count);
+        vkEnumerateInstanceExtensionProperties_(nullptr, &ext_count, available_exts.data());
+
+        bool portability_supported = false;
+        for (const auto& ext : available_exts) {
+            if (std::string(ext.extensionName) == "VK_KHR_portability_enumeration") {
+                extensions.push_back("VK_KHR_portability_enumeration");
+                portability_supported = true;
+                break;
+            }
+        }
 
         VkInstanceCreateInfo inst_create_info = {};
         inst_create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
         inst_create_info.pApplicationInfo = &appinfo;
+        inst_create_info.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
+        inst_create_info.ppEnabledExtensionNames = extensions.data();
+        
+        if (portability_supported) {
+            inst_create_info.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+        }
 
         VkInstance inst;
         VkResult result = vkCreateInstance_(&inst_create_info, nullptr, &inst);
@@ -122,14 +149,22 @@ std::optional<VkDevice> vk_create_device(VkPhysicalDevice pdev,uint32_t queueFam
         LOGE("vkCreateDevice function pointer is null");
         return std::nullopt;
     }
-    float  queue_priority = 0.0f;
+    
+    // We only need 1 queue for this test
+    uint32_t queueCount = 1;
+    float queuePriorities[1] = {1.0f};
+
     VkDeviceQueueCreateInfo queue_create_info = {
             .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
             .pNext = nullptr,
             .flags = 0,
             .queueFamilyIndex = queueFamilyIndex,
-            .queueCount = props.queueCount,
-            .pQueuePriorities = &queue_priority
+            .queueCount = queueCount,
+            .pQueuePriorities = queuePriorities
+    };
+
+    const char* extensions[] = {
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME
     };
 
     VkDeviceCreateInfo device_create_info = {
@@ -140,12 +175,14 @@ std::optional<VkDevice> vk_create_device(VkPhysicalDevice pdev,uint32_t queueFam
             .pQueueCreateInfos = &queue_create_info,
             .enabledLayerCount = 0,
             .ppEnabledLayerNames = nullptr,
-            .enabledExtensionCount = 0,
-            .ppEnabledExtensionNames = nullptr,
+            .enabledExtensionCount = 1,
+            .ppEnabledExtensionNames = extensions,
             .pEnabledFeatures = nullptr
     };
     VkDevice dev;
-    if(vkCreateDevice_(pdev, &device_create_info, nullptr, &dev) != VK_SUCCESS){
+    VkResult res = vkCreateDevice_(pdev, &device_create_info, nullptr, &dev);
+    if(res != VK_SUCCESS){
+         LOGE("vkCreateDevice failed: %d", res);
          return std::nullopt;
     }
     return dev;

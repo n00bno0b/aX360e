@@ -441,6 +441,8 @@ class TextureCache {
     kLoadShaderIndexGBGR8ToRGB8,
     kLoadShaderIndexBGRG8ToRGBG8,
     kLoadShaderIndexBGRG8ToRGB8,
+    kLoadShaderIndexR10G10B10A2UNormToRGBA16Float,
+    kLoadShaderIndexR10G10B10A2SNormToRGBA16Float,
     kLoadShaderIndexR10G11B11ToRGBA16,
     kLoadShaderIndexR10G11B11ToRGBA16SNorm,
     kLoadShaderIndexR11G11B10ToRGBA16,

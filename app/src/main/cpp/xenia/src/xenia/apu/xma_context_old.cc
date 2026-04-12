@@ -113,12 +113,6 @@ void XmaContextOld::Enable() {
   auto context_ptr = memory()->TranslateVirtual(guest_ptr());
   XMA_CONTEXT_DATA data(context_ptr);
 
-  XELOGAPU("XmaContext: kicking context {} (buffer {} {}/{} bits)", id(),
-           data.current_buffer, data.input_buffer_read_offset,
-           (data.current_buffer == 0 ? data.input_buffer_0_packet_count
-                                     : data.input_buffer_1_packet_count) *
-               kBitsPerPacket);
-
   data.Store(context_ptr);
 
   set_is_enabled(true);
@@ -137,8 +131,6 @@ bool XmaContextOld::Block(bool poll) {
 
 void XmaContextOld::Clear() {
   std::lock_guard<xe_mutex> lock(lock_);
-  XELOGAPU("XmaContext: reset context {}", id());
-
   auto context_ptr = memory()->TranslateVirtual(guest_ptr());
   XMA_CONTEXT_DATA data(context_ptr);
 
@@ -160,7 +152,6 @@ void XmaContextOld::Clear() {
 
 void XmaContextOld::Disable() {
   std::lock_guard<xe_mutex> lock(lock_);
-  XELOGAPU("XmaContext: disabling context {}", id());
   set_is_enabled(false);
 }
 
@@ -352,13 +343,6 @@ void XmaContextOld::Decode(XMA_CONTEXT_DATA* data) {
     return;
   }
 
-  XELOGAPU(
-      "Processing context {} (offset {}, buffer {}, ptr {:p}, output buffer "
-      "{:08X}, output buffer count {})",
-      id(), data->input_buffer_read_offset, data->current_buffer,
-      static_cast<void*>(current_input_buffer), data->output_buffer_ptr,
-      data->output_buffer_block_count);
-
   if (is_stream_done_) {
     is_stream_done_ = false;
     packets_skip_ = 0;
@@ -392,6 +376,22 @@ void XmaContextOld::Decode(XMA_CONTEXT_DATA* data) {
   output_rb.set_read_offset(output_read_offset);
   output_rb.set_write_offset(output_write_offset);
 
+  auto reset_split_frame_state = [&]() {
+    split_frame_len_ = 0;
+    split_frame_len_partial_ = 0;
+    split_frame_padding_start_ = 0;
+  };
+  auto fail_parser = [&](const char* reason, size_t offset, size_t limit_bits) {
+    XELOGE("XmaContext {}: {} (offset={} limit={})", id(), reason, offset,
+           limit_bits);
+    data->parser_error_status = 4;
+    reset_split_frame_state();
+    if (av_context_) {
+      avcodec_flush_buffers(av_context_);
+    }
+    SwapInputBuffer(data);
+  };
+
   // We can only decode an entire frame and write it out at a time, so
   // don't save any samples.
   // TODO(JoelLinn): subframes when looping
@@ -423,22 +423,24 @@ void XmaContextOld::Decode(XMA_CONTEXT_DATA* data) {
     uint8_t* packet;
     bool frame_last_split;
 
-    BitStream stream(current_input_buffer, current_input_size * 8);
-    stream.SetOffset(data->input_buffer_read_offset);
-
-    if (data->input_buffer_read_offset > current_input_size * 8) {
-      XELOGE(
-          "XmaContext {}: Error - Provided input offset exceed input buffer "
-          "size! ({} > {})",
-          id(), data->input_buffer_read_offset, current_input_size * 8);
-      SwapInputBuffer(data);
+    const size_t current_input_size_bits = current_input_size * 8;
+    if (data->input_buffer_read_offset > current_input_size_bits) {
+      fail_parser("Provided input offset exceeds input buffer size",
+                  data->input_buffer_read_offset, current_input_size_bits);
       return;
     }
+    BitStream stream(current_input_buffer, current_input_size_bits);
+    stream.SetOffset(data->input_buffer_read_offset);
     // if we had a buffer swap try to skip packets first
     if (packets_skip_ > 0) {
       packet_idx =
           GetFramePacketNumber(current_input_buffer, current_input_size,
                                data->input_buffer_read_offset);
+      if (packet_idx < 0) {
+        fail_parser("Invalid packet index while skipping packets",
+                    data->input_buffer_read_offset, current_input_size_bits);
+        return;
+      }
       while (packets_skip_ > 0) {
         packets_skip_--;
         packet_idx++;
@@ -467,13 +469,26 @@ void XmaContextOld::Decode(XMA_CONTEXT_DATA* data) {
       packet_idx =
           GetFramePacketNumber(current_input_buffer, current_input_size,
                                data->input_buffer_read_offset);
+      if (packet_idx < 0 ||
+          packet_idx >= static_cast<int>(current_input_packet_count)) {
+        fail_parser("Invalid packet index for split frame",
+                    data->input_buffer_read_offset, current_input_size_bits);
+        return;
+      }
       packet = current_input_buffer + packet_idx * kBytesPerPacket;
       std::tie(frame_count, frame_last_split) = GetPacketFrameCount(packet);
       frame_idx = -1;
 
-      stream =
-          BitStream(current_input_buffer, (packet_idx + 1) * kBitsPerPacket);
-      stream.SetOffset(packet_idx * kBitsPerPacket + kBitsPerHeader);
+      const size_t packet_limit_bits = (packet_idx + 1) * kBitsPerPacket;
+      const size_t packet_payload_offset =
+          packet_idx * kBitsPerPacket + kBitsPerHeader;
+      if (packet_payload_offset > packet_limit_bits) {
+        fail_parser("Split frame packet payload offset exceeds packet bounds",
+                    packet_payload_offset, packet_limit_bits);
+        return;
+      }
+      stream = BitStream(current_input_buffer, packet_limit_bits);
+      stream.SetOffset(packet_payload_offset);
 
       if (split_frame_len_ > xma::kMaxFrameLength) {
         // TODO write CopyPeekMethod
@@ -515,11 +530,11 @@ void XmaContextOld::Decode(XMA_CONTEXT_DATA* data) {
                                       kBytesPerPacket * packet_number) +
             data->input_buffer_read_offset;
         if (offset == -1) {
-          // No more frames.
-          SwapInputBuffer(data);
-          // TODO partial frames? end?
-          XELOGE("XmaContext {}: TODO partial frames? end?", id());
-          assert_always("TODO");
+          XELOGE("XmaContext {}: Failed to resolve next frame offset at packet "
+                 "boundary",
+                 id());
+          fail_parser("Failed to resolve next frame offset at packet boundary",
+                      data->input_buffer_read_offset, current_input_size_bits);
           return;
         } else {
           data->input_buffer_read_offset = offset;
@@ -538,9 +553,11 @@ void XmaContextOld::Decode(XMA_CONTEXT_DATA* data) {
       std::tie(packet_idx, frame_idx) =
           GetFrameNumber(current_input_buffer, current_input_size,
                          data->input_buffer_read_offset);
-      // TODO handle
-      assert_true(packet_idx >= 0);
-      assert_true(frame_idx >= 0);
+      if (packet_idx < 0 || frame_idx < 0) {
+        fail_parser("Invalid frame location", data->input_buffer_read_offset,
+                    current_input_size_bits);
+        return;
+      }
       packet = current_input_buffer + packet_idx * kBytesPerPacket;
       // frames that belong to this packet
       std::tie(frame_count, frame_last_split) = GetPacketFrameCount(packet);
@@ -553,6 +570,11 @@ void XmaContextOld::Decode(XMA_CONTEXT_DATA* data) {
 
       stream =
           BitStream(current_input_buffer, (packet_idx + 1) * kBitsPerPacket);
+      if (data->input_buffer_read_offset > stream.size_bits()) {
+        fail_parser("Frame offset exceeds current packet bounds",
+                    data->input_buffer_read_offset, stream.size_bits());
+        return;
+      }
       stream.SetOffset(data->input_buffer_read_offset);
       // int frame_len;
       // int frame_len_partial
@@ -563,8 +585,16 @@ void XmaContextOld::Decode(XMA_CONTEXT_DATA* data) {
         // assert_always();
         split_frame_len_ = xma::kMaxFrameLength + 1;
       }
-      assert_true(frame_is_split ==
-                  (split_frame_len_ > split_frame_len_partial_));
+      if (frame_is_split !=
+          (split_frame_len_ > split_frame_len_partial_)) {
+        XELOGE(
+            "XmaContext {}: Split-frame invariant mismatch "
+            "(frame_is_split={}, split_len={}, split_partial={})",
+            id(), frame_is_split, split_frame_len_, split_frame_len_partial_);
+        fail_parser("Split-frame invariant mismatch",
+                    data->input_buffer_read_offset, current_input_size_bits);
+        return;
+      }
 
       // TODO fix bitstream copy
       std::memset(xma_frame_.data(), 0, xma_frame_.size());
@@ -579,7 +609,8 @@ void XmaContextOld::Decode(XMA_CONTEXT_DATA* data) {
               "split_frame_len: {}, split_partial: {}, offset_bits: {}",
               id(), split_frame_len_, split_frame_len_partial_,
               stream.offset_bits());
-          SwapInputBuffer(data);
+          fail_parser("Invalid amount of bits to copy in split frame",
+                      stream.offset_bits(), stream.size_bits());
           return;
         }
         auto offset = stream.Copy(xma_frame_.data() + 1, bits_to_copy);
@@ -632,28 +663,30 @@ void XmaContextOld::Decode(XMA_CONTEXT_DATA* data) {
 
     auto ret = avcodec_send_packet(av_context_, av_packet_);
     if (ret < 0) {
-      XELOGE("XmaContext {}: Error - Sending packet for decoding failed", id());
-      // TODO bail out
-      assert_always();
+      XELOGE(
+          "XmaContext {}: Error - Sending packet for decoding failed ({})",
+          id(), ret);
+      fail_parser("Sending packet for decoding failed",
+                  data->input_buffer_read_offset, current_input_size_bits);
+      return;
     }
     ret = avcodec_receive_frame(av_context_, av_frame_);
-    /*
-    if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
-      // TODO AVERROR_EOF???
+    bool frame_decoded = false;
+    if (ret == AVERROR(EAGAIN)) {
+      // The decoder accepted this frame but needs more packets before emitting
+      // PCM. Advance the bitstream so we don't keep resubmitting the same packet
+      // start on the next kick.
+    } else if (ret == AVERROR_EOF) {
       break;
-    else
-    */
-    if (ret < 0) {
-      XELOGE("XmaContext {}: Error - Decoding failed", id());
-      data->parser_error_status = 4;  // TODO(Gliniak): Find all parsing errors
-                                      // and create enumerator from them
-      SwapInputBuffer(data);
-      assert_always();
-      return;  // TODO bail out
+    } else if (ret < 0) {
+      XELOGE("XmaContext {}: Error - Decoding failed ({})", id(), ret);
+      fail_parser("Decoding failed", data->input_buffer_read_offset,
+                  current_input_size_bits);
+      return;
+    } else {
+      frame_decoded = true;
     }
-    assert_true(ret == 0);
-
-    {
+    if (frame_decoded) {
       // copy over 1 frame
       // update input buffer read offset
 
@@ -674,55 +707,20 @@ void XmaContextOld::Decode(XMA_CONTEXT_DATA* data) {
       data->output_buffer_write_offset = output_rb.write_offset() / 256;
 
       total_samples += id_ == 0 ? kSamplesPerFrame : 0;
+    }
 
-      uint32_t offset =
-          std::max(kBitsPerHeader, data->input_buffer_read_offset);
-      offset = static_cast<uint32_t>(
-          GetNextFrame(current_input_buffer, current_input_size, offset));
+    uint32_t offset =
+        std::max(kBitsPerHeader, data->input_buffer_read_offset);
+    offset = static_cast<uint32_t>(
+        GetNextFrame(current_input_buffer, current_input_size, offset));
 
-      XELOGAPU(
-          "XmaContext {}: Next Offset: {} (Frame: {}/{} Packet: {}/{} Packet "
-          "Skip: {} - {})",
-          id(), offset, frame_idx, frame_count - 1, packet_idx,
-          current_input_packet_count, xma::GetPacketSkipCount(packet),
-          data->input_buffer_read_offset);
-      if (frame_idx + 1 >= frame_count) {
-        // Skip to next packet (no split frame)
-        packets_skip_ = xma::GetPacketSkipCount(packet) + 1;
-        while (packets_skip_ > 0) {
-          packets_skip_--;
-          packet_idx++;
-          if (packet_idx >= current_input_packet_count) {
-            if (!reuse_input_buffer) {
-              // Last packet. Try setup once more.
-              reuse_input_buffer = TrySetupNextLoop(data, true);
-            }
-            if (!reuse_input_buffer) {
-              if (is_streaming) {
-                SwapInputBuffer(data);
-                data->input_buffer_read_offset =
-                    GetPacketFirstFrameOffset(data);
-              } else {
-                is_stream_done_ = true;
-              }
-              if (output_rb.write_offset() == output_rb.read_offset()) {
-                data->output_buffer_valid = 0;
-              }
-            }
-            return;
-          }
-        }
-        packet = current_input_buffer + packet_idx * kBytesPerPacket;
-        // TODO(Gliniak): There might be an edge-case when we're in packet 26/27
-        // and GetPacketFrameOffset returns that there is no data in this packet
-        // aka. FrameOffset is set to more than 0x7FFF-0x20
-        offset =
-            xma::GetPacketFrameOffset(packet) + packet_idx * kBitsPerPacket;
-      }
-      if (offset == 0 || frame_idx == -1) {
-        // Next packet but we already skipped to it
+    if (frame_idx + 1 >= frame_count) {
+      // Skip to next packet (no split frame)
+      packets_skip_ = xma::GetPacketSkipCount(packet) + 1;
+      while (packets_skip_ > 0) {
+        packets_skip_--;
+        packet_idx++;
         if (packet_idx >= current_input_packet_count) {
-          // Buffer is fully used
           if (!reuse_input_buffer) {
             // Last packet. Try setup once more.
             reuse_input_buffer = TrySetupNextLoop(data, true);
@@ -730,18 +728,54 @@ void XmaContextOld::Decode(XMA_CONTEXT_DATA* data) {
           if (!reuse_input_buffer) {
             if (is_streaming) {
               SwapInputBuffer(data);
+              data->input_buffer_read_offset =
+                  GetPacketFirstFrameOffset(data);
             } else {
               is_stream_done_ = true;
             }
+            if (output_rb.write_offset() == output_rb.read_offset()) {
+              data->output_buffer_valid = 0;
+            }
           }
-          break;
+          return;
         }
-        offset =
-            xma::GetPacketFrameOffset(packet) + packet_idx * kBitsPerPacket;
       }
-      // TODO buffer bounds check
-      assert_true(data->input_buffer_read_offset < offset);
-      data->input_buffer_read_offset = offset;
+      packet = current_input_buffer + packet_idx * kBytesPerPacket;
+      // TODO(Gliniak): There might be an edge-case when we're in packet 26/27
+      // and GetPacketFrameOffset returns that there is no data in this packet
+      // aka. FrameOffset is set to more than 0x7FFF-0x20
+      offset =
+          xma::GetPacketFrameOffset(packet) + packet_idx * kBitsPerPacket;
+    }
+    if (offset == 0 || frame_idx == -1) {
+      // Next packet but we already skipped to it
+      if (packet_idx >= current_input_packet_count) {
+        // Buffer is fully used
+        if (!reuse_input_buffer) {
+          // Last packet. Try setup once more.
+          reuse_input_buffer = TrySetupNextLoop(data, true);
+        }
+        if (!reuse_input_buffer) {
+          if (is_streaming) {
+            SwapInputBuffer(data);
+          } else {
+            is_stream_done_ = true;
+          }
+        }
+        break;
+      }
+      offset =
+          xma::GetPacketFrameOffset(packet) + packet_idx * kBitsPerPacket;
+    }
+    if (offset <= data->input_buffer_read_offset ||
+        offset > current_input_size_bits) {
+      fail_parser("Invalid next frame offset", offset, current_input_size_bits);
+      return;
+    }
+    data->input_buffer_read_offset = offset;
+
+    if (!frame_decoded) {
+      continue;
     }
   }
 
@@ -769,6 +803,11 @@ uint32_t XmaContextOld::GetPacketFirstFrameOffset(
 
   if (current_input_buffer) {
     first_frame_offset = xma::GetPacketFrameOffset(current_input_buffer);
+    if (first_frame_offset > kBitsPerPacket) {
+      XELOGE("XmaContext {}: Invalid first frame offset in next packet ({})",
+             id(), first_frame_offset);
+      first_frame_offset = kBitsPerHeader;
+    }
   }
   return first_frame_offset;
 }
@@ -779,9 +818,18 @@ size_t XmaContextOld::GetNextFrame(uint8_t* block, size_t size,
   // TODO meh
   // auto next_packet = bit_offset - bit_offset % kBitsPerPacket +
   // kBitsPerPacket;
-  auto packet_idx = GetFramePacketNumber(block, size, bit_offset);
+  const size_t size_bits = size * 8;
+  if (bit_offset >= size_bits) {
+    XELOGAPU("GetNextFrame: Invalid bit offset {} / {}", bit_offset, size_bits);
+    return 0;
+  }
 
-  BitStream stream(block, size * 8);
+  auto packet_idx = GetFramePacketNumber(block, size, bit_offset);
+  if (packet_idx < 0) {
+    return 0;
+  }
+
+  BitStream stream(block, size_bits);
   stream.SetOffset(bit_offset);
 
   if (stream.BitsRemaining() < 15) {
@@ -796,7 +844,7 @@ size_t XmaContextOld::GetNextFrame(uint8_t* block, size_t size,
     // return next_packet;
     return 0;
   } else if (len >= xma::kMaxFrameLength) {
-    assert_always("TODO");
+    XELOGAPU("GetNextFrame: Invalid frame length {}", len);
     // *bit_offset = next_packet;
     // return false;
     return 0;
@@ -820,8 +868,8 @@ int XmaContextOld::GetFramePacketNumber(uint8_t* block, size_t size,
                                         size_t bit_offset) {
   size *= 8;
   if (bit_offset >= size) {
-    // Not good :(
-    assert_always();
+    XELOGAPU("GetFramePacketNumber: Invalid bit offset {} / {}", bit_offset,
+             size);
     return -1;
   }
 
@@ -836,7 +884,8 @@ std::tuple<int, int> XmaContextOld::GetFrameNumber(uint8_t* block, size_t size,
   auto packet_idx = GetFramePacketNumber(block, size, bit_offset);
 
   if (packet_idx < 0 || (packet_idx + 1) * kBytesPerPacket > size) {
-    assert_always();
+    XELOGAPU("GetFrameNumber: Invalid packet index {} for size {}", packet_idx,
+             size);
     return {packet_idx, -2};
   }
 
@@ -900,7 +949,7 @@ std::tuple<int, bool> XmaContextOld::GetPacketFrameCount(uint8_t* packet) {
     if ((size - 15) > stream.BitsRemaining()) {
       return {frame_count, true};
     } else if (size == 0x7FFF) {
-      assert_always();
+      XELOGAPU("GetPacketFrameCount: Invalid frame length marker");
       return {frame_count, true};
     }
 

@@ -108,6 +108,20 @@ XReg ComputeMemoryAddress(A64Emitter& e, const T& guest,
   }
 }
 
+bool LocalOffsetFitsUnscaledAccess(uint32_t offset, uint32_t access_size) {
+  if (offset > 0xFFFu * access_size) {
+    return false;
+  }
+  return (offset & (access_size - 1)) == 0;
+}
+
+XReg ComputeLocalAddress(A64Emitter& e, uint32_t offset,
+                         XReg address_register = X1) {
+  e.MOV(X0, static_cast<uint64_t>(offset));
+  e.ADD(address_register, SP, X0);
+  return address_register;
+}
+
 // ============================================================================
 // OPCODE_ATOMIC_EXCHANGE
 // ============================================================================
@@ -289,49 +303,84 @@ EMITTER_OPCODE_TABLE(OPCODE_ATOMIC_COMPARE_EXCHANGE,
 struct LOAD_LOCAL_I8
     : Sequence<LOAD_LOCAL_I8, I<OPCODE_LOAD_LOCAL, I8Op, I32Op>> {
   static void Emit(A64Emitter& e, const EmitArgType& i) {
-    e.LDRB(i.dest, SP, i.src1.constant());
+    const uint32_t offset = static_cast<uint32_t>(i.src1.constant());
+    if (LocalOffsetFitsUnscaledAccess(offset, 1)) {
+      e.LDRB(i.dest, SP, offset);
+    } else {
+      e.LDRB(i.dest, ComputeLocalAddress(e, offset));
+    }
     // e.TraceLoadI8(DATA_LOCAL, i.src1.constant, i.dest);
   }
 };
 struct LOAD_LOCAL_I16
     : Sequence<LOAD_LOCAL_I16, I<OPCODE_LOAD_LOCAL, I16Op, I32Op>> {
   static void Emit(A64Emitter& e, const EmitArgType& i) {
-    e.LDRH(i.dest, SP, i.src1.constant());
+    const uint32_t offset = static_cast<uint32_t>(i.src1.constant());
+    if (LocalOffsetFitsUnscaledAccess(offset, 2)) {
+      e.LDRH(i.dest, SP, offset);
+    } else {
+      e.LDRH(i.dest, ComputeLocalAddress(e, offset));
+    }
     // e.TraceLoadI16(DATA_LOCAL, i.src1.constant, i.dest);
   }
 };
 struct LOAD_LOCAL_I32
     : Sequence<LOAD_LOCAL_I32, I<OPCODE_LOAD_LOCAL, I32Op, I32Op>> {
   static void Emit(A64Emitter& e, const EmitArgType& i) {
-    e.LDR(i.dest, SP, i.src1.constant());
+    const uint32_t offset = static_cast<uint32_t>(i.src1.constant());
+    if (LocalOffsetFitsUnscaledAccess(offset, 4)) {
+      e.LDR(i.dest, SP, offset);
+    } else {
+      e.LDR(i.dest, ComputeLocalAddress(e, offset));
+    }
     // e.TraceLoadI32(DATA_LOCAL, i.src1.constant, i.dest);
   }
 };
 struct LOAD_LOCAL_I64
     : Sequence<LOAD_LOCAL_I64, I<OPCODE_LOAD_LOCAL, I64Op, I32Op>> {
   static void Emit(A64Emitter& e, const EmitArgType& i) {
-    e.LDR(i.dest, SP, i.src1.constant());
+    const uint32_t offset = static_cast<uint32_t>(i.src1.constant());
+    if (LocalOffsetFitsUnscaledAccess(offset, 8)) {
+      e.LDR(i.dest, SP, offset);
+    } else {
+      e.LDR(i.dest, ComputeLocalAddress(e, offset));
+    }
     // e.TraceLoadI64(DATA_LOCAL, i.src1.constant, i.dest);
   }
 };
 struct LOAD_LOCAL_F32
     : Sequence<LOAD_LOCAL_F32, I<OPCODE_LOAD_LOCAL, F32Op, I32Op>> {
   static void Emit(A64Emitter& e, const EmitArgType& i) {
-    e.LDR(i.dest, SP, i.src1.constant());
+    const uint32_t offset = static_cast<uint32_t>(i.src1.constant());
+    if (LocalOffsetFitsUnscaledAccess(offset, 4)) {
+      e.LDR(i.dest, SP, offset);
+    } else {
+      e.LDR(i.dest, ComputeLocalAddress(e, offset));
+    }
     // e.TraceLoadF32(DATA_LOCAL, i.src1.constant, i.dest);
   }
 };
 struct LOAD_LOCAL_F64
     : Sequence<LOAD_LOCAL_F64, I<OPCODE_LOAD_LOCAL, F64Op, I32Op>> {
   static void Emit(A64Emitter& e, const EmitArgType& i) {
-    e.LDR(i.dest, SP, i.src1.constant());
+    const uint32_t offset = static_cast<uint32_t>(i.src1.constant());
+    if (LocalOffsetFitsUnscaledAccess(offset, 8)) {
+      e.LDR(i.dest, SP, offset);
+    } else {
+      e.LDR(i.dest, ComputeLocalAddress(e, offset));
+    }
     // e.TraceLoadF64(DATA_LOCAL, i.src1.constant, i.dest);
   }
 };
 struct LOAD_LOCAL_V128
     : Sequence<LOAD_LOCAL_V128, I<OPCODE_LOAD_LOCAL, V128Op, I32Op>> {
   static void Emit(A64Emitter& e, const EmitArgType& i) {
-    e.LDR(i.dest, SP, i.src1.constant());
+    const uint32_t offset = static_cast<uint32_t>(i.src1.constant());
+    if (LocalOffsetFitsUnscaledAccess(offset, 16)) {
+      e.LDR(i.dest, SP, offset);
+    } else {
+      e.LDR(i.dest, ComputeLocalAddress(e, offset));
+    }
     // e.TraceLoadV128(DATA_LOCAL, i.src1.constant, i.dest);
   }
 };
@@ -347,49 +396,84 @@ struct STORE_LOCAL_I8
     : Sequence<STORE_LOCAL_I8, I<OPCODE_STORE_LOCAL, VoidOp, I32Op, I8Op>> {
   static void Emit(A64Emitter& e, const EmitArgType& i) {
     // e.TraceStoreI8(DATA_LOCAL, i.src1.constant, i.src2);
-    e.STRB(i.src2, SP, i.src1.constant());
+    const uint32_t offset = static_cast<uint32_t>(i.src1.constant());
+    if (LocalOffsetFitsUnscaledAccess(offset, 1)) {
+      e.STRB(i.src2, SP, offset);
+    } else {
+      e.STRB(i.src2, ComputeLocalAddress(e, offset));
+    }
   }
 };
 struct STORE_LOCAL_I16
     : Sequence<STORE_LOCAL_I16, I<OPCODE_STORE_LOCAL, VoidOp, I32Op, I16Op>> {
   static void Emit(A64Emitter& e, const EmitArgType& i) {
     // e.TraceStoreI16(DATA_LOCAL, i.src1.constant, i.src2);
-    e.STRH(i.src2, SP, i.src1.constant());
+    const uint32_t offset = static_cast<uint32_t>(i.src1.constant());
+    if (LocalOffsetFitsUnscaledAccess(offset, 2)) {
+      e.STRH(i.src2, SP, offset);
+    } else {
+      e.STRH(i.src2, ComputeLocalAddress(e, offset));
+    }
   }
 };
 struct STORE_LOCAL_I32
     : Sequence<STORE_LOCAL_I32, I<OPCODE_STORE_LOCAL, VoidOp, I32Op, I32Op>> {
   static void Emit(A64Emitter& e, const EmitArgType& i) {
     // e.TraceStoreI32(DATA_LOCAL, i.src1.constant, i.src2);
-    e.STR(i.src2, SP, i.src1.constant());
+    const uint32_t offset = static_cast<uint32_t>(i.src1.constant());
+    if (LocalOffsetFitsUnscaledAccess(offset, 4)) {
+      e.STR(i.src2, SP, offset);
+    } else {
+      e.STR(i.src2, ComputeLocalAddress(e, offset));
+    }
   }
 };
 struct STORE_LOCAL_I64
     : Sequence<STORE_LOCAL_I64, I<OPCODE_STORE_LOCAL, VoidOp, I32Op, I64Op>> {
   static void Emit(A64Emitter& e, const EmitArgType& i) {
     // e.TraceStoreI64(DATA_LOCAL, i.src1.constant, i.src2);
-    e.STR(i.src2, SP, i.src1.constant());
+    const uint32_t offset = static_cast<uint32_t>(i.src1.constant());
+    if (LocalOffsetFitsUnscaledAccess(offset, 8)) {
+      e.STR(i.src2, SP, offset);
+    } else {
+      e.STR(i.src2, ComputeLocalAddress(e, offset));
+    }
   }
 };
 struct STORE_LOCAL_F32
     : Sequence<STORE_LOCAL_F32, I<OPCODE_STORE_LOCAL, VoidOp, I32Op, F32Op>> {
   static void Emit(A64Emitter& e, const EmitArgType& i) {
     // e.TraceStoreF32(DATA_LOCAL, i.src1.constant, i.src2);
-    e.STR(i.src2, SP, i.src1.constant());
+    const uint32_t offset = static_cast<uint32_t>(i.src1.constant());
+    if (LocalOffsetFitsUnscaledAccess(offset, 4)) {
+      e.STR(i.src2, SP, offset);
+    } else {
+      e.STR(i.src2, ComputeLocalAddress(e, offset));
+    }
   }
 };
 struct STORE_LOCAL_F64
     : Sequence<STORE_LOCAL_F64, I<OPCODE_STORE_LOCAL, VoidOp, I32Op, F64Op>> {
   static void Emit(A64Emitter& e, const EmitArgType& i) {
     // e.TraceStoreF64(DATA_LOCAL, i.src1.constant, i.src2);
-    e.STR(i.src2, SP, i.src1.constant());
+    const uint32_t offset = static_cast<uint32_t>(i.src1.constant());
+    if (LocalOffsetFitsUnscaledAccess(offset, 8)) {
+      e.STR(i.src2, SP, offset);
+    } else {
+      e.STR(i.src2, ComputeLocalAddress(e, offset));
+    }
   }
 };
 struct STORE_LOCAL_V128
     : Sequence<STORE_LOCAL_V128, I<OPCODE_STORE_LOCAL, VoidOp, I32Op, V128Op>> {
   static void Emit(A64Emitter& e, const EmitArgType& i) {
     // e.TraceStoreV128(DATA_LOCAL, i.src1.constant, i.src2);
-    e.STR(i.src2, SP, i.src1.constant());
+    const uint32_t offset = static_cast<uint32_t>(i.src1.constant());
+    if (LocalOffsetFitsUnscaledAccess(offset, 16)) {
+      e.STR(i.src2, SP, offset);
+    } else {
+      e.STR(i.src2, ComputeLocalAddress(e, offset));
+    }
   }
 };
 EMITTER_OPCODE_TABLE(OPCODE_STORE_LOCAL, STORE_LOCAL_I8, STORE_LOCAL_I16,

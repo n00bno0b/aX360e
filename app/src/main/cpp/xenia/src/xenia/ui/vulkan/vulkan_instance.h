@@ -117,6 +117,9 @@ class VulkanInstance {
 
 #if XE_PLATFORM_LINUX
   void* loader_ = nullptr;
+#if XE_PLATFORM_ANDROID || XE_PLATFORM_AX360E
+  void* android_hal_device_ = nullptr;
+#endif
 #elif XE_PLATFORM_WIN32
   HMODULE loader_ = nullptr;
 #endif

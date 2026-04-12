@@ -24,29 +24,32 @@ jint JNI_OnLoad(JavaVM* vm, void* reserved){
     JNIEnv* env = NULL;
     int result=-1;
 
-    LOGW("JNI_OnLoad ");
+    __android_log_print(ANDROID_LOG_INFO, "ax360e_native", "JNI_OnLoad starting");
     if (vm->GetEnv((void**)&env, JNI_VERSION_1_6) != JNI_OK) {
-        LOGE("GetEnv failed");
+        __android_log_print(ANDROID_LOG_ERROR, "ax360e_native", "GetEnv failed");
         goto bail;
     }
 
+    __android_log_print(ANDROID_LOG_INFO, "ax360e_native", "Registering Emulator");
     if(register_Emulator(env) != JNI_OK){
-        LOGE("register_Emulator failed");
+        __android_log_print(ANDROID_LOG_ERROR, "ax360e_native", "register_Emulator failed");
         goto bail;
     }
 
+    __android_log_print(ANDROID_LOG_INFO, "ax360e_native", "Registering Emulator$Config");
     if(register_Emulator$Config(env) != JNI_OK){
-        LOGE("register_Emulator$Config failed");
+        __android_log_print(ANDROID_LOG_ERROR, "ax360e_native", "register_Emulator$Config failed");
         goto bail;
     }
 
+    __android_log_print(ANDROID_LOG_INFO, "ax360e_native", "Registering ax360e_Emulator");
     if(register_ax360e_Emulator(env) != JNI_OK){
-        LOGE("register_ax360e_Emulator failed");
+        __android_log_print(ANDROID_LOG_ERROR, "ax360e_native", "register_ax360e_Emulator failed");
         goto bail;
     }
     result = JNI_VERSION_1_6;
 
-    LOGW("JNI_OnLoad OK");
+    __android_log_print(ANDROID_LOG_INFO, "ax360e_native", "JNI_OnLoad OK");
 
     bail:
     return result;

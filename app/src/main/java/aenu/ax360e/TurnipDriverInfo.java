@@ -25,9 +25,31 @@ public class TurnipDriverInfo {
         
         File driverDir = CustomDriverUtils.getDriverDirectory(context);
         File icdFile = new File(driverDir, "vk_icd.json");
+        File metaFile = new File(driverDir, "meta.json");
         
         if (icdFile.exists()) {
             info.isInstalled = true;
+            
+            // Try meta.json first for better info
+            if (metaFile.exists()) {
+                try (BufferedReader reader = new BufferedReader(new FileReader(metaFile))) {
+                    StringBuilder sb = new StringBuilder();
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        sb.append(line);
+                    }
+                    JSONObject meta = new JSONObject(sb.toString());
+                    info.driverName = meta.optString("name", "Mesa Turnip");
+                    info.mesaVersion = meta.optString("description", "Unknown");
+                    info.driverVersion = meta.optString("driverVersion", "Unknown");
+                    info.isTurnip = true;
+                    return info;
+                } catch (IOException | JSONException e) {
+                    Log.w(TAG, "Failed to read meta.json", e);
+                }
+            }
+
+            // Fallback to vk_icd.json if meta.json fails or doesn't exist
             try (BufferedReader reader = new BufferedReader(new FileReader(icdFile))) {
                 StringBuilder sb = new StringBuilder();
                 String line;
@@ -43,7 +65,7 @@ public class TurnipDriverInfo {
                 if (libraryPath.contains("turnip") || libraryPath.contains("Turnip")
                         || libraryPath.contains("freedreno") || libraryPath.contains("libvulkan_freedreno")) {
                     info.isTurnip = true;
-                    info.driverName = "Mesa Turnip";
+                    if (info.driverName.equals("Unknown")) info.driverName = "Mesa Turnip";
                     
                     // Try to extract version from filename
                     File soFile = new File(libraryPath);
@@ -53,7 +75,9 @@ public class TurnipDriverInfo {
                     }
                 }
                 
-                info.driverVersion = icd.optString("api_version", "Unknown");
+                if (info.driverVersion.equals("Unknown")) {
+                    info.driverVersion = icd.optString("api_version", "Unknown");
+                }
             } catch (IOException | JSONException e) {
                 Log.e(TAG, "Failed to read driver info", e);
             }

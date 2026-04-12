@@ -76,12 +76,32 @@ std::unique_ptr<VulkanProvider> VulkanProvider::Create(
   }
 
   if (!provider->vulkan_device_) {
+    // Priority 1: Mesa Turnip driver
     for (const VkPhysicalDevice physical_device : physical_devices) {
-      provider->vulkan_device_ = VulkanDevice::CreateIfSupported(
-          provider->vulkan_instance_.get(), physical_device, with_gpu_emulation,
-          with_presentation);
-      if (provider->vulkan_device_) {
-        break;
+      VkPhysicalDeviceProperties properties;
+      ifn.vkGetPhysicalDeviceProperties(physical_device, &properties);
+      if (std::strstr(properties.deviceName, "Turnip") || 
+          std::strstr(properties.deviceName, "Mesa") ||
+          std::strstr(properties.deviceName, "freedreno")) {
+        provider->vulkan_device_ = VulkanDevice::CreateIfSupported(
+            provider->vulkan_instance_.get(), physical_device, with_gpu_emulation,
+            with_presentation);
+        if (provider->vulkan_device_) {
+          XELOGI("Prioritized Mesa Turnip driver: {}", properties.deviceName);
+          break;
+        }
+      }
+    }
+
+    // Priority 2: Any other compatible device (stock Adreno, etc.)
+    if (!provider->vulkan_device_) {
+      for (const VkPhysicalDevice physical_device : physical_devices) {
+        provider->vulkan_device_ = VulkanDevice::CreateIfSupported(
+            provider->vulkan_instance_.get(), physical_device, with_gpu_emulation,
+            with_presentation);
+        if (provider->vulkan_device_) {
+          break;
+        }
       }
     }
 

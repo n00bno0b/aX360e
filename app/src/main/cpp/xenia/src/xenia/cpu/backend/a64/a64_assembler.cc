@@ -24,7 +24,9 @@
 #include "xenia/cpu/cpu_flags.h"
 #include "xenia/cpu/hir/hir_builder.h"
 #include "xenia/cpu/hir/label.h"
+#include "xenia/cpu/hir/opcodes.h"
 #include "xenia/cpu/processor.h"
+#include "oaknut/oaknut_exception.hpp"
 
 namespace xe {
 namespace cpu {
@@ -78,8 +80,96 @@ bool A64Assembler::Assemble(GuestFunction* function, HIRBuilder* builder,
   // Lower HIR -> a64.
   void* machine_code = nullptr;
   size_t code_size = 0;
-  if (!emitter_->Emit(function, builder, debug_info_flags, debug_info.get(),
-                      &machine_code, &code_size, &function->source_map())) {
+  const auto reset_emitter = [this]() {
+    emitter_.reset(new A64Emitter(a64_backend_));
+  };
+  const auto log_emit_failure = [this, function, builder](const char* reason) {
+    const uint32_t address = function ? function->address() : 0;
+    const uint32_t end_address =
+        function && function->has_end_address() ? function->end_address() : 0;
+    const char* name =
+        function && !function->name().empty() ? function->name().c_str()
+                                              : "<unnamed>";
+    XELOGE(
+        "A64Assembler: {} while assembling guest function {:08X}-{:08X} {}",
+        reason, address, end_address, name);
+
+    if (emitter_) {
+      const auto* instr = emitter_->current_instr();
+      if (instr && instr->opcode) {
+        XELOGE(
+            "A64Assembler: active HIR opcode={} block={} ordinal={} flags={:04X}",
+            instr->opcode->name, instr->block ? instr->block->ordinal : 0,
+            instr->ordinal, instr->flags);
+      }
+
+      const uint32_t last_guest_address = emitter_->last_guest_address();
+      const uint32_t last_hir_offset = emitter_->last_hir_offset();
+      if (last_guest_address || last_hir_offset) {
+        XELOGE(
+            "A64Assembler: last source guest={:08X} hir_offset={:08X}",
+            last_guest_address, last_hir_offset);
+      }
+    }
+
+    const auto* instr = emitter_ ? emitter_->current_instr() : nullptr;
+    if (!instr || !instr->block) {
+      return;
+    }
+
+    string_buffer_.Reset();
+    string_buffer_.AppendFormat("A64Assembler: HIR window around failure for {:08X}:\n",
+                                address);
+
+    const hir::Instr* window_start = instr;
+    for (int i = 0; i < 3 && window_start->prev; ++i) {
+      window_start = window_start->prev;
+    }
+
+    const hir::Instr* cursor = window_start;
+    for (int i = 0; cursor && i < 7; ++i, cursor = cursor->next) {
+      if (cursor->opcode->flags & hir::OPCODE_FLAG_HIDE) {
+        continue;
+      }
+
+      const bool is_current = cursor == instr;
+      string_buffer_.AppendFormat(
+          "  {} block={} ordinal={} opcode={}",
+          is_current ? ">>" : "  ",
+          cursor->block ? cursor->block->ordinal : 0,
+          cursor->ordinal,
+          cursor->opcode ? cursor->opcode->name : "<null>");
+
+      if (cursor->opcode == &hir::OPCODE_SOURCE_OFFSET_info) {
+        string_buffer_.AppendFormat(" guest={:08X}",
+                                    static_cast<uint32_t>(cursor->src1.offset));
+      }
+      if (cursor->flags) {
+        string_buffer_.AppendFormat(" flags={:04X}", cursor->flags);
+      }
+      string_buffer_.Append('\n');
+    }
+
+    XELOGE("{}", string_buffer_.to_string_view());
+  };
+
+  try {
+    if (!emitter_->Emit(function, builder, debug_info_flags, debug_info.get(),
+                        &machine_code, &code_size, &function->source_map())) {
+      reset_emitter();
+      return false;
+    }
+  } catch (const oaknut::OaknutException& e) {
+    log_emit_failure(e.what());
+    reset_emitter();
+    return false;
+  } catch (const std::exception& e) {
+    log_emit_failure(e.what());
+    reset_emitter();
+    return false;
+  } catch (...) {
+    log_emit_failure("unknown exception");
+    reset_emitter();
     return false;
   }
 

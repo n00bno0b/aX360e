@@ -29,6 +29,46 @@ dword_result_t HidReadKeys_entry(dword_t unk1, unknown_t unk2, unknown_t unk3) {
 }
 DECLARE_XBOXKRNL_EXPORT1(HidReadKeys, kInput, kStub);
 
+dword_result_t XInputdFFGetDeviceInfo_entry(dword_t user_index, pointer_t<void> info) {
+  return X_ERROR_DEVICE_NOT_CONNECTED;
+}
+DECLARE_XBOXKRNL_EXPORT1(XInputdFFGetDeviceInfo, kInput, kStub);
+
+dword_result_t XInputdFFSetEffect_entry(dword_t user_index, pointer_t<void> effect) {
+  return X_ERROR_DEVICE_NOT_CONNECTED;
+}
+DECLARE_XBOXKRNL_EXPORT1(XInputdFFSetEffect, kInput, kStub);
+
+dword_result_t XInputdFFUpdateEffect_entry(dword_t user_index, pointer_t<void> effect) {
+  return X_ERROR_DEVICE_NOT_CONNECTED;
+}
+DECLARE_XBOXKRNL_EXPORT1(XInputdFFUpdateEffect, kInput, kStub);
+
+dword_result_t XInputdFFEffectOperation_entry(dword_t user_index, dword_t op) {
+  return X_ERROR_DEVICE_NOT_CONNECTED;
+}
+DECLARE_XBOXKRNL_EXPORT1(XInputdFFEffectOperation, kInput, kStub);
+
+dword_result_t XInputdFFDeviceControl_entry(dword_t user_index, dword_t control, pointer_t<void> data) {
+  return X_ERROR_DEVICE_NOT_CONNECTED;
+}
+DECLARE_XBOXKRNL_EXPORT1(XInputdFFDeviceControl, kInput, kStub);
+
+dword_result_t XInputdFFSetDeviceGain_entry(dword_t user_index, dword_t gain) {
+  return X_ERROR_DEVICE_NOT_CONNECTED;
+}
+DECLARE_XBOXKRNL_EXPORT1(XInputdFFSetDeviceGain, kInput, kStub);
+
+dword_result_t XInputdFFCancelIo_entry(dword_t user_index) {
+  return X_ERROR_DEVICE_NOT_CONNECTED;
+}
+DECLARE_XBOXKRNL_EXPORT1(XInputdFFCancelIo, kInput, kStub);
+
+dword_result_t XInputdFFSetRumble_entry(dword_t user_index, pointer_t<void> rumble) {
+  return X_ERROR_SUCCESS;
+}
+DECLARE_XBOXKRNL_EXPORT1(XInputdFFSetRumble, kInput, kStub);
+
 }  // namespace xboxkrnl
 }  // namespace kernel
 }  // namespace xe

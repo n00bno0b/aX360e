@@ -1793,6 +1793,13 @@ void SpirvShaderTranslator::StartFragmentShaderBeforeMain() {
   if (edram_fragment_shader_interlock_) {
     builder_->addExtension("SPV_EXT_fragment_shader_interlock");
 
+    // Phase 4B: If tile images are supported and FSI is used, enable the extension.
+    if (CanUseTileImagesForEdram()) {
+      builder_->addExtension("SPV_EXT_shader_tile_image");
+      // spv::CapabilityTileImageColorReadAccessEXT = 4166
+      builder_->addCapability(static_cast<spv::Capability>(4166));
+    }
+
     // EDRAM buffer uint[].
     id_vector_temp_.clear();
     id_vector_temp_.push_back(builder_->makeRuntimeArray(type_uint_));
@@ -1813,13 +1820,31 @@ void SpirvShaderTranslator::StartFragmentShaderBeforeMain() {
                                                 : spv::StorageClassUniform,
         type_edram, "xe_edram");
     builder_->addDecoration(buffer_edram_, spv::DecorationDescriptorSet,
-                            int(kDescriptorSetSharedMemoryAndEdram));
+                             int(kDescriptorSetSharedMemoryAndEdram));
     builder_->addDecoration(buffer_edram_, spv::DecorationBinding, 1);
     if (features_.spirv_version >= spv::Spv_1_4) {
       main_interface_.push_back(buffer_edram_);
     }
-  }
 
+    // Phase 4B: Declare input attachments for color read access.
+    // Xenia uses up to 4 color targets.
+    if (CanUseTileImagesForEdram()) {
+      for (uint32_t i = 0; i < 4; ++i) {
+        // Declare as subpass input.
+        spv::Id attachment_type = builder_->makeImageType(
+            type_float4_, spv::DimSubpassData, 0, false, 0, 1,
+            spv::ImageFormatUnknown);
+        input_attachments_tile_image_[i] = builder_->createVariable(
+            spv::NoPrecision, spv::StorageClassInput, attachment_type,
+            fmt::format("xe_tile_image_{}", i).c_str());
+        builder_->addDecoration(input_attachments_tile_image_[i],
+                                spv::DecorationInputAttachmentIndex, int(i));
+        if (features_.spirv_version >= spv::Spv_1_4) {
+          main_interface_.push_back(input_attachments_tile_image_[i]);
+        }
+      }
+    }
+  }
   bool param_gen_needed = !is_depth_only_fragment_shader_ &&
                           GetPsParamGenInterpolator() != UINT32_MAX;
 

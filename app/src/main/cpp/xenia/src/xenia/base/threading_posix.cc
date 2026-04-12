@@ -22,6 +22,7 @@
 #include <sys/eventfd.h>
 #include <sys/syscall.h>
 #include <sys/time.h>
+#include <sys/resource.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <array>
@@ -665,6 +666,21 @@ class PosixCondition<Thread> : public PosixConditionBase {
 
     void set_priority(int new_priority) const {
         WaitStarted();
+#if XE_PLATFORM_ANDROID || XE_PLATFORM_AX360E
+        // Android blocks SCHED_FIFO for non-root apps. We map logical priorities to niceness levels.
+        // Android niceness: -20 (highest) to 19 (lowest).
+        int nice_level = 0;
+        // Priority comes from XThread::set_priority which might be from Win32 THREAD_PRIORITY_*
+        // Values usually span from -2 to 2 or 1 to 31.
+        if (new_priority > 0) nice_level = -10;
+        if (new_priority > 10) nice_level = -16;
+        if (new_priority > 20) nice_level = -19; // URGENT_DISPLAY / AUDIO
+        
+        int res = setpriority(PRIO_PROCESS, pthread_gettid_np(thread_), nice_level);
+        if (res != 0) {
+            XELOGW("Permission denied while setting priority using setpriority (nice_level={})", nice_level);
+        }
+#else
         sched_param param{};
         param.sched_priority = new_priority;
         int res = pthread_setschedparam(thread_, SCHED_FIFO, &param);
@@ -679,6 +695,7 @@ class PosixCondition<Thread> : public PosixConditionBase {
                     XELOGW("Unknown error while setting priority");
             }
         }
+#endif
     }
   void QueueUserCallback(std::function<void()> callback) {
     WaitStarted();

@@ -97,6 +97,9 @@ public class CustomDriverUtils {
                         if (entry.getName().endsWith(".so") && entry.getName().contains("vulkan")) {
                             driverSoName = entry.getName();
                         }
+                        if (entry.getName().equals("meta.json")) {
+                            // meta.json is handled by the extraction loop above
+                        }
                     }
                     zis.closeEntry();
                 }
@@ -111,6 +114,14 @@ public class CustomDriverUtils {
                         deleteRecursive(stagingDir);
                         return false;
                     }
+
+                    // Ensure ALL extracted .so files are executable (bundled deps need this too)
+                    if (!chmodSoFilesRecursive(dir)) {
+                        Log.e(TAG, "Failed to make driver .so files executable");
+                        deleteRecursive(dir);
+                        return false;
+                    }
+
                     // Generate ICD manifest AFTER rename so paths point to final location
                     generateIcdManifest(dir, driverSoName);
                     return true;
@@ -168,6 +179,22 @@ public class CustomDriverUtils {
         }
     }
 
+    public static boolean isDriverInstalled(Context context) {
+        File dir = getDriverDirectory(context);
+        File icdFile = new File(dir, "vk_icd.json");
+        return icdFile.exists() && findDriverSoPath(dir) != null;
+    }
+
+    public static void clearDriverEnv() {
+        try {
+            Os.unsetenv("CUSTOM_DRIVER_PATH");
+            Os.unsetenv("VK_ICD_FILENAMES");
+            Os.unsetenv("VK_DRIVER_FILES");
+        } catch (ErrnoException e) {
+            Log.w(TAG, "Failed to clear custom driver env vars", e);
+        }
+    }
+
     /**
      * Find the Vulkan .so path inside the installed driver directory.
      * Returns null if no valid driver .so is found.
@@ -210,6 +237,28 @@ public class CustomDriverUtils {
     public static void removeDriver(Context context) {
         File dir = getDriverDirectory(context);
         deleteRecursive(dir);
+    }
+
+    private static boolean chmodSoFilesRecursive(File dir) {
+        File[] files = dir.listFiles();
+        if (files == null) return true;
+        boolean success = true;
+        for (File f : files) {
+            if (f.isDirectory()) {
+                if (!chmodSoFilesRecursive(f)) success = false;
+            } else if (f.getName().endsWith(".so")) {
+                try {
+                    Os.chmod(f.getAbsolutePath(), 0700);
+                } catch (ErrnoException e) {
+                    Log.w(TAG, "chmod failed for " + f.getAbsolutePath() + ": " + e);
+                    if (!f.setExecutable(true, true)) {
+                        Log.e(TAG, "setExecutable also failed for " + f.getAbsolutePath());
+                        success = false;
+                    }
+                }
+            }
+        }
+        return success;
     }
 
     private static void deleteRecursive(File fileOrDirectory) {

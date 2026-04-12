@@ -124,6 +124,9 @@ bool A64Emitter::Emit(GuestFunction* function, HIRBuilder* builder,
   debug_info_flags_ = debug_info_flags;
   trace_data_ = &function->trace_data();
   source_map_arena_.Reset();
+  current_instr_ = nullptr;
+  last_guest_address_ = 0;
+  last_hir_offset_ = 0;
 
   // Fill the generator with code.
   EmitFunctionInfo func_info = {};
@@ -286,6 +289,7 @@ bool A64Emitter::Emit(HIRBuilder* builder, EmitFunctionInfo& func_info) {
     // Process instructions.
     const Instr* instr = block->instr_head;
     while (instr) {
+        current_instr_ = const_cast<Instr*>(instr);
         if (synchronize_stack_on_next_instruction_) {
             if (instr->opcode->num != hir::OPCODE_SOURCE_OFFSET) {
                 synchronize_stack_on_next_instruction_ = false;
@@ -306,6 +310,7 @@ bool A64Emitter::Emit(HIRBuilder* builder, EmitFunctionInfo& func_info) {
 
     block = block->next;
   }
+  current_instr_ = nullptr;
 
   // Function epilog.
   l(epilog_label);
@@ -349,6 +354,8 @@ void A64Emitter::MarkSourceOffset(const Instr* i) {
   entry->guest_address = static_cast<uint32_t>(i->src1.offset);
   entry->hir_offset = uint32_t(i->block->ordinal << 16) | i->ordinal;
   entry->code_offset = static_cast<uint32_t>(offset());
+  last_guest_address_ = entry->guest_address;
+  last_hir_offset_ = entry->hir_offset;
 #if 0
   if (cvars::emit_source_annotations) {
     NOP();

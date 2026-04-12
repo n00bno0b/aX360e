@@ -22,6 +22,26 @@
 
 #if XE_PLATFORM_LINUX
 #include <dlfcn.h>
+#if XE_PLATFORM_ANDROID || XE_PLATFORM_AX360E
+#include <android/dlext.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <stdint.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+// android_get_exported_namespace is a bionic private API exported from
+// libdl.so but NOT declared in public NDK headers. Declare it ourselves as a
+// weak symbol so: (a) the compiler accepts the call, (b) if the dynamic linker
+// can resolve it we get a real function pointer, and (c) if it can't we get
+// NULL and fall back to an explicit dlopen("libdl.so") + dlsym lookup.
+extern "C" __attribute__((weak))
+struct android_namespace_t* android_get_exported_namespace(const char* name);
+#ifndef MFD_CLOEXEC
+#define MFD_CLOEXEC 0x0001U
+#endif
+#endif
 #elif XE_PLATFORM_WIN32
 #include "xenia/base/platform_win.h"
 #endif
@@ -36,9 +56,329 @@ namespace xe {
 namespace ui {
 namespace vulkan {
 
+#if XE_PLATFORM_ANDROID || XE_PLATFORM_AX360E
+namespace {
+
+using GetAndroidNamespaceFn = android_namespace_t* (*)(const char* name);
+
+struct AndroidHwModule;
+struct AndroidHwDevice;
+
+using AndroidHwOpenFn = int (*)(const AndroidHwModule* module, const char* id,
+                                AndroidHwDevice** device);
+
+struct AndroidHwModuleMethods {
+  AndroidHwOpenFn open;
+};
+
+struct AndroidHwModule {
+  uint32_t tag;
+  uint16_t module_api_version;
+  uint16_t hal_api_version;
+  const char* id;
+  const char* name;
+  const char* author;
+  AndroidHwModuleMethods* methods;
+  void* dso;
+  uint32_t reserved[32 - 8];
+};
+
+struct AndroidHwDevice {
+  uint32_t tag;
+  uint32_t version;
+  AndroidHwModule* module;
+  int (*close)(AndroidHwDevice* device);
+  uint32_t reserved[32 - 4];
+};
+
+struct AndroidHwVulkanModule {
+  AndroidHwModule common;
+};
+
+struct AndroidHwVulkanDevice {
+  AndroidHwDevice common;
+  PFN_vkEnumerateInstanceExtensionProperties
+      EnumerateInstanceExtensionProperties;
+  PFN_vkCreateInstance CreateInstance;
+  PFN_vkGetInstanceProcAddr GetInstanceProcAddr;
+};
+
+struct AndroidHalVulkanFunctions {
+  PFN_vkEnumerateInstanceExtensionProperties
+      EnumerateInstanceExtensionProperties = nullptr;
+  PFN_vkCreateInstance CreateInstance = nullptr;
+  PFN_vkGetInstanceProcAddr GetInstanceProcAddr = nullptr;
+};
+
+GetAndroidNamespaceFn ResolveAndroidGetExportedNamespace() {
+  GetAndroidNamespaceFn fn_get_ns = &android_get_exported_namespace;
+  if (fn_get_ns) {
+    return fn_get_ns;
+  }
+  void* libdl = dlopen("libdl.so", RTLD_NOW);
+  if (!libdl) {
+    return nullptr;
+  }
+  return reinterpret_cast<GetAndroidNamespaceFn>(
+      dlsym(libdl, "android_get_exported_namespace"));
+}
+
+int OpenReadOnlyNoInterrupt(const char* path) {
+  int fd;
+  do {
+    fd = open(path, O_RDONLY | O_CLOEXEC);
+  } while (fd == -1 && errno == EINTR);
+  return fd;
+}
+
+bool WriteAllNoInterrupt(int fd, const uint8_t* data, size_t size) {
+  while (size > 0) {
+    ssize_t written;
+    do {
+      written = write(fd, data, size);
+    } while (written == -1 && errno == EINTR);
+    if (written <= 0) {
+      return false;
+    }
+    data += written;
+    size -= size_t(written);
+  }
+  return true;
+}
+
+std::string GetDirectoryName(const char* path) {
+  if (!path || !path[0]) {
+    return {};
+  }
+  std::string path_string(path);
+  size_t separator = path_string.find_last_of('/');
+  if (separator == std::string::npos) {
+    return {};
+  }
+  return path_string.substr(0, separator);
+}
+
+void PreloadAndroidStubLibraries(const char* source_path) {
+  std::string driver_dir = GetDirectoryName(source_path);
+  if (driver_dir.empty()) {
+    return;
+  }
+  std::string data_root = GetDirectoryName(driver_dir.c_str());
+  if (data_root.empty()) {
+    return;
+  }
+
+  const char* kStubLibraries[] = {
+      "libcutils.so",
+      "libhardware.so",
+      "liblog.so",
+      "libnativewindow.so",
+      "libsync.so",
+  };
+
+  std::string stub_dir = data_root + "/android_stub";
+  for (const char* library_name : kStubLibraries) {
+    std::string stub_path = stub_dir + "/" + library_name;
+    void* handle = dlopen(stub_path.c_str(), RTLD_NOW | RTLD_GLOBAL);
+    if (handle) {
+      XELOGI("Preloaded Android stub library: {}", stub_path);
+    } else {
+      XELOGW("Failed to preload Android stub library '{}': {}", stub_path,
+             dlerror());
+    }
+  }
+}
+
+int CreateMemFdCopy(const char* source_path) {
+#ifdef __NR_memfd_create
+  int source_fd = OpenReadOnlyNoInterrupt(source_path);
+  if (source_fd == -1) {
+    XELOGW("Failed to open custom driver '{}' for memfd copy: {}",
+           source_path, strerror(errno));
+    return -1;
+  }
+
+  struct stat source_stat = {};
+  if (fstat(source_fd, &source_stat) != 0) {
+    XELOGW("Failed to stat custom driver '{}' for memfd copy: {}", source_path,
+           strerror(errno));
+    close(source_fd);
+    return -1;
+  }
+
+  int memfd = int(syscall(__NR_memfd_create, "ax360e-turnip", MFD_CLOEXEC));
+  if (memfd == -1) {
+    XELOGW("memfd_create failed for custom driver '{}': {}", source_path,
+           strerror(errno));
+    close(source_fd);
+    return -1;
+  }
+
+  std::vector<uint8_t> buffer(64 * 1024);
+  bool copied = true;
+  while (copied) {
+    ssize_t bytes_read;
+    do {
+      bytes_read = read(source_fd, buffer.data(), buffer.size());
+    } while (bytes_read == -1 && errno == EINTR);
+
+    if (bytes_read == 0) {
+      break;
+    }
+    if (bytes_read < 0 ||
+        !WriteAllNoInterrupt(memfd, buffer.data(), size_t(bytes_read))) {
+      XELOGW("Failed to copy custom driver '{}' into memfd: {}", source_path,
+             strerror(errno));
+      copied = false;
+      break;
+    }
+  }
+
+  close(source_fd);
+
+  if (!copied || lseek(memfd, 0, SEEK_SET) == -1) {
+    if (copied) {
+      XELOGW("Failed to rewind memfd for custom driver '{}': {}", source_path,
+             strerror(errno));
+    }
+    close(memfd);
+    return -1;
+  }
+
+  if (source_stat.st_size > 0 && ftruncate(memfd, source_stat.st_size) != 0) {
+    XELOGW("Failed to size memfd for custom driver '{}': {}", source_path,
+           strerror(errno));
+    close(memfd);
+    return -1;
+  }
+
+  return memfd;
+#else
+  XELOGW("memfd_create is unavailable on this build; cannot retry custom "
+         "driver '{}' from memfd",
+         source_path);
+  return -1;
+#endif
+}
+
+void* TryLoadCustomDriverFromMemFd(const char* source_path,
+                                   android_namespace_t* ns,
+                                   const char* ns_name) {
+  int memfd = CreateMemFdCopy(source_path);
+  if (memfd == -1) {
+    return nullptr;
+  }
+
+  android_dlextinfo extinfo = {};
+  extinfo.flags = ANDROID_DLEXT_USE_LIBRARY_FD | ANDROID_DLEXT_FORCE_LOAD;
+  extinfo.library_fd = memfd;
+  if (ns) {
+    extinfo.flags |= ANDROID_DLEXT_USE_NAMESPACE;
+    extinfo.library_namespace = ns;
+  }
+
+  void* handle =
+      android_dlopen_ext(source_path, RTLD_NOW | RTLD_GLOBAL, &extinfo);
+  if (handle) {
+    if (ns_name) {
+      XELOGI("Custom driver loaded from memfd via '{}' namespace", ns_name);
+    } else {
+      XELOGI("Custom driver loaded from memfd without explicit namespace");
+    }
+  } else {
+    XELOGW("android_dlopen_ext from memfd{} failed: {}",
+           ns_name ? (" via '" + std::string(ns_name) + "' namespace").c_str()
+                   : "",
+           dlerror());
+  }
+
+  close(memfd);
+  return handle;
+}
+
+bool TryLoadAndroidHalVulkanFunctions(void* loader, void** hal_device_out,
+                                      AndroidHalVulkanFunctions* functions_out) {
+  if (hal_device_out) {
+    *hal_device_out = nullptr;
+  }
+  if (functions_out) {
+    *functions_out = {};
+  }
+
+  auto* hal_module = reinterpret_cast<AndroidHwVulkanModule*>(
+      dlsym(loader, "HMI"));
+  if (!hal_module) {
+    return false;
+  }
+
+  if (!hal_module->common.methods || !hal_module->common.methods->open) {
+    XELOGW("Android HAL Vulkan module exported HMI but has no open method");
+    return false;
+  }
+
+  AndroidHwDevice* opened_device = nullptr;
+  int open_result =
+      hal_module->common.methods->open(&hal_module->common, "vk0",
+                                       &opened_device);
+  if (open_result != 0 || !opened_device) {
+    XELOGW("Android HAL Vulkan module open(vk0) failed with {}",
+           open_result);
+    return false;
+  }
+
+  auto* hal_vulkan_device =
+      reinterpret_cast<AndroidHwVulkanDevice*>(opened_device);
+  if (!hal_vulkan_device->CreateInstance ||
+      !hal_vulkan_device->EnumerateInstanceExtensionProperties ||
+      !hal_vulkan_device->GetInstanceProcAddr) {
+    XELOGW(
+        "Android HAL Vulkan device missing required callbacks "
+        "(CreateInstance={}, EnumerateInstanceExtensionProperties={}, "
+        "GetInstanceProcAddr={})",
+        hal_vulkan_device->CreateInstance != nullptr,
+        hal_vulkan_device->EnumerateInstanceExtensionProperties != nullptr,
+        hal_vulkan_device->GetInstanceProcAddr != nullptr);
+    if (opened_device->close) {
+      opened_device->close(opened_device);
+    }
+    return false;
+  }
+
+  if (hal_device_out) {
+    *hal_device_out = opened_device;
+  }
+  if (functions_out) {
+    functions_out->CreateInstance = hal_vulkan_device->CreateInstance;
+    functions_out->EnumerateInstanceExtensionProperties =
+        hal_vulkan_device->EnumerateInstanceExtensionProperties;
+    functions_out->GetInstanceProcAddr = hal_vulkan_device->GetInstanceProcAddr;
+  }
+
+  XELOGI(
+      "Using Android HAL Vulkan entry points via HMI/vk0 "
+      "(CreateInstance + EnumerateInstanceExtensionProperties + "
+      "GetInstanceProcAddr)");
+  return true;
+}
+
+void CloseAndroidHalDevice(void* hal_device) {
+  if (!hal_device) {
+    return;
+  }
+
+  auto* device = reinterpret_cast<AndroidHwDevice*>(hal_device);
+  if (device->close) {
+    device->close(device);
+  }
+}
+
+}  // namespace
+#endif
+
 std::unique_ptr<VulkanInstance> VulkanInstance::Create(
     const bool with_surface, const bool try_enable_validation) {
   std::unique_ptr<VulkanInstance> vulkan_instance(new VulkanInstance());
+  bool enable_validation = try_enable_validation;
 
   // Load the RenderDoc API if connected.
 
@@ -47,48 +387,202 @@ std::unique_ptr<VulkanInstance> VulkanInstance::Create(
   // Load the loader library.
 
   Functions& ifn = vulkan_instance->functions_;
+  std::string requested_loader_name;
+  std::string active_loader_name;
+  std::string custom_loader_error;
+  bool custom_loader_requested = false;
+  bool loaded_system_fallback = false;
+  bool using_android_hal_bridge = false;
+  AndroidHalVulkanFunctions android_hal_functions;
 
   bool functions_loaded = true;
 #if XE_PLATFORM_LINUX
 #if XE_PLATFORM_ANDROID||XE_PLATFORM_AX360E
   // On Android, check for a custom Turnip driver installed via CustomDriverUtils.
-  // The Java layer sets CUSTOM_DRIVER_PATH to the direct .so path since
-  // Android's Vulkan loader does not honor VK_ICD_FILENAMES.
   const char* custom_driver_path = std::getenv("CUSTOM_DRIVER_PATH");
   const char* loader_library_name;
-  if (custom_driver_path && custom_driver_path[0] != '\0') {
+  bool is_custom = (custom_driver_path && custom_driver_path[0] != '\0');
+  custom_loader_requested = is_custom;
+  
+  if (is_custom) {
     loader_library_name = custom_driver_path;
     XELOGI("Using custom Vulkan driver: {}", loader_library_name);
   } else {
     loader_library_name = "libvulkan.so";
   }
+  requested_loader_name = loader_library_name;
+  active_loader_name = loader_library_name;
 #else
   const char* const loader_library_name = "libvulkan.so.1";
+  requested_loader_name = loader_library_name;
+  active_loader_name = loader_library_name;
 #endif
-  // http://developer.download.nvidia.com/mobile/shield/assets/Vulkan/UsingtheVulkanAPI.pdf
-  vulkan_instance->loader_ = dlopen(loader_library_name, RTLD_NOW | RTLD_LOCAL);
+  // Load the Vulkan library. On Android with a custom driver, use the sphal
+  // namespace (System Private HAL) which has access to system-private libraries
+  // like libcutils.so that Turnip depends on — these are blocked in the app's
+  // classloader namespace (clns-N) on Android 12+.
+#if XE_PLATFORM_ANDROID || XE_PLATFORM_AX360E
+  if (is_custom) {
+    PreloadAndroidStubLibraries(loader_library_name);
+    // android_get_exported_namespace is declared in <android/dlext.h> since API
+    // 24 and exported by libdl.so. We can't reach it via dlsym(RTLD_DEFAULT)
+    // from within a dlopen'd library on Android (visibility is scoped to the
+    // caller's linker namespace), so we resolve it two ways:
+    //   1. Directly (strong link through libdl.so at load time).
+    //   2. Via an explicit dlopen("libdl.so") + dlsym fallback, in case the
+    //      NDK we built against had the symbol stripped for our target API.
+    GetAndroidNamespaceFn fn_get_ns = ResolveAndroidGetExportedNamespace();
+    const char* ns_names[] = {"sphal", "vndk", "default", nullptr};
+    if (fn_get_ns) {
+      for (int i = 0; ns_names[i] && !vulkan_instance->loader_; i++) {
+        android_namespace_t* ns = fn_get_ns(ns_names[i]);
+        if (!ns) {
+          XELOGW("Namespace '{}' not found", ns_names[i]);
+          continue;
+        }
+        android_dlextinfo extinfo = {};
+        extinfo.flags = ANDROID_DLEXT_USE_NAMESPACE;
+        extinfo.library_namespace = ns;
+        vulkan_instance->loader_ =
+            android_dlopen_ext(loader_library_name, RTLD_NOW | RTLD_GLOBAL, &extinfo);
+        if (vulkan_instance->loader_) {
+          XELOGI("Custom driver loaded via '{}' namespace", ns_names[i]);
+        } else {
+          XELOGW("android_dlopen_ext with '{}' namespace failed: {}",
+                 ns_names[i], dlerror());
+        }
+      }
+    } else {
+      XELOGW("android_get_exported_namespace unavailable, trying direct dlopen");
+    }
+    if (!vulkan_instance->loader_) {
+      vulkan_instance->loader_ =
+          dlopen(loader_library_name, RTLD_NOW | RTLD_GLOBAL);
+      if (vulkan_instance->loader_) {
+        XELOGI("Custom driver loaded via direct dlopen after stub preload");
+      } else {
+        XELOGW("Direct dlopen for custom driver failed after stub preload: {}",
+               dlerror());
+      }
+    }
+    if (!vulkan_instance->loader_) {
+      if (fn_get_ns) {
+        for (int i = 0; ns_names[i] && !vulkan_instance->loader_; i++) {
+          android_namespace_t* ns = fn_get_ns(ns_names[i]);
+          if (!ns) {
+            continue;
+          }
+          vulkan_instance->loader_ =
+              TryLoadCustomDriverFromMemFd(loader_library_name, ns, ns_names[i]);
+        }
+      }
+      if (vulkan_instance->loader_) {
+        active_loader_name += " [memfd]";
+      }
+    }
+  } else {
+    vulkan_instance->loader_ = dlopen(loader_library_name, RTLD_NOW | RTLD_GLOBAL);
+  }
+#else
+  vulkan_instance->loader_ = dlopen(loader_library_name, RTLD_NOW | RTLD_GLOBAL);
+#endif
   if (!vulkan_instance->loader_) {
-    XELOGE("Failed to load {}", loader_library_name);
-    return nullptr;
+    const char* error = dlerror();
+    XELOGE("Failed to load {}: {}", loader_library_name, error ? error : "unknown error");
+    
+    // Fallback to system driver if custom failed
+    if (custom_loader_requested) {
+        custom_loader_error = error ? error : "unknown error";
+        XELOGW("Fallback: attempting to load system libvulkan.so");
+        vulkan_instance->loader_ =
+            dlopen("libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
+        if (vulkan_instance->loader_) {
+            loaded_system_fallback = true;
+            active_loader_name = "libvulkan.so";
+            XELOGI("Successfully loaded system Vulkan as fallback");
+        } else {
+            const char* fallback_error = dlerror();
+            XELOGE("Failed to load system libvulkan.so during fallback: {}",
+                   fallback_error ? fallback_error : "unknown error");
+        }
+    }
+    
+    if (!vulkan_instance->loader_) {
+        return nullptr;
+    }
+  }
+  if (loaded_system_fallback) {
+    XELOGW(
+        "Active Vulkan loader library: {} (requested custom loader {} failed: {})",
+        active_loader_name, requested_loader_name, custom_loader_error);
+  } else {
+    XELOGI("Active Vulkan loader library: {}", active_loader_name);
   }
 #define XE_VULKAN_LOAD_LOADER_FUNCTION(name)                             \
   functions_loaded &=                                                    \
       (ifn.name = PFN_##name(dlsym(vulkan_instance->loader_, #name))) != \
-      nullptr;
+       nullptr;
 #elif XE_PLATFORM_WIN32
   vulkan_instance->loader_ = LoadLibraryW(L"vulkan-1.dll");
+  requested_loader_name = "vulkan-1.dll";
+  active_loader_name = requested_loader_name;
   if (!vulkan_instance->loader_) {
     XELOGE("Failed to load vulkan-1.dll");
     return nullptr;
   }
+  XELOGI("Active Vulkan loader library: {}", active_loader_name);
 #define XE_VULKAN_LOAD_LOADER_FUNCTION(name)                 \
   functions_loaded &= (ifn.name = PFN_##name(GetProcAddress( \
-                           vulkan_instance->loader_, #name))) != nullptr;
+                            vulkan_instance->loader_, #name))) != nullptr;
 #else
 #error No Vulkan loader library loading provided for the target platform.
 #endif
+  // Try the standard loader entry point first. If the loaded library is a
+  // Vulkan ICD (e.g. Mesa Turnip loaded directly, not via libvulkan.so), it
+  // exports vk_icdGetInstanceProcAddr instead and we must dispatch through
+  // that. vkDestroyInstance is NOT exported as a symbol by ICDs, so we defer
+  // loading it until after vkCreateInstance succeeds and we have a valid
+  // VkInstance handle (see below, after vkCreateInstance).
   XE_VULKAN_LOAD_LOADER_FUNCTION(vkGetInstanceProcAddr);
-  XE_VULKAN_LOAD_LOADER_FUNCTION(vkDestroyInstance);
+  // Try to load vkDestroyInstance eagerly; it's needed only at shutdown, and
+  // we'll lazily resolve it via vkGetInstanceProcAddr after instance creation
+  // if the eager dlsym didn't work (ICDs don't export it as a symbol).
+  ifn.vkDestroyInstance = PFN_vkDestroyInstance(
+      dlsym(vulkan_instance->loader_, "vkDestroyInstance"));
+#if XE_PLATFORM_ANDROID || XE_PLATFORM_AX360E
+  if (!ifn.vkGetInstanceProcAddr) {
+    // ICD interface: optionally negotiate version, then use vk_icd*.
+    typedef VkResult (*PFN_vk_icdNegotiate)(uint32_t*);
+    auto icd_negotiate = reinterpret_cast<PFN_vk_icdNegotiate>(
+        dlsym(vulkan_instance->loader_,
+              "vk_icdNegotiateLoaderICDInterfaceVersion"));
+    if (icd_negotiate) {
+      uint32_t icd_version = 6;  // highest loader version we claim support for
+      VkResult nr = icd_negotiate(&icd_version);
+      XELOGI("ICD negotiate returned {}, version {}",
+             static_cast<int>(nr), icd_version);
+    }
+    ifn.vkGetInstanceProcAddr = PFN_vkGetInstanceProcAddr(
+        dlsym(vulkan_instance->loader_, "vk_icdGetInstanceProcAddr"));
+    if (ifn.vkGetInstanceProcAddr) {
+      XELOGI("Using ICD entry point vk_icdGetInstanceProcAddr");
+      functions_loaded = true;
+    }
+  }
+  if (!ifn.vkGetInstanceProcAddr && custom_loader_requested) {
+    if (TryLoadAndroidHalVulkanFunctions(vulkan_instance->loader_,
+                                         &vulkan_instance->android_hal_device_,
+                                         &android_hal_functions)) {
+      ifn.vkGetInstanceProcAddr = android_hal_functions.GetInstanceProcAddr;
+      using_android_hal_bridge = true;
+      XELOGI("Using Android HAL GetInstanceProcAddr bridge");
+      functions_loaded = true;
+    }
+  }
+#endif
+  if (!ifn.vkGetInstanceProcAddr) {
+    functions_loaded = false;
+  }
 #undef XE_VULKAN_LOAD_LOADER_FUNCTION
   if (!functions_loaded) {
     XELOGE("Failed to get Vulkan loader function pointers");
@@ -96,27 +590,65 @@ std::unique_ptr<VulkanInstance> VulkanInstance::Create(
   }
 
   // Load global functions.
+  if (using_android_hal_bridge) {
+    XELOGI(
+        "Resolving Vulkan global entry points via Android HAL bridge "
+        "(validation layer probing disabled)");
+    enable_validation = false;
+    ifn.vkCreateInstance = android_hal_functions.CreateInstance;
+    ifn.vkEnumerateInstanceExtensionProperties =
+        android_hal_functions.EnumerateInstanceExtensionProperties;
+  }
 
-  functions_loaded &=
-      (ifn.vkCreateInstance = PFN_vkCreateInstance(
-           ifn.vkGetInstanceProcAddr(nullptr, "vkCreateInstance"))) != nullptr;
-  functions_loaded &=
-      (ifn.vkEnumerateInstanceExtensionProperties =
-           PFN_vkEnumerateInstanceExtensionProperties(ifn.vkGetInstanceProcAddr(
-               nullptr, "vkEnumerateInstanceExtensionProperties"))) != nullptr;
-  functions_loaded &=
-      (ifn.vkEnumerateInstanceLayerProperties =
-           PFN_vkEnumerateInstanceLayerProperties(ifn.vkGetInstanceProcAddr(
-               nullptr, "vkEnumerateInstanceLayerProperties"))) != nullptr;
+  if (!using_android_hal_bridge) {
+    XELOGI("Resolving vkCreateInstance");
+    functions_loaded &=
+        (ifn.vkCreateInstance = PFN_vkCreateInstance(
+             ifn.vkGetInstanceProcAddr(nullptr, "vkCreateInstance"))) !=
+        nullptr;
+    XELOGI("Resolving vkEnumerateInstanceExtensionProperties");
+    functions_loaded &=
+        (ifn.vkEnumerateInstanceExtensionProperties =
+             PFN_vkEnumerateInstanceExtensionProperties(
+                 ifn.vkGetInstanceProcAddr(
+                     nullptr, "vkEnumerateInstanceExtensionProperties"))) !=
+        nullptr;
+  } else {
+    XELOGI("Using Android HAL direct CreateInstance callback");
+    XELOGI(
+        "Using Android HAL direct EnumerateInstanceExtensionProperties "
+        "callback");
+    functions_loaded &= ifn.vkCreateInstance != nullptr;
+    functions_loaded &= ifn.vkEnumerateInstanceExtensionProperties != nullptr;
+  }
+  if (!using_android_hal_bridge) {
+    XELOGI("Resolving vkEnumerateInstanceLayerProperties");
+    functions_loaded &=
+        (ifn.vkEnumerateInstanceLayerProperties =
+             PFN_vkEnumerateInstanceLayerProperties(
+                 ifn.vkGetInstanceProcAddr(
+                     nullptr, "vkEnumerateInstanceLayerProperties"))) !=
+        nullptr;
+  } else {
+    ifn.vkEnumerateInstanceLayerProperties = nullptr;
+  }
   if (!functions_loaded) {
     XELOGE(
         "Failed to get Vulkan global function pointers via "
         "vkGetInstanceProcAddr");
     return nullptr;
   }
-  // Available since Vulkan 1.1. If this is nullptr, it's a Vulkan 1.0 instance.
-  ifn.vkEnumerateInstanceVersion = PFN_vkEnumerateInstanceVersion(
-      ifn.vkGetInstanceProcAddr(nullptr, "vkEnumerateInstanceVersion"));
+  // Available since Vulkan 1.1. On the Android HAL path, avoid any additional
+  // null-instance GetInstanceProcAddr calls before vkCreateInstance.
+  if (!using_android_hal_bridge) {
+    ifn.vkEnumerateInstanceVersion = PFN_vkEnumerateInstanceVersion(
+        ifn.vkGetInstanceProcAddr(nullptr, "vkEnumerateInstanceVersion"));
+  } else {
+    ifn.vkEnumerateInstanceVersion = nullptr;
+    XELOGI(
+        "Skipping vkEnumerateInstanceVersion on Android HAL path and using "
+        "conservative Vulkan 1.0 instance version until vkCreateInstance");
+  }
 
   // Get the API version.
 
@@ -173,6 +705,7 @@ std::unique_ptr<VulkanInstance> VulkanInstance::Create(
   std::vector<const char*> enabled_extensions;
 
   std::vector<VkExtensionProperties> supported_implementation_extensions;
+  XELOGI("Enumerating Vulkan instance extensions");
   while (true) {
     uint32_t supported_implementation_extension_count = 0;
     const VkResult get_supported_implementation_extension_count_result =
@@ -227,7 +760,7 @@ std::unique_ptr<VulkanInstance> VulkanInstance::Create(
   // vector.
   std::unordered_map<std::string, bool*> requested_layers;
   bool layer_khronos_validation = false;
-  if (try_enable_validation) {
+  if (enable_validation) {
     requested_layers.emplace("VK_LAYER_KHRONOS_validation",
                              &layer_khronos_validation);
   }
@@ -378,6 +911,9 @@ std::unique_ptr<VulkanInstance> VulkanInstance::Create(
   instance_create_info.enabledExtensionCount =
       uint32_t(enabled_extensions.size());
   instance_create_info.ppEnabledExtensionNames = enabled_extensions.data();
+  XELOGI("Creating Vulkan instance with {} extensions and {} layers",
+         instance_create_info.enabledExtensionCount,
+         instance_create_info.enabledLayerCount);
   VkResult instance_create_result = ifn.vkCreateInstance(
       &instance_create_info, nullptr, &vulkan_instance->instance_);
 
@@ -403,6 +939,20 @@ std::unique_ptr<VulkanInstance> VulkanInstance::Create(
     XELOGE("Failed to create a Vulkan instance: {}",
            vk::to_string(vk::Result(instance_create_result)));
     return nullptr;
+  }
+  XELOGI("Created Vulkan instance successfully");
+
+  // Lazily resolve vkDestroyInstance if it wasn't available as a raw symbol
+  // (the ICD case — the function is only reachable via vkGetInstanceProcAddr
+  // with a valid VkInstance, per the Vulkan spec).
+  if (!ifn.vkDestroyInstance) {
+    ifn.vkDestroyInstance = PFN_vkDestroyInstance(
+        ifn.vkGetInstanceProcAddr(vulkan_instance->instance_,
+                                  "vkDestroyInstance"));
+    if (!ifn.vkDestroyInstance) {
+      XELOGE("Failed to resolve vkDestroyInstance via vkGetInstanceProcAddr");
+      return nullptr;
+    }
   }
 
   // Load instance functions.
@@ -552,6 +1102,9 @@ VulkanInstance::~VulkanInstance() {
   }
 
 #if XE_PLATFORM_LINUX
+  if (android_hal_device_) {
+    CloseAndroidHalDevice(android_hal_device_);
+  }
   if (loader_) {
     dlclose(loader_);
   }

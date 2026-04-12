@@ -50,10 +50,10 @@ public class LaunchEnvironmentResolver {
         }
 
         // Resolve driver selection
-        applyDriverSelection(profile);
+        boolean customDriverActive = applyDriverSelection(profile);
 
         // Apply Turnip environment variables
-        applyTurnipEnvironment();
+        applyTurnipEnvironment(customDriverActive);
 
         // Note: Engine profile config overrides are applied in the native config system
         // This resolver only handles environment variables
@@ -65,41 +65,48 @@ public class LaunchEnvironmentResolver {
     /**
      * Apply driver selection based on per-game profile.
      */
-    private void applyDriverSelection(GameProfile profile) {
+    private boolean applyDriverSelection(GameProfile profile) {
+        boolean customDriverInstalled = CustomDriverUtils.isDriverInstalled(context);
         switch (profile.driverSelection) {
             case FORCE_SYSTEM:
-                // Clear any custom driver env vars to force system driver
-                try {
-                    Os.unsetenv("CUSTOM_DRIVER_PATH");
-                    Os.unsetenv("VK_ICD_FILENAMES");
-                    Os.unsetenv("VK_DRIVER_FILES");
-                    Log.i(TAG, "Driver selection: FORCE_SYSTEM (using system libvulkan.so)");
-                } catch (ErrnoException e) {
-                    Log.e(TAG, "Failed to unset custom driver env vars", e);
-                }
-                break;
+                CustomDriverUtils.clearDriverEnv();
+                Log.i(TAG, "Driver selection: FORCE_SYSTEM (using system libvulkan.so)");
+                return false;
 
             case CUSTOM:
-                // Use specific custom driver (future: support multiple installed drivers)
-                // For now, just use the globally installed custom driver
+                if (!customDriverInstalled) {
+                    CustomDriverUtils.clearDriverEnv();
+                    Log.w(TAG, "Driver selection: CUSTOM requested but no custom driver is installed");
+                    return false;
+                }
                 CustomDriverUtils.setupDriverEnv(context);
                 Log.i(TAG, "Driver selection: CUSTOM (custom driver name: " +
                       (profile.customDriverName != null ? profile.customDriverName : "global") + ")");
-                break;
+                return true;
 
             case DEFAULT:
             default:
-                // Use global driver setting (check if custom driver is installed)
-                CustomDriverUtils.setupDriverEnv(context);
-                Log.i(TAG, "Driver selection: DEFAULT (using global driver setting)");
-                break;
+                if (customDriverInstalled) {
+                    CustomDriverUtils.setupDriverEnv(context);
+                    Log.i(TAG, "Driver selection: DEFAULT (using installed custom driver)");
+                    return true;
+                }
+                CustomDriverUtils.clearDriverEnv();
+                Log.i(TAG, "Driver selection: DEFAULT (using system driver, no custom driver installed)");
+                return false;
         }
     }
 
     /**
      * Apply Turnip-specific environment variables based on global settings.
      */
-    private void applyTurnipEnvironment() {
+    private void applyTurnipEnvironment(boolean customDriverActive) {
+        if (!customDriverActive) {
+            clearTurnipEnvironment();
+            Log.i(TAG, "Skipping Turnip environment variables because system driver is active");
+            return;
+        }
+
         TurnipEnvManager turnipManager = new TurnipEnvManager(context);
         List<TurnipEnvManager.EnvVar> envVars = turnipManager.buildEnvironmentVariables();
 
@@ -116,6 +123,21 @@ public class LaunchEnvironmentResolver {
             Log.i(TAG, "No Turnip environment variables configured");
         } else {
             Log.i(TAG, "Applied " + envVars.size() + " Turnip environment variables");
+        }
+    }
+
+    private void clearTurnipEnvironment() {
+        String[] envVars = {
+            "TU_DEBUG",
+            "FD_DEV_FEATURES",
+            "MESA_DEBUG"
+        };
+        for (String envVar : envVars) {
+            try {
+                Os.unsetenv(envVar);
+            } catch (ErrnoException e) {
+                Log.w(TAG, "Failed to clear " + envVar, e);
+            }
         }
     }
 

@@ -97,8 +97,7 @@ dword_result_t NtQueryInformationFile_entry(
       // arbitrary 4 byte integer most of the time
       XELOGW("Stub XFileSectorInformation!");
       auto info = info_ptr.as<uint32_t*>();
-      size_t fname_hash = xe::memory::hash_combine(82589933LL, file->path());
-      *info = static_cast<uint32_t>(fname_hash ^ (fname_hash >> 32));
+      *info = 2048; // 2048 bytes per sector
       out_length = sizeof(uint32_t);
       break;
     }
@@ -384,7 +383,7 @@ dword_result_t NtQueryVolumeInformationFile_entry(
       auto info = info_ptr.as<X_FILE_FS_DEVICE_INFORMATION*>();
       auto file_device = file->device();
       XELOGW("Stub XFileFsDeviceInformation!");
-      info->device_type = FILE_DEVICE_UNKNOWN;  // 415608D8 checks for 0x46;
+      info->device_type = static_cast<X_FILE_DEVICE_TYPE>(0x46);  // 415608D8 checks for 0x46;
       info->characteristics = 0;
       out_length = sizeof(X_FILE_FS_DEVICE_INFORMATION);
       break;

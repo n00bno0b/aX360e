@@ -135,6 +135,9 @@ class A64Emitter : public oaknut::VectorCodeGenerator {
 
   Processor* processor() const { return processor_; }
   A64Backend* backend() const { return backend_; }
+  const hir::Instr* current_instr() const { return current_instr_; }
+  uint32_t last_guest_address() const { return last_guest_address_; }
+  uint32_t last_hir_offset() const { return last_hir_offset_; }
 
   static uintptr_t PlaceConstData(uintptr_t high_address);
   static void FreeConstData(uintptr_t data);
@@ -262,6 +265,8 @@ class A64Emitter : public oaknut::VectorCodeGenerator {
   uint32_t debug_info_flags_ = 0;
   FunctionTraceData* trace_data_ = nullptr;
   Arena source_map_arena_;
+  uint32_t last_guest_address_ = 0;
+  uint32_t last_hir_offset_ = 0;
 
   size_t stack_size_ = 0;
 

@@ -782,6 +782,13 @@ bool VulkanRenderTargetCache::Initialize(uint32_t shared_memory_binding_count) {
     // Common render pass.
     VkSubpassDescription fsi_subpass = {};
     fsi_subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+
+    bool use_tile_images =
+        vulkan_device->extensions().ext_EXT_shader_tile_image;
+    // EXT_shader_tile_image operates without render pass attachments — tile
+    // images are accessed directly from the framebuffer tile, so no attachment
+    // descriptions or references are needed in the subpass.
+
     // Fragment shader interlock provides synchronization and ordering within a
     // subpass, create an external by-region dependency to maintain interlocking
     // between passes. Framebuffer-global dependencies will be made with
@@ -796,8 +803,18 @@ bool VulkanRenderTargetCache::Initialize(uint32_t shared_memory_binding_count) {
         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
     fsi_subpass_dependencies[0].srcAccessMask =
         VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+    if (use_tile_images) {
+      fsi_subpass_dependencies[0].srcAccessMask |=
+          VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+          VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    }
     fsi_subpass_dependencies[0].dstAccessMask =
         VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+    if (use_tile_images) {
+      fsi_subpass_dependencies[0].dstAccessMask |=
+          VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+          VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    }
     fsi_subpass_dependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
     fsi_subpass_dependencies[1].srcSubpass = 0;
     fsi_subpass_dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
@@ -806,8 +823,18 @@ bool VulkanRenderTargetCache::Initialize(uint32_t shared_memory_binding_count) {
     fsi_subpass_dependencies[1].dstStageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
     fsi_subpass_dependencies[1].srcAccessMask =
         VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+    if (use_tile_images) {
+      fsi_subpass_dependencies[1].srcAccessMask |=
+          VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+          VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    }
     fsi_subpass_dependencies[1].dstAccessMask =
         VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+    if (use_tile_images) {
+      fsi_subpass_dependencies[1].dstAccessMask |=
+          VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+          VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    }
     fsi_subpass_dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
     VkRenderPassCreateInfo fsi_render_pass_create_info;
     fsi_render_pass_create_info.sType =
@@ -839,6 +866,7 @@ bool VulkanRenderTargetCache::Initialize(uint32_t shared_memory_binding_count) {
     fsi_framebuffer_create_info.renderPass = fsi_render_pass_;
     fsi_framebuffer_create_info.attachmentCount = 0;
     fsi_framebuffer_create_info.pAttachments = nullptr;
+
     fsi_framebuffer_create_info.width = std::min(
         xenos::kTexture2DCubeMaxWidthHeight * draw_resolution_scale_x(),
         device_properties.maxFramebufferWidth);
