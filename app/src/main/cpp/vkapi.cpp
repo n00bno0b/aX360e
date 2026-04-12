@@ -97,6 +97,9 @@ void vk_unload() {
         return;
     }
 
+    // The driver was loaded with RTLD_NODELETE, so dlclose() decrements the
+    // reference count but does NOT unload the image from memory. This is
+    // intentional: GPU drivers maintain global state and must not be evicted.
     dlclose(lib_handle);
     lib_handle = nullptr;
 
@@ -104,7 +107,7 @@ void vk_unload() {
 #include "vksym.h"
 #undef VKFN
 
-    LOGI("Vulkan library unloaded successfully");
+    LOGI("Vulkan driver reference released (library remains resident due to RTLD_NODELETE)");
 }
 
 bool vk_is_loaded() {
