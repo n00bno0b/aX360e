@@ -35,7 +35,7 @@ aX360e is an Xbox 360 emulator for Android devices, based on the Xenia emulator 
 - **Vulkan renderer**: Hardware-accelerated graphics via Vulkan API
 - **Fragment Shader Interlock (FSI)**: High-accuracy render target emulation on supported GPUs
 - **XMA audio decoding**: Both legacy and new experimental XMA audio decoders
-- **Save state support**: Save and load game progress
+- **In-game save support**: Supports normal game-provided save and load progress
 
 ### Graphics & Performance
 - **Resolution scaling**: 1x, 2x, 3x internal resolution options
@@ -59,7 +59,7 @@ aX360e is an Xbox 360 emulator for Android devices, based on the Xenia emulator 
 
 ### Customization & Advanced Features
 - **Per-game configuration**: Individual settings for each game
-- **Game patches**: 473+ community patches from xenia-canary (FPS unlocks, bug fixes, enhancements)
+- **Game patches**: Community patches from xenia-canary (FPS unlocks, bug fixes, enhancements)
 - **Patch manager**: Built-in GUI to enable/disable patches
 - **Extensive settings**: 100+ emulator configuration options across all subsystems
 - **Performance presets**: Quick configurations for performance vs. quality
@@ -113,7 +113,7 @@ aX360e is an Xbox 360 emulator for Android devices, based on the Xenia emulator 
    ```
 
 ### Build Configuration
-- **Target SDK**: Android 14 (API 35)
+- **Target SDK**: Android 15 (API 35)
 - **Min SDK**: Android 8.0 (API 26)
 - **Architecture**: ARM64-v8a only
 - **C++ Standard**: C++20
@@ -132,7 +132,7 @@ aX360e is an Xbox 360 emulator for Android devices, based on the Xenia emulator 
 ### For Best Performance
 1. **Use custom Turnip drivers** on Adreno GPUs (Settings → Custom Drivers)
 2. **Enable GPU-specific optimizations**:
-   - Adreno 830: Enable "Force Sysmem Mode" and "Disable LRZ"
+   - Adreno 830: Enable "Force Sysmem Mode" and "Disable Low Resolution Z"
    - Adreno 710/720: Enable "Force GMEM Mode"
 3. **Reduce resolution scale** if experiencing lag (Settings → GPU → Draw Resolution Scale)
 4. **Disable VSync** for higher frame rates (Settings → GPU → VSYNC)
@@ -143,7 +143,7 @@ aX360e is an Xbox 360 emulator for Android devices, based on the Xenia emulator 
 1. **Enable VSync** to cap frame rate
 2. **Use lower resolution scales**
 3. **Enable "Background Resource Unload"**
-4. **Select "Battery Saver" performance preset**
+4. **Select "Battery Optimized" performance preset**
 
 ## Known Issues & Limitations
 
@@ -230,4 +230,4 @@ This emulator is for educational and preservation purposes. You must own legal c
 **Current Version**: 1.0
 **Last Updated**: 2026-04-12
 **Minimum Android**: 8.0 (API 26)
-**Target Android**: 14 (API 35)
+**Target Android**: 15 (API 35)
