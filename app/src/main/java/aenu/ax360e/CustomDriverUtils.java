@@ -187,6 +187,19 @@ public class CustomDriverUtils {
             try {
                 ensureAndroidStubLibraries(context);
 
+                // Set LD_LIBRARY_PATH to include driver and stub directories
+                // This allows the dynamic linker to find dependencies
+                File stubDir = new File(dir.getParentFile(), ANDROID_STUB_DIR_NAME);
+                String currentPath = System.getenv("LD_LIBRARY_PATH");
+                StringBuilder newPath = new StringBuilder();
+                newPath.append(dir.getAbsolutePath());
+                newPath.append(":").append(stubDir.getAbsolutePath());
+                if (currentPath != null && !currentPath.isEmpty()) {
+                    newPath.append(":").append(currentPath);
+                }
+                Os.setenv("LD_LIBRARY_PATH", newPath.toString(), true);
+                Log.i(TAG, "LD_LIBRARY_PATH set to include driver and stub directories");
+
                 // Set ICD env vars (used by desktop Vulkan loaders, informational on Android)
                 Os.setenv("VK_ICD_FILENAMES", icdFile.getAbsolutePath(), true);
                 Os.setenv("VK_DRIVER_FILES", icdFile.getAbsolutePath(), true);
