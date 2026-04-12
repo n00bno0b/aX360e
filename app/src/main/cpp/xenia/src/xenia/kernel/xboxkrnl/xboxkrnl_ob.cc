@@ -441,7 +441,7 @@ uint32_t NtClose(uint32_t handle) {
 }
 
 dword_result_t NtClose_entry(dword_t handle) { return NtClose(handle); }
-DECLARE_XBOXKRNL_EXPORT1(NtClose, kNone, kImplemented);
+DECLARE_XBOXKRNL_EXPORT2(NtClose, kNone, kImplemented, kHighFrequency);
 
 dword_result_t ObCreateObject_entry(
     pointer_t<X_OBJECT_TYPE> object_factory,

@@ -128,7 +128,8 @@ bool A64Assembler::Assemble(GuestFunction* function, HIRBuilder* builder,
 
     const hir::Instr* cursor = window_start;
     for (int i = 0; cursor && i < 7; ++i, cursor = cursor->next) {
-      if (cursor->opcode->flags & hir::OPCODE_FLAG_HIDE) {
+      if (cursor->opcode &&
+          (cursor->opcode->flags & hir::OPCODE_FLAG_HIDE)) {
         continue;
       }
 
@@ -156,6 +157,7 @@ bool A64Assembler::Assemble(GuestFunction* function, HIRBuilder* builder,
   try {
     if (!emitter_->Emit(function, builder, debug_info_flags, debug_info.get(),
                         &machine_code, &code_size, &function->source_map())) {
+      log_emit_failure("Emit returned false");
       reset_emitter();
       return false;
     }

@@ -26,7 +26,9 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <array>
+#include <cerrno>
 #include <cstddef>
+#include <cstring>
 #include <ctime>
 #include <memory>
 
@@ -672,13 +674,36 @@ class PosixCondition<Thread> : public PosixConditionBase {
         int nice_level = 0;
         // Priority comes from XThread::set_priority which might be from Win32 THREAD_PRIORITY_*
         // Values usually span from -2 to 2 or 1 to 31.
-        if (new_priority > 0) nice_level = -10;
-        if (new_priority > 10) nice_level = -16;
-        if (new_priority > 20) nice_level = -19; // URGENT_DISPLAY / AUDIO
-        
-        int res = setpriority(PRIO_PROCESS, pthread_gettid_np(thread_), nice_level);
+        if (new_priority < 0) {
+            nice_level = 10;
+        } else if (new_priority > 20) {
+            nice_level = -19;  // URGENT_DISPLAY / AUDIO
+        } else if (new_priority > 10) {
+            nice_level = -16;
+        } else if (new_priority > 0) {
+            nice_level = -10;
+        } else {
+            nice_level = 0;
+        }
+        if (nice_level < 0 && geteuid() != 0) {
+            XELOGW(
+                "Falling back to non-privileged thread priority for requested "
+                "priority {} because negative niceness requires elevated privileges",
+                new_priority);
+            nice_level = 0;
+        }
+
+        int thread_id = pthread_gettid_np(thread_);
+        errno = 0;
+        int res = setpriority(PRIO_PROCESS, thread_id, nice_level);
         if (res != 0) {
-            XELOGW("Permission denied while setting priority using setpriority (nice_level={})", nice_level);
+            int err = errno;
+            XELOGW(
+                "setpriority failed for tid {} with nice_level {} (errno={} "
+                "{}{})",
+                thread_id, nice_level, err, std::strerror(err),
+                err == EPERM ? ", elevated privileges required for negative niceness"
+                             : "");
         }
 #else
         sched_param param{};

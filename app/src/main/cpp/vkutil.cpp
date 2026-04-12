@@ -33,10 +33,29 @@ std::optional<VkInstance> vk_create_instance(const char * name) {
         };
 
         // Check for portability enumeration extension
+        if (!vkEnumerateInstanceExtensionProperties_) {
+            LOGE("vkEnumerateInstanceExtensionProperties function pointer is null");
+            return std::nullopt;
+        }
         uint32_t ext_count = 0;
-        vkEnumerateInstanceExtensionProperties_(nullptr, &ext_count, nullptr);
+        VkResult ext_result =
+            vkEnumerateInstanceExtensionProperties_(nullptr, &ext_count, nullptr);
+        if (ext_result != VK_SUCCESS && ext_result != VK_INCOMPLETE) {
+            LOGE("vkEnumerateInstanceExtensionProperties (count) failed: %d",
+                 ext_result);
+            return std::nullopt;
+        }
         std::vector<VkExtensionProperties> available_exts(ext_count);
-        vkEnumerateInstanceExtensionProperties_(nullptr, &ext_count, available_exts.data());
+        if (ext_count != 0) {
+            ext_result = vkEnumerateInstanceExtensionProperties_(
+                nullptr, &ext_count, available_exts.data());
+            if (ext_result != VK_SUCCESS && ext_result != VK_INCOMPLETE) {
+                LOGE("vkEnumerateInstanceExtensionProperties (fetch) failed: %d",
+                     ext_result);
+                return std::nullopt;
+            }
+            available_exts.resize(ext_count);
+        }
 
         bool portability_supported = false;
         for (const auto& ext : available_exts) {

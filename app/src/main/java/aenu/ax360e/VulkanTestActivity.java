@@ -60,33 +60,53 @@ public class VulkanTestActivity extends Activity implements SurfaceHolder.Callba
     }
 
     private void startVulkanTest(Surface surface) {
+        if (isRunning) {
+            return;
+        }
         isRunning = true;
         testThread = new Thread(() -> {
-            String result = nRunVulkanTest(surface);
-            String deviceInfo = nGetVulkanDeviceInfo();
-            new Handler(Looper.getMainLooper()).post(() -> {
-                statusText.setText("Result: " + result);
-                driverInfo.setText("GPU: " + deviceInfo);
-            });
-            isRunning = false;
+            try {
+                String result = nRunVulkanTest(surface);
+                String deviceInfo = nGetVulkanDeviceInfo();
+                new Handler(Looper.getMainLooper()).post(() -> {
+                    if (isFinishing() || isDestroyed()) {
+                        return;
+                    }
+                    statusText.setText("Result: " + result);
+                    driverInfo.setText("GPU: " + deviceInfo);
+                });
+            } finally {
+                isRunning = false;
+                testThread = null;
+            }
         });
         testThread.start();
     }
 
     private void stopVulkanTest() {
         isRunning = false;
-        if (testThread != null) {
+        Thread thread = testThread;
+        if (thread != null) {
+            nCancelVulkanTest();
             try {
-                testThread.join(1000);
+                thread.join(300);
             } catch (InterruptedException e) {
                 Log.w(TAG, "join interrupted", e);
+                Thread.currentThread().interrupt();
             }
-            if (testThread.isAlive()) {
-                testThread.interrupt();
+            if (thread.isAlive()) {
+                thread.interrupt();
             }
         }
     }
 
+    @Override
+    protected void onDestroy() {
+        stopVulkanTest();
+        super.onDestroy();
+    }
+
     private native String nRunVulkanTest(Surface surface);
+    private native void nCancelVulkanTest();
     private native String nGetVulkanDeviceInfo();
 }

@@ -123,6 +123,8 @@ void SpirvShaderTranslator::Reset() {
   input_fragment_coordinates_ = spv::NoResult;
   input_front_facing_ = spv::NoResult;
   input_sample_mask_ = spv::NoResult;
+  std::fill(input_attachments_tile_image_.begin(),
+            input_attachments_tile_image_.end(), spv::NoResult);
   std::fill(input_output_interpolators_.begin(),
             input_output_interpolators_.end(), spv::NoResult);
   output_point_coordinates_ = spv::NoResult;
@@ -1826,16 +1828,17 @@ void SpirvShaderTranslator::StartFragmentShaderBeforeMain() {
       main_interface_.push_back(buffer_edram_);
     }
 
-    // Phase 4B: Declare input attachments for color read access.
+    // Declare tile input attachments for subpass read access.
     // Xenia uses up to 4 color targets.
     if (CanUseTileImagesForEdram()) {
       for (uint32_t i = 0; i < 4; ++i) {
         // Declare as subpass input.
         spv::Id attachment_type = builder_->makeImageType(
-            type_float4_, spv::DimSubpassData, 0, false, 0, 1,
+            type_float4_, spv::DimSubpassData, 0, false, 0, 2,
             spv::ImageFormatUnknown);
         input_attachments_tile_image_[i] = builder_->createVariable(
-            spv::NoPrecision, spv::StorageClassInput, attachment_type,
+            spv::NoPrecision, static_cast<spv::StorageClass>(4172),
+            attachment_type,
             fmt::format("xe_tile_image_{}", i).c_str());
         builder_->addDecoration(input_attachments_tile_image_[i],
                                 spv::DecorationInputAttachmentIndex, int(i));

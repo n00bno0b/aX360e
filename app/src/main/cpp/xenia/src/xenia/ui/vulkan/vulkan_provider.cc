@@ -9,6 +9,7 @@
 
 #include "xenia/ui/vulkan/vulkan_provider.h"
 
+#include <cstring>
 #include <vector>
 
 #include "xenia/base/cvar.h"

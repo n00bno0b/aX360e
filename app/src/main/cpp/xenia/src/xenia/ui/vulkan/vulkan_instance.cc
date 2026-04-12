@@ -171,20 +171,38 @@ void PreloadAndroidStubLibraries(const char* source_path) {
   const char* kStubLibraries[] = {
       "libcutils.so",
       "libhardware.so",
-      "liblog.so",
-      "libnativewindow.so",
       "libsync.so",
   };
 
   std::string stub_dir = data_root + "/android_stub";
   for (const char* library_name : kStubLibraries) {
     std::string stub_path = stub_dir + "/" + library_name;
+    XELOGI("Attempting Android stub preload from explicit path: {}", stub_path);
+    dlerror();
     void* handle = dlopen(stub_path.c_str(), RTLD_NOW | RTLD_GLOBAL);
     if (handle) {
-      XELOGI("Preloaded Android stub library: {}", stub_path);
+      XELOGI("Preloaded Android stub library from explicit path: {}",
+             stub_path);
+      continue;
+    }
+    const char* stub_error = dlerror();
+
+    XELOGW(
+        "Explicit-path preload failed for '{}' (error: {}), attempting "
+        "packaged soname fallback",
+        stub_path, stub_error ? stub_error : "unknown error");
+    dlerror();
+    handle = dlopen(library_name, RTLD_NOW | RTLD_GLOBAL);
+    if (handle) {
+      XELOGI("Preloaded Android stub library from packaged soname fallback: {}",
+             library_name);
     } else {
-      XELOGW("Failed to preload Android stub library '{}': {}", stub_path,
-             dlerror());
+      const char* packaged_error = dlerror();
+      XELOGW(
+          "Failed to preload Android stub library '{}' (packaged soname "
+          "error: {}, file-path error: {})",
+          stub_path, packaged_error ? packaged_error : "unknown error",
+          stub_error ? stub_error : "unknown error");
     }
   }
 }
@@ -393,6 +411,7 @@ std::unique_ptr<VulkanInstance> VulkanInstance::Create(
   bool custom_loader_requested = false;
   bool loaded_system_fallback = false;
   bool using_android_hal_bridge = false;
+  bool android_namespace_lookup_unavailable = false;
   AndroidHalVulkanFunctions android_hal_functions;
 
   bool functions_loaded = true;
@@ -423,6 +442,8 @@ std::unique_ptr<VulkanInstance> VulkanInstance::Create(
   // classloader namespace (clns-N) on Android 12+.
 #if XE_PLATFORM_ANDROID || XE_PLATFORM_AX360E
   if (is_custom) {
+    XELOGI("Preparing Android stub preload for custom driver: {}",
+           loader_library_name);
     PreloadAndroidStubLibraries(loader_library_name);
     // android_get_exported_namespace is declared in <android/dlext.h> since API
     // 24 and exported by libdl.so. We can't reach it via dlsym(RTLD_DEFAULT)
@@ -431,6 +452,7 @@ std::unique_ptr<VulkanInstance> VulkanInstance::Create(
     //   1. Directly (strong link through libdl.so at load time).
     //   2. Via an explicit dlopen("libdl.so") + dlsym fallback, in case the
     //      NDK we built against had the symbol stripped for our target API.
+    XELOGI("Resolving android_get_exported_namespace for custom driver load");
     GetAndroidNamespaceFn fn_get_ns = ResolveAndroidGetExportedNamespace();
     const char* ns_names[] = {"sphal", "vndk", "default", nullptr};
     if (fn_get_ns) {
@@ -443,6 +465,8 @@ std::unique_ptr<VulkanInstance> VulkanInstance::Create(
         android_dlextinfo extinfo = {};
         extinfo.flags = ANDROID_DLEXT_USE_NAMESPACE;
         extinfo.library_namespace = ns;
+        XELOGI("Attempting android_dlopen_ext for custom driver via '{}' namespace",
+               ns_names[i]);
         vulkan_instance->loader_ =
             android_dlopen_ext(loader_library_name, RTLD_NOW | RTLD_GLOBAL, &extinfo);
         if (vulkan_instance->loader_) {
@@ -453,17 +477,11 @@ std::unique_ptr<VulkanInstance> VulkanInstance::Create(
         }
       }
     } else {
-      XELOGW("android_get_exported_namespace unavailable, trying direct dlopen");
-    }
-    if (!vulkan_instance->loader_) {
-      vulkan_instance->loader_ =
-          dlopen(loader_library_name, RTLD_NOW | RTLD_GLOBAL);
-      if (vulkan_instance->loader_) {
-        XELOGI("Custom driver loaded via direct dlopen after stub preload");
-      } else {
-        XELOGW("Direct dlopen for custom driver failed after stub preload: {}",
-               dlerror());
-      }
+      XELOGW(
+          "android_get_exported_namespace unavailable; skipping namespace "
+          "loading and falling back to memfd/direct custom-driver load "
+          "attempts");
+      android_namespace_lookup_unavailable = true;
     }
     if (!vulkan_instance->loader_) {
       if (fn_get_ns) {
@@ -472,13 +490,46 @@ std::unique_ptr<VulkanInstance> VulkanInstance::Create(
           if (!ns) {
             continue;
           }
+          XELOGI("Attempting memfd-backed custom driver load via '{}' namespace",
+                 ns_names[i]);
           vulkan_instance->loader_ =
               TryLoadCustomDriverFromMemFd(loader_library_name, ns, ns_names[i]);
         }
       }
+      if (!vulkan_instance->loader_) {
+        XELOGI("Attempting memfd-backed custom driver load without explicit namespace");
+        vulkan_instance->loader_ =
+            TryLoadCustomDriverFromMemFd(loader_library_name, nullptr, nullptr);
+      }
       if (vulkan_instance->loader_) {
         active_loader_name += " [memfd]";
+      } else {
+        XELOGI(
+            "Memfd-backed custom driver load did not succeed; falling back "
+            "to direct dlopen");
       }
+    }
+    if (!vulkan_instance->loader_) {
+      XELOGI("Attempting direct dlopen for custom driver after stub preload: {}",
+             loader_library_name);
+      dlerror();
+      vulkan_instance->loader_ =
+          dlopen(loader_library_name, RTLD_NOW | RTLD_GLOBAL);
+      if (vulkan_instance->loader_) {
+        XELOGI("Custom driver loaded via direct dlopen after stub preload");
+      } else {
+        const char* direct_load_error = dlerror();
+        custom_loader_error =
+            direct_load_error ? direct_load_error : "unknown error";
+        XELOGW("Direct dlopen for custom driver failed after stub preload: {}",
+               custom_loader_error);
+      }
+    }
+    if (!vulkan_instance->loader_ && custom_loader_error.empty() &&
+        android_namespace_lookup_unavailable) {
+      custom_loader_error =
+          "android_get_exported_namespace unavailable and memfd/direct custom "
+          "driver load paths failed";
     }
   } else {
     vulkan_instance->loader_ = dlopen(loader_library_name, RTLD_NOW | RTLD_GLOBAL);
@@ -488,11 +539,14 @@ std::unique_ptr<VulkanInstance> VulkanInstance::Create(
 #endif
   if (!vulkan_instance->loader_) {
     const char* error = dlerror();
-    XELOGE("Failed to load {}: {}", loader_library_name, error ? error : "unknown error");
+    XELOGE("Failed to load {}: {}", loader_library_name,
+           error ? error : "unknown error");
     
     // Fallback to system driver if custom failed
     if (custom_loader_requested) {
-        custom_loader_error = error ? error : "unknown error";
+        if (custom_loader_error.empty()) {
+          custom_loader_error = error ? error : "unknown error";
+        }
         XELOGW("Fallback: attempting to load system libvulkan.so");
         vulkan_instance->loader_ =
             dlopen("libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
@@ -547,8 +601,12 @@ std::unique_ptr<VulkanInstance> VulkanInstance::Create(
   // Try to load vkDestroyInstance eagerly; it's needed only at shutdown, and
   // we'll lazily resolve it via vkGetInstanceProcAddr after instance creation
   // if the eager dlsym didn't work (ICDs don't export it as a symbol).
+#if XE_PLATFORM_LINUX
   ifn.vkDestroyInstance = PFN_vkDestroyInstance(
       dlsym(vulkan_instance->loader_, "vkDestroyInstance"));
+#else
+  ifn.vkDestroyInstance = nullptr;
+#endif
 #if XE_PLATFORM_ANDROID || XE_PLATFORM_AX360E
   if (!ifn.vkGetInstanceProcAddr) {
     // ICD interface: optionally negotiate version, then use vk_icd*.
@@ -1101,10 +1159,12 @@ VulkanInstance::~VulkanInstance() {
     functions_.vkDestroyInstance(instance_, nullptr);
   }
 
-#if XE_PLATFORM_LINUX
+#if XE_PLATFORM_ANDROID || XE_PLATFORM_AX360E
   if (android_hal_device_) {
     CloseAndroidHalDevice(android_hal_device_);
   }
+#endif
+#if XE_PLATFORM_LINUX
   if (loader_) {
     dlclose(loader_);
   }

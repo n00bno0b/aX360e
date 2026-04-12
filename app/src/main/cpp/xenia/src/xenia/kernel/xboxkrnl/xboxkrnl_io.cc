@@ -263,7 +263,8 @@ dword_result_t NtReadFileScatter_entry(
 
   return result;
 }
-DECLARE_XBOXKRNL_EXPORT1(NtReadFileScatter, kFileSystem, kImplemented);
+DECLARE_XBOXKRNL_EXPORT2(NtReadFileScatter, kFileSystem, kImplemented,
+                         kHighFrequency);
 
 dword_result_t NtWriteFile_entry(dword_t file_handle, dword_t event_handle,
                                  function_t apc_routine, lpvoid_t apc_context,

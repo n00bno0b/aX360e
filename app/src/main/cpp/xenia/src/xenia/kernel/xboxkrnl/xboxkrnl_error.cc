@@ -991,7 +991,6 @@ uint32_t xeRtlNtStatusToDosError(uint32_t source_status) {
       if (!result) {
         break;
       }
-      XELOGI("xeRtlNtStatusToDosError {:X} => {:X}", status, result);
       return result;
     }
     ++error_table;

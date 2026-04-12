@@ -9,7 +9,6 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -62,7 +61,12 @@ public class TurnipEnvManager {
         if (tuDebugFlags.isEmpty()) {
             String recommendedFlags = getRecommendedTuDebugForDevice();
             if (!recommendedFlags.isEmpty()) {
-                tuDebugFlags.addAll(Arrays.asList(recommendedFlags.split(",")));
+                for (String token : recommendedFlags.split(",")) {
+                    String trimmed = token.trim();
+                    if (!trimmed.isEmpty()) {
+                        tuDebugFlags.add(trimmed);
+                    }
+                }
             }
         }
 

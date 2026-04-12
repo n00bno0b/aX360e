@@ -79,6 +79,8 @@
     <!-- Legacy Colors -->
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <color name="text_primary_white">#FFFFFF</color>
+    <color name="text_secondary_gray">#AAAAAA</color>
 
     <!-- Accent Colors for Game Status -->
     <color name="status_running">#4CAF50</color>

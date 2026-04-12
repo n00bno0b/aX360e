@@ -155,6 +155,13 @@ add_library(cutils SHARED dummy_libs.cpp)
 add_library(utils SHARED dummy_libs.cpp)
 add_library(hardware SHARED dummy_libs.cpp)
 add_library(hidlbase SHARED dummy_libs.cpp)
+add_library(android_stub_sync SHARED dummy_libs.cpp)
+set_target_properties(android_stub_sync PROPERTIES OUTPUT_NAME "sync")
+target_link_libraries(cutils PRIVATE log)
+target_link_libraries(utils PRIVATE log)
+target_link_libraries(hardware PRIVATE log)
+target_link_libraries(hidlbase PRIVATE log)
+target_link_libraries(android_stub_sync PRIVATE log)
 
 target_include_directories(emu PRIVATE
         xenia

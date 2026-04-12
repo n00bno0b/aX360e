@@ -278,8 +278,10 @@ X_STATUS VirtualFileSystem::OpenFile(Entry* root_entry,
     // return X_STATUS_ACCESS_DENIED;
     // TODO(benvanik): figure out why games are opening read-only files with
     // write modes.
-    assert_always();
-    XELOGW("Attempted to open the file/dir for create/write");
+    XELOGW(
+        "Attempted to open read-only file/dir with write access, "
+        "downgrading to read-only: {}",
+        path);
     desired_access = FileAccess::kGenericRead | FileAccess::kFileReadData;
   }
 

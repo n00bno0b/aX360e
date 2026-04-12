@@ -19,7 +19,8 @@ dword_result_t XamVoiceIsActiveProcess_entry() {
   // Returning 0 here will short-circuit a bunch of voice stuff.
   return 0;
 }
-DECLARE_XAM_EXPORT1(XamVoiceIsActiveProcess, kNone, kStub);
+DECLARE_XAM_EXPORT2(XamVoiceIsActiveProcess, kNone, kImplemented,
+                    kHighFrequency);
 
 dword_result_t XamVoiceCreate_entry(dword_t user_index,
                                     dword_t max_attached_packets,  // 0xF

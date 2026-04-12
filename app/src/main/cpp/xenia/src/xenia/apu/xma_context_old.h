@@ -44,11 +44,13 @@ class XmaContextOld : public XmaContext {
   void Release();
 
  private:
-  static void SwapInputBuffer(XMA_CONTEXT_DATA* data);
+  void SwapInputBuffer(XMA_CONTEXT_DATA* data);
   static bool TrySetupNextLoop(XMA_CONTEXT_DATA* data,
                                bool ignore_input_buffer_offset);
   static void NextPacket(XMA_CONTEXT_DATA* data);
   static int GetSampleRate(int id);
+  static size_t FindNextPacketWithFrameOffset(uint8_t* block, size_t size,
+                                              size_t packet_idx);
   // Get the offset of the next frame. Does not traverse packets.
   static size_t GetNextFrame(uint8_t* block, size_t size, size_t bit_offset);
   // Get the containing packet number of the frame pointed to by the offset.

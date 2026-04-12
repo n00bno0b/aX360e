@@ -4,6 +4,8 @@
 #include <android/log.h>
 #include "vkapi.h"
 #include "vkutil.h"
+#include <atomic>
+#include <cctype>
 #include <string>
 #include <vector>
 #include <thread>
@@ -13,11 +15,52 @@
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
+namespace {
+std::atomic<bool> g_vulkan_test_cancel_requested{false};
+}
+
 extern "C"
 JNIEXPORT jstring JNICALL
 Java_aenu_ax360e_VulkanTestActivity_nRunVulkanTest(JNIEnv *env, jobject thiz, jobject surface) {
+    g_vulkan_test_cancel_requested.store(false, std::memory_order_release);
     ANativeWindow* window = ANativeWindow_fromSurface(env, surface);
     if (!window) return env->NewStringUTF("Failed to get native window");
+
+    VkInstance instance = VK_NULL_HANDLE;
+    VkSurfaceKHR vk_surface = VK_NULL_HANDLE;
+    VkDevice device = VK_NULL_HANDLE;
+    VkSwapchainKHR swapchain = VK_NULL_HANDLE;
+    VkCommandPool pool = VK_NULL_HANDLE;
+
+    auto cleanup = [&]() {
+        if (pool != VK_NULL_HANDLE && vkDestroyCommandPool_) {
+            vkDestroyCommandPool_(device, pool, nullptr);
+            pool = VK_NULL_HANDLE;
+        }
+        if (swapchain != VK_NULL_HANDLE && vkDestroySwapchainKHR_) {
+            vkDestroySwapchainKHR_(device, swapchain, nullptr);
+            swapchain = VK_NULL_HANDLE;
+        }
+        if (device != VK_NULL_HANDLE) {
+            vk_destroy_device(device);
+            device = VK_NULL_HANDLE;
+        }
+        if (vk_surface != VK_NULL_HANDLE && vkDestroySurfaceKHR_) {
+            vkDestroySurfaceKHR_(instance, vk_surface, nullptr);
+            vk_surface = VK_NULL_HANDLE;
+        }
+        if (instance != VK_NULL_HANDLE) {
+            vk_destroy_instance(instance);
+            instance = VK_NULL_HANDLE;
+        }
+        if (window) {
+            ANativeWindow_release(window);
+            window = nullptr;
+        }
+    };
+    auto cancel_requested = [&]() {
+        return g_vulkan_test_cancel_requested.load(std::memory_order_acquire);
+    };
 
     // Check if a custom driver should be loaded
     const char* custom_driver_path = std::getenv("CUSTOM_DRIVER_PATH");
@@ -31,39 +74,45 @@ Java_aenu_ax360e_VulkanTestActivity_nRunVulkanTest(JNIEnv *env, jobject thiz, jo
     vk_load(lib_path, is_custom);
 
     if (!vk_is_loaded()) {
-        ANativeWindow_release(window);
+        cleanup();
         return env->NewStringUTF("Failed to load Vulkan library");
     }
 
     auto instance_opt = vk_create_instance("VulkanTest");
     if (!instance_opt) {
-        ANativeWindow_release(window);
+        cleanup();
         LOGE("Failed to create Vulkan instance");
         return env->NewStringUTF("Failed to create Vulkan instance");
     }
-    VkInstance instance = *instance_opt;
+    instance = *instance_opt;
     LOGI("Vulkan instance created");
+    if (cancel_requested()) {
+        LOGI("Vulkan test cancelled after instance creation");
+        cleanup();
+        return env->NewStringUTF("Cancelled");
+    }
 
     VkAndroidSurfaceCreateInfoKHR surface_info = {};
     surface_info.sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR;
     surface_info.window = window;
     
-    VkSurfaceKHR vk_surface;
     VkResult res = vkCreateAndroidSurfaceKHR_(instance, &surface_info, nullptr, &vk_surface);
     if (res != VK_SUCCESS) {
         LOGE("vkCreateAndroidSurfaceKHR failed: %d", res);
-        vk_destroy_instance(instance);
-        ANativeWindow_release(window);
+        cleanup();
         return env->NewStringUTF(("Failed to create surface: " + std::to_string(res)).c_str());
     }
     LOGI("Vulkan surface created");
+    if (cancel_requested()) {
+        LOGI("Vulkan test cancelled after surface creation");
+        cleanup();
+        return env->NewStringUTF("Cancelled");
+    }
 
     auto physical_device_opt = vk_get_physical_device(instance);
     if (!physical_device_opt) {
         LOGE("No physical device found");
-        vkDestroySurfaceKHR_(instance, vk_surface, nullptr);
-        vk_destroy_instance(instance);
-        ANativeWindow_release(window);
+        cleanup();
         return env->NewStringUTF("No physical device found");
     }
     VkPhysicalDevice pdev = *physical_device_opt;
@@ -73,7 +122,9 @@ Java_aenu_ax360e_VulkanTestActivity_nRunVulkanTest(JNIEnv *env, jobject thiz, jo
 
     // Determine driver type for clear color
     std::string dev_name = props.deviceName;
-    for (auto & c: dev_name) c = std::tolower(c);
+    for (auto& c : dev_name) {
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
     
     bool is_turnip = (dev_name.find("turnip") != std::string::npos || 
                       dev_name.find("mesa") != std::string::npos || 
@@ -120,9 +171,7 @@ Java_aenu_ax360e_VulkanTestActivity_nRunVulkanTest(JNIEnv *env, jobject thiz, jo
 
     if (graphics_queue_family == 0xFFFFFFFF) {
         LOGE("No suitable graphics/present queue family found");
-        vkDestroySurfaceKHR_(instance, vk_surface, nullptr);
-        vk_destroy_instance(instance);
-        ANativeWindow_release(window);
+        cleanup();
         return env->NewStringUTF("No suitable queue family found");
     }
     LOGI("Selected graphics queue family: %u", graphics_queue_family);
@@ -131,28 +180,36 @@ Java_aenu_ax360e_VulkanTestActivity_nRunVulkanTest(JNIEnv *env, jobject thiz, jo
     auto qprops_opt = vk_get_queue_family_properties(pdev, graphics_queue_family);
     if (!qprops_opt) {
         LOGE("Failed to get queue family properties for family %u", graphics_queue_family);
-        vkDestroySurfaceKHR_(instance, vk_surface, nullptr);
-        vk_destroy_instance(instance);
-        ANativeWindow_release(window);
+        cleanup();
         return env->NewStringUTF("Failed to get queue family properties");
     }
     auto device_opt = vk_create_device(pdev, graphics_queue_family, *qprops_opt);
     if (!device_opt) {
         LOGE("Failed to create device");
-        vkDestroySurfaceKHR_(instance, vk_surface, nullptr);
-        vk_destroy_instance(instance);
-        ANativeWindow_release(window);
+        cleanup();
         return env->NewStringUTF("Failed to create device");
     }
-    VkDevice device = *device_opt;
+    device = *device_opt;
     LOGI("Vulkan device created");
+    if (cancel_requested()) {
+        LOGI("Vulkan test cancelled after device creation");
+        cleanup();
+        return env->NewStringUTF("Cancelled");
+    }
 
     VkQueue queue;
     vkGetDeviceQueue_(device, graphics_queue_family, 0, &queue);
 
     // Simplified swapchain creation
     VkSurfaceCapabilitiesKHR caps;
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR_(pdev, vk_surface, &caps);
+    res = vkGetPhysicalDeviceSurfaceCapabilitiesKHR_(pdev, vk_surface, &caps);
+    if (res != VK_SUCCESS) {
+        LOGE("vkGetPhysicalDeviceSurfaceCapabilitiesKHR failed: %d", res);
+        cleanup();
+        return env->NewStringUTF(("Failed to get surface capabilities: " +
+                                  std::to_string(res))
+                                     .c_str());
+    }
     LOGI("Surface capabilities: minImageCount %u, maxImageCount %u", caps.minImageCount, caps.maxImageCount);
     
     VkExtent2D extent = caps.currentExtent;
@@ -179,17 +236,18 @@ Java_aenu_ax360e_VulkanTestActivity_nRunVulkanTest(JNIEnv *env, jobject thiz, jo
     swap_info.presentMode = VK_PRESENT_MODE_FIFO_KHR;
     swap_info.clipped = VK_TRUE;
 
-    VkSwapchainKHR swapchain;
     res = vkCreateSwapchainKHR_(device, &swap_info, nullptr, &swapchain);
     if (res != VK_SUCCESS) {
         LOGE("vkCreateSwapchainKHR failed: %d", res);
-        vk_destroy_device(device);
-        vkDestroySurfaceKHR_(instance, vk_surface, nullptr);
-        vk_destroy_instance(instance);
-        ANativeWindow_release(window);
+        cleanup();
         return env->NewStringUTF(("Failed to create swapchain: " + std::to_string(res)).c_str());
     }
     LOGI("Vulkan swapchain created");
+    if (cancel_requested()) {
+        LOGI("Vulkan test cancelled after swapchain creation");
+        cleanup();
+        return env->NewStringUTF("Cancelled");
+    }
 
     uint32_t image_count = 0;
     vkGetSwapchainImagesKHR_(device, swapchain, &image_count, nullptr);
@@ -202,15 +260,10 @@ Java_aenu_ax360e_VulkanTestActivity_nRunVulkanTest(JNIEnv *env, jobject thiz, jo
     pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     pool_info.queueFamilyIndex = graphics_queue_family;
     
-    VkCommandPool pool;
     res = vkCreateCommandPool_(device, &pool_info, nullptr, &pool);
     if (res != VK_SUCCESS) {
         LOGE("vkCreateCommandPool failed: %d", res);
-        vkDestroySwapchainKHR_(device, swapchain, nullptr);
-        vk_destroy_device(device);
-        vkDestroySurfaceKHR_(instance, vk_surface, nullptr);
-        vk_destroy_instance(instance);
-        ANativeWindow_release(window);
+        cleanup();
         return env->NewStringUTF("Failed to create command pool");
     }
     LOGI("Command pool created");
@@ -225,12 +278,7 @@ Java_aenu_ax360e_VulkanTestActivity_nRunVulkanTest(JNIEnv *env, jobject thiz, jo
     res = vkAllocateCommandBuffers_(device, &alloc_info, &cmd);
     if (res != VK_SUCCESS) {
         LOGE("vkAllocateCommandBuffers failed: %d", res);
-        vkDestroyCommandPool_(device, pool, nullptr);
-        vkDestroySwapchainKHR_(device, swapchain, nullptr);
-        vk_destroy_device(device);
-        vkDestroySurfaceKHR_(instance, vk_surface, nullptr);
-        vk_destroy_instance(instance);
-        ANativeWindow_release(window);
+        cleanup();
         return env->NewStringUTF("Failed to allocate command buffer");
     }
     LOGI("Command buffer allocated");
@@ -243,27 +291,17 @@ Java_aenu_ax360e_VulkanTestActivity_nRunVulkanTest(JNIEnv *env, jobject thiz, jo
     res = vkCreateFence_(device, &acquire_fence_info, nullptr, &acquire_fence);
     if (res != VK_SUCCESS) {
         LOGE("vkCreateFence failed: %d", res);
-        vkDestroyCommandPool_(device, pool, nullptr);
-        vkDestroySwapchainKHR_(device, swapchain, nullptr);
-        vk_destroy_device(device);
-        vkDestroySurfaceKHR_(instance, vk_surface, nullptr);
-        vk_destroy_instance(instance);
-        ANativeWindow_release(window);
+        cleanup();
         return env->NewStringUTF("Failed to create acquire fence");
     }
 
     uint32_t image_index;
     LOGI("Acquiring next image...");
     res = vkAcquireNextImageKHR_(device, swapchain, UINT64_MAX, VK_NULL_HANDLE, acquire_fence, &image_index);
-    if (res != VK_SUCCESS) {
+    if (res != VK_SUCCESS && res != VK_SUBOPTIMAL_KHR) {
         LOGE("vkAcquireNextImageKHR failed: %d", res);
         vkDestroyFence_(device, acquire_fence, nullptr);
-        vkDestroyCommandPool_(device, pool, nullptr);
-        vkDestroySwapchainKHR_(device, swapchain, nullptr);
-        vk_destroy_device(device);
-        vkDestroySurfaceKHR_(instance, vk_surface, nullptr);
-        vk_destroy_instance(instance);
-        ANativeWindow_release(window);
+        cleanup();
         return env->NewStringUTF("Failed to acquire image");
     }
     vkWaitForFences_(device, 1, &acquire_fence, VK_TRUE, UINT64_MAX);
@@ -276,12 +314,7 @@ Java_aenu_ax360e_VulkanTestActivity_nRunVulkanTest(JNIEnv *env, jobject thiz, jo
     res = vkBeginCommandBuffer_(cmd, &begin_info);
     if (res != VK_SUCCESS) {
         LOGE("vkBeginCommandBuffer failed: %d", res);
-        vkDestroyCommandPool_(device, pool, nullptr);
-        vkDestroySwapchainKHR_(device, swapchain, nullptr);
-        vk_destroy_device(device);
-        vkDestroySurfaceKHR_(instance, vk_surface, nullptr);
-        vk_destroy_instance(instance);
-        ANativeWindow_release(window);
+        cleanup();
         return env->NewStringUTF(("Error: vkBeginCommandBuffer failed: " + std::to_string(res)).c_str());
     }
 
@@ -319,12 +352,7 @@ Java_aenu_ax360e_VulkanTestActivity_nRunVulkanTest(JNIEnv *env, jobject thiz, jo
     res = vkEndCommandBuffer_(cmd);
     if (res != VK_SUCCESS) {
         LOGE("vkEndCommandBuffer failed: %d", res);
-        vkDestroyCommandPool_(device, pool, nullptr);
-        vkDestroySwapchainKHR_(device, swapchain, nullptr);
-        vk_destroy_device(device);
-        vkDestroySurfaceKHR_(instance, vk_surface, nullptr);
-        vk_destroy_instance(instance);
-        ANativeWindow_release(window);
+        cleanup();
         return env->NewStringUTF(("Error: vkEndCommandBuffer failed: " + std::to_string(res)).c_str());
     }
 
@@ -337,16 +365,18 @@ Java_aenu_ax360e_VulkanTestActivity_nRunVulkanTest(JNIEnv *env, jobject thiz, jo
     res = vkQueueSubmit_(queue, 1, &submit_info, VK_NULL_HANDLE);
     if (res != VK_SUCCESS) {
         LOGE("vkQueueSubmit failed: %d", res);
-        vkDestroyCommandPool_(device, pool, nullptr);
-        vkDestroySwapchainKHR_(device, swapchain, nullptr);
-        vk_destroy_device(device);
-        vkDestroySurfaceKHR_(instance, vk_surface, nullptr);
-        vk_destroy_instance(instance);
-        ANativeWindow_release(window);
+        cleanup();
         return env->NewStringUTF(("Error: vkQueueSubmit failed: " + std::to_string(res)).c_str());
     }
     LOGI("Waiting for queue idle...");
-    vkQueueWaitIdle_(queue);
+    res = vkQueueWaitIdle_(queue);
+    if (res != VK_SUCCESS) {
+        LOGE("vkQueueWaitIdle failed: %d", res);
+        cleanup();
+        return env->NewStringUTF(("Error: vkQueueWaitIdle failed: " +
+                                  std::to_string(res))
+                                     .c_str());
+    }
 
     VkPresentInfoKHR present_info = {};
     present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -356,30 +386,33 @@ Java_aenu_ax360e_VulkanTestActivity_nRunVulkanTest(JNIEnv *env, jobject thiz, jo
 
     LOGI("Presenting...");
     res = vkQueuePresentKHR_(queue, &present_info);
-    if (res != VK_SUCCESS) {
+    if (res != VK_SUCCESS && res != VK_SUBOPTIMAL_KHR) {
         LOGE("vkQueuePresentKHR failed: %d", res);
-        vkDestroyCommandPool_(device, pool, nullptr);
-        vkDestroySwapchainKHR_(device, swapchain, nullptr);
-        vk_destroy_device(device);
-        vkDestroySurfaceKHR_(instance, vk_surface, nullptr);
-        vk_destroy_instance(instance);
-        ANativeWindow_release(window);
+        cleanup();
         return env->NewStringUTF(("Error: vkQueuePresentKHR failed: " + std::to_string(res)).c_str());
     }
 
     // Wait a bit to show the color before cleanup
     LOGI("Rendering successful, waiting 2 seconds...");
-    std::this_thread::sleep_for(std::chrono::seconds(2));
+    for (int i = 0; i < 20; ++i) {
+        if (cancel_requested()) {
+            LOGI("Vulkan test cancelled during post-present wait");
+            cleanup();
+            return env->NewStringUTF("Cancelled");
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
 
     LOGI("Cleaning up...");
-    vkDestroyCommandPool_(device, pool, nullptr);
-    vkDestroySwapchainKHR_(device, swapchain, nullptr);
-    vk_destroy_device(device);
-    vkDestroySurfaceKHR_(instance, vk_surface, nullptr);
-    vk_destroy_instance(instance);
-    ANativeWindow_release(window);
+    cleanup();
 
     return env->NewStringUTF("Success: Rendered Clear Color!");
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_aenu_ax360e_VulkanTestActivity_nCancelVulkanTest(JNIEnv* env, jobject thiz) {
+    g_vulkan_test_cancel_requested.store(true, std::memory_order_release);
 }
 
 extern "C"

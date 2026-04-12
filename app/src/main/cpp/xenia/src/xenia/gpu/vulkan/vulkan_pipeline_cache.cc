@@ -84,8 +84,8 @@ bool VulkanPipelineCache::Initialize() {
           "Adreno/Turnip");
     } else if (tile_images_supported) {
       XELOGI(
-          "VulkanPipelineCache: tile-image path supported but disabled; set "
-          "vulkan_experimental_tile_images=true to test on hardware");
+          "VulkanPipelineCache: tile-image path is supported but explicitly "
+          "disabled; set vulkan_experimental_tile_images=true to re-enable it");
     } else {
       XELOGI(
           "VulkanPipelineCache: using stable FSI path without tile images");

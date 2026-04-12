@@ -38,6 +38,11 @@ void vk_load(const char* lib_path, bool is_adreno_custom) {
         return;
     }
 
+    if (!lib_path) {
+        LOGE("vk_load called with null lib_path");
+        return;
+    }
+
     LOGI("Loading Vulkan library from path: %s (custom=%d)", lib_path, is_adreno_custom);
 
     // Set environment variables before loading driver
@@ -72,6 +77,21 @@ void vk_load(const char* lib_path, bool is_adreno_custom) {
 
 #include "vksym.h"
 #undef VKFN
+
+    if (!vkCreateInstance_ || !vkDestroyInstance_ || !vkEnumeratePhysicalDevices_) {
+        LOGE(
+            "Critical Vulkan symbols missing after loading %s: "
+            "vkCreateInstance=%p vkDestroyInstance=%p vkEnumeratePhysicalDevices=%p",
+            lib_path, reinterpret_cast<void*>(vkCreateInstance_),
+            reinterpret_cast<void*>(vkDestroyInstance_),
+            reinterpret_cast<void*>(vkEnumeratePhysicalDevices_));
+        dlclose(lib_handle);
+        lib_handle = nullptr;
+#define VKFN(func) func##_ = nullptr
+#include "vksym.h"
+#undef VKFN
+        return;
+    }
 
     LOGI("Successfully loaded Vulkan library and functions");
     

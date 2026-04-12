@@ -2,6 +2,7 @@ package aenu.ax360e;
 
 import android.content.Context;
 import android.net.Uri;
+import android.os.Build;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.util.Log;
@@ -15,13 +16,24 @@ import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Enumeration;
 import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 import java.util.zip.ZipInputStream;
 
 public class CustomDriverUtils {
 
     private static final String TAG = "CustomDriverUtils";
     private static final String DRIVER_DIR_NAME = "custom_drivers";
+    private static final String ANDROID_STUB_DIR_NAME = "android_stub";
+    private static final String[] ANDROID_STUB_LIBRARIES = {
+            "libcutils.so",
+            "libhardware.so",
+            "libutils.so",
+            "libhidlbase.so",
+            "libsync.so"
+    };
+    private static volatile String lastDriverError = "";
     // Decompression bomb limits to prevent OOM from malicious zip files
     private static final long MAX_TOTAL_UNCOMPRESSED_SIZE = 100 * 1024 * 1024; // 100MB total
     private static final long MAX_SINGLE_FILE_SIZE = 50 * 1024 * 1024; // 50MB per file
@@ -31,6 +43,7 @@ public class CustomDriverUtils {
     }
 
     public static boolean installDriver(Context context, Uri zipUri) {
+        setLastDriverError("");
         File dir = getDriverDirectory(context);
         File stagingDir = new File(dir.getParentFile(), "staging");
 
@@ -45,6 +58,7 @@ public class CustomDriverUtils {
             InputStream is = context.getContentResolver().openInputStream(zipUri);
             if (is == null) {
                 Log.e(TAG, "Failed to open input stream from URI");
+                setLastDriverError("Could not open the selected driver package.");
                 deleteRecursive(stagingDir);
                 return false;
             }
@@ -59,6 +73,7 @@ public class CustomDriverUtils {
                         if (entry.getSize() > MAX_SINGLE_FILE_SIZE) {
                             Log.e(TAG, "Zip entry too large: " + entry.getName()
                                     + " (" + entry.getSize() + " bytes, max " + MAX_SINGLE_FILE_SIZE + ")");
+                            setLastDriverError("Driver archive contains an oversized file: " + entry.getName());
                             deleteRecursive(stagingDir);
                             return false;
                         }
@@ -83,11 +98,13 @@ public class CustomDriverUtils {
                                 // Check limits during extraction (handles unknown sizes)
                                 if (fileBytesWritten > MAX_SINGLE_FILE_SIZE) {
                                     Log.e(TAG, "File exceeded max size during extraction: " + entry.getName());
+                                    setLastDriverError("Driver file exceeded extraction limit: " + entry.getName());
                                     deleteRecursive(stagingDir);
                                     return false;
                                 }
                                 if (totalBytesExtracted > MAX_TOTAL_UNCOMPRESSED_SIZE) {
                                     Log.e(TAG, "Total extraction exceeded max size: " + totalBytesExtracted + " bytes");
+                                    setLastDriverError("Driver archive is too large when extracted.");
                                     deleteRecursive(stagingDir);
                                     return false;
                                 }
@@ -111,6 +128,7 @@ public class CustomDriverUtils {
                     }
                     if (!stagingDir.renameTo(dir)) {
                         Log.e(TAG, "Failed to move staging directory to driver directory");
+                        setLastDriverError("Could not move the driver into app storage.");
                         deleteRecursive(stagingDir);
                         return false;
                     }
@@ -118,6 +136,7 @@ public class CustomDriverUtils {
                     // Ensure ALL extracted .so files are executable (bundled deps need this too)
                     if (!chmodSoFilesRecursive(dir)) {
                         Log.e(TAG, "Failed to make driver .so files executable");
+                        setLastDriverError("Driver libraries could not be marked executable.");
                         deleteRecursive(dir);
                         return false;
                     }
@@ -127,15 +146,21 @@ public class CustomDriverUtils {
                     return true;
                 } else {
                     Log.e(TAG, "No vulkan .so file found in zip.");
+                    setLastDriverError("No Vulkan driver library was found in the package.");
                     deleteRecursive(stagingDir);
                     return false;
                 }
             }
         } catch (IOException | JSONException | SecurityException | NullPointerException e) {
             Log.e(TAG, "Failed to install driver", e);
+            setLastDriverError(buildFailureReason(e));
             deleteRecursive(stagingDir);
             return false;
         }
+    }
+
+    public static String getLastDriverError() {
+        return lastDriverError;
     }
 
     private static void generateIcdManifest(File dir, String soName) throws IOException, JSONException {
@@ -160,6 +185,8 @@ public class CustomDriverUtils {
         File icdFile = new File(dir, "vk_icd.json");
         if (icdFile.exists()) {
             try {
+                ensureAndroidStubLibraries(context);
+
                 // Set ICD env vars (used by desktop Vulkan loaders, informational on Android)
                 Os.setenv("VK_ICD_FILENAMES", icdFile.getAbsolutePath(), true);
                 Os.setenv("VK_DRIVER_FILES", icdFile.getAbsolutePath(), true);
@@ -234,6 +261,116 @@ public class CustomDriverUtils {
         return null;
     }
 
+    private static void ensureAndroidStubLibraries(Context context) {
+        File driverDir = getDriverDirectory(context);
+        File dataRoot = driverDir.getParentFile();
+        if (dataRoot == null) {
+            Log.w(TAG, "Unable to resolve app data root for Android stub libraries");
+            return;
+        }
+
+        File stubDir = new File(dataRoot, ANDROID_STUB_DIR_NAME);
+        if (!stubDir.exists() && !stubDir.mkdirs()) {
+            Log.w(TAG, "Failed to create Android stub directory: " + stubDir.getAbsolutePath());
+            return;
+        }
+
+        File nativeLibDir = new File(context.getApplicationInfo().nativeLibraryDir);
+        if (!nativeLibDir.exists()) {
+            Log.w(TAG, "Native library directory is unavailable: " + nativeLibDir.getAbsolutePath());
+            return;
+        }
+
+        for (String libraryName : ANDROID_STUB_LIBRARIES) {
+            File source = new File(nativeLibDir, libraryName);
+            File destination = new File(stubDir, libraryName);
+            try {
+                if (destination.exists() && destination.length() == source.length()) {
+                    continue;
+                }
+                if (source.exists()) {
+                    copyFile(source, destination);
+                } else if (!extractLibraryFromApk(context, libraryName, destination)) {
+                    Log.w(TAG, "Android stub library not packaged in APK: " + source.getAbsolutePath());
+                    continue;
+                }
+                try {
+                    Os.chmod(destination.getAbsolutePath(), 0700);
+                } catch (ErrnoException e) {
+                    if (!destination.setExecutable(true, true)) {
+                        Log.w(TAG, "Failed to mark Android stub library executable: " + destination.getAbsolutePath(), e);
+                    }
+                }
+            } catch (IOException e) {
+                Log.w(TAG, "Failed to stage Android stub library " + libraryName, e);
+            }
+        }
+    }
+
+    private static void copyFile(File source, File destination) throws IOException {
+        File parent = destination.getParentFile();
+        if (parent != null && !parent.exists() && !parent.mkdirs()) {
+            throw new IOException("Failed to create directory " + parent.getAbsolutePath());
+        }
+        try (FileInputStream input = new FileInputStream(source);
+             FileOutputStream output = new FileOutputStream(destination, false)) {
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = input.read(buffer)) != -1) {
+                output.write(buffer, 0, read);
+            }
+            output.getFD().sync();
+        }
+    }
+
+    private static boolean extractLibraryFromApk(Context context, String libraryName, File destination)
+            throws IOException {
+        String apkPath = context.getApplicationInfo().sourceDir;
+        if (apkPath == null || apkPath.isEmpty()) {
+            return false;
+        }
+
+        try (ZipFile apk = new ZipFile(apkPath)) {
+            ZipEntry libraryEntry = null;
+            for (String abi : Build.SUPPORTED_ABIS) {
+                libraryEntry = apk.getEntry("lib/" + abi + "/" + libraryName);
+                if (libraryEntry != null) {
+                    break;
+                }
+            }
+            if (libraryEntry == null) {
+                Enumeration<? extends ZipEntry> entries = apk.entries();
+                while (entries.hasMoreElements()) {
+                    ZipEntry candidate = entries.nextElement();
+                    if (!candidate.isDirectory()
+                            && candidate.getName().startsWith("lib/")
+                            && candidate.getName().endsWith("/" + libraryName)) {
+                        libraryEntry = candidate;
+                        break;
+                    }
+                }
+            }
+            if (libraryEntry == null) {
+                return false;
+            }
+
+            File parent = destination.getParentFile();
+            if (parent != null && !parent.exists() && !parent.mkdirs()) {
+                throw new IOException("Failed to create directory " + parent.getAbsolutePath());
+            }
+            try (InputStream input = apk.getInputStream(libraryEntry);
+                 FileOutputStream output = new FileOutputStream(destination, false)) {
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = input.read(buffer)) != -1) {
+                    output.write(buffer, 0, read);
+                }
+                output.getFD().sync();
+            }
+            return true;
+        }
+    }
+
     public static void removeDriver(Context context) {
         File dir = getDriverDirectory(context);
         deleteRecursive(dir);
@@ -271,5 +408,20 @@ public class CustomDriverUtils {
             }
         }
         fileOrDirectory.delete();
+    }
+
+    private static void setLastDriverError(String error) {
+        lastDriverError = error == null ? "" : error;
+    }
+
+    private static String buildFailureReason(Exception exception) {
+        if (exception == null) {
+            return "Unknown driver installation failure.";
+        }
+        String message = exception.getMessage();
+        if (message == null || message.trim().isEmpty()) {
+            return exception.getClass().getSimpleName();
+        }
+        return message.trim();
     }
 }

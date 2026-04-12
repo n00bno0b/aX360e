@@ -125,7 +125,8 @@ void VdGetCurrentDisplayGamma_entry(lpdword_t type_ptr, lpfloat_t power_ptr) {
   *type_ptr = cvars::kernel_display_gamma_type;
   *power_ptr = float(cvars::kernel_display_gamma_power);
 }
-DECLARE_XBOXKRNL_EXPORT1(VdGetCurrentDisplayGamma, kVideo, kStub);
+DECLARE_XBOXKRNL_EXPORT2(VdGetCurrentDisplayGamma, kVideo, kImplemented,
+                         kHighFrequency);
 
 struct X_D3DPRIVATE_RECT {
   xe::be<uint32_t> x1;  // 0x0
@@ -311,7 +312,7 @@ void VdInitializeRingBuffer_entry(lpvoid_t ptr, int_t size_log2) {
   auto graphics_system = kernel_state()->emulator()->graphics_system();
   graphics_system->InitializeRingBuffer(ptr, size_log2);
 }
-DECLARE_XBOXKRNL_EXPORT1(VdInitializeRingBuffer, kVideo, kImplemented);
+DECLARE_XBOXKRNL_EXPORT2(VdInitializeRingBuffer, kVideo, kImplemented, kHighFrequency);
 
 void VdEnableRingBufferRPtrWriteBack_entry(lpvoid_t ptr,
                                            int_t block_size_log2) {
@@ -319,20 +320,21 @@ void VdEnableRingBufferRPtrWriteBack_entry(lpvoid_t ptr,
   auto graphics_system = kernel_state()->emulator()->graphics_system();
   graphics_system->EnableReadPointerWriteBack(ptr, block_size_log2);
 }
-DECLARE_XBOXKRNL_EXPORT1(VdEnableRingBufferRPtrWriteBack, kVideo, kImplemented);
+DECLARE_XBOXKRNL_EXPORT2(VdEnableRingBufferRPtrWriteBack, kVideo, kImplemented,
+                         kHighFrequency);
 
 void VdGetSystemCommandBuffer_entry(lpunknown_t p0_ptr, lpunknown_t p1_ptr) {
   p0_ptr.Zero(0x94);
   xe::store_and_swap<uint32_t>(p0_ptr, 0xBEEF0000);
   xe::store_and_swap<uint32_t>(p1_ptr, 0xBEEF0001);
 }
-DECLARE_XBOXKRNL_EXPORT1(VdGetSystemCommandBuffer, kVideo, kStub);
+DECLARE_XBOXKRNL_EXPORT2(VdGetSystemCommandBuffer, kVideo, kStub, kHighFrequency);
 
 void VdSetSystemCommandBufferGpuIdentifierAddress_entry(lpunknown_t unk) {
   // r3 = 0x2B10(d3d?) + 8
 }
-DECLARE_XBOXKRNL_EXPORT1(VdSetSystemCommandBufferGpuIdentifierAddress, kVideo,
-                         kStub);
+DECLARE_XBOXKRNL_EXPORT2(VdSetSystemCommandBufferGpuIdentifierAddress, kVideo,
+                         kStub, kHighFrequency);
 
 // VdVerifyMEInitCommand
 // r3
@@ -402,7 +404,7 @@ dword_result_t VdIsHSIOTrainingSucceeded_entry() {
   // BOOL return value
   return 1;
 }
-DECLARE_XBOXKRNL_EXPORT1(VdIsHSIOTrainingSucceeded, kVideo, kStub);
+DECLARE_XBOXKRNL_EXPORT2(VdIsHSIOTrainingSucceeded, kVideo, kStub, kHighFrequency);
 
 dword_result_t VdPersistDisplay_entry(unknown_t unk0, lpdword_t unk1_ptr) {
   // unk1_ptr needs to be populated with a pointer passed to
@@ -420,14 +422,14 @@ dword_result_t VdPersistDisplay_entry(unknown_t unk0, lpdword_t unk1_ptr) {
 DECLARE_XBOXKRNL_EXPORT2(VdPersistDisplay, kVideo, kImplemented, kSketchy);
 
 dword_result_t VdRetrainEDRAMWorker_entry(unknown_t unk0) { return 0; }
-DECLARE_XBOXKRNL_EXPORT1(VdRetrainEDRAMWorker, kVideo, kStub);
+DECLARE_XBOXKRNL_EXPORT2(VdRetrainEDRAMWorker, kVideo, kStub, kHighFrequency);
 
 dword_result_t VdRetrainEDRAM_entry(unknown_t unk0, unknown_t unk1,
                                     unknown_t unk2, unknown_t unk3,
                                     unknown_t unk4, unknown_t unk5) {
   return 0;
 }
-DECLARE_XBOXKRNL_EXPORT1(VdRetrainEDRAM, kVideo, kStub);
+DECLARE_XBOXKRNL_EXPORT2(VdRetrainEDRAM, kVideo, kStub, kHighFrequency);
 
 void VdSwap_entry(
     lpvoid_t buffer_ptr,        // ptr into primary ringbuffer

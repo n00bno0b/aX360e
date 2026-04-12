@@ -1050,10 +1050,12 @@ void SpirvShaderTranslator::CompleteFragmentShaderInMain() {
             if (CanUseTileImagesForEdram()) {
               // Phase 4B: Load from input attachment using VK_EXT_shader_tile_image.
               // spv::OpColorAttachmentReadEXT = 4168
-              std::vector<spv::Id> operands = {
-                  input_attachments_tile_image_[color_target_index]};
+              id_vector_temp_.clear();
+              id_vector_temp_.push_back(
+                  input_attachments_tile_image_[color_target_index]);
+              id_vector_temp_.push_back(builder_->makeUintConstant(i));
               spv::Id tile_image_val = builder_->createOp(
-                  static_cast<spv::Op>(4168), type_float4_, operands);
+                  static_cast<spv::Op>(4168), type_float4_, id_vector_temp_);
               
               // Pack the float4 back into dest_packed to reuse existing logic.
               dest_packed = FSI_ClampAndPackColor(tile_image_val, rt_format_with_flags);

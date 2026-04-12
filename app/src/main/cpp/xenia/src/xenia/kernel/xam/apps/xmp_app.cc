@@ -380,9 +380,6 @@ X_HRESULT XmpApp::DispatchMessageSync(uint32_t message, uint32_t buffer_ptr,
       static_assert_size(decltype(*args), 12);
 
       assert_true(args->xmp_client == 0x00000002);
-      XELOGD("XMPGetPlaybackController({:08X}, {:08X}, {:08X})",
-             uint32_t(args->xmp_client), uint32_t(args->controller_ptr),
-             uint32_t(args->locked_ptr));
       xe::store_and_swap<uint32_t>(
           memory_->TranslateVirtual(args->controller_ptr), 0);
       xe::store_and_swap<uint32_t>(memory_->TranslateVirtual(args->locked_ptr),

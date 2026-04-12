@@ -65,7 +65,7 @@ dword_result_t XInputdFFCancelIo_entry(dword_t user_index) {
 DECLARE_XBOXKRNL_EXPORT1(XInputdFFCancelIo, kInput, kStub);
 
 dword_result_t XInputdFFSetRumble_entry(dword_t user_index, pointer_t<void> rumble) {
-  return X_ERROR_SUCCESS;
+  return X_ERROR_DEVICE_NOT_CONNECTED;
 }
 DECLARE_XBOXKRNL_EXPORT1(XInputdFFSetRumble, kInput, kStub);
 

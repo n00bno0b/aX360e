@@ -42,7 +42,8 @@ dword_result_t PsCamDeviceRequest_entry(lpvoid_t request_buffer) {
   // Return device-not-connected so games stop polling and move on.
   return X_E_DEVICE_NOT_CONNECTED;
 }
-DECLARE_XBOXKRNL_EXPORT1(PsCamDeviceRequest, kNone, kStub);
+DECLARE_XBOXKRNL_EXPORT2(PsCamDeviceRequest, kNone, kImplemented,
+                         kHighFrequency);
 
 }  // namespace xboxkrnl
 }  // namespace kernel

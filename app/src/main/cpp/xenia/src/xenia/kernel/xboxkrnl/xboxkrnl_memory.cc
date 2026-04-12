@@ -202,7 +202,8 @@ dword_result_t NtAllocateVirtualMemory_entry(lpdword_t base_addr_ptr,
   *region_size_ptr = adjusted_size;
   return X_STATUS_SUCCESS;
 }
-DECLARE_XBOXKRNL_EXPORT1(NtAllocateVirtualMemory, kMemory, kImplemented);
+DECLARE_XBOXKRNL_EXPORT2(NtAllocateVirtualMemory, kMemory, kImplemented,
+                         kHighFrequency);
 
 dword_result_t NtProtectVirtualMemory_entry(lpdword_t base_addr_ptr,
                                             lpdword_t region_size_ptr,
@@ -297,7 +298,8 @@ dword_result_t NtFreeVirtualMemory_entry(lpdword_t base_addr_ptr,
   *region_size_ptr = region_size_value;
   return X_STATUS_SUCCESS;
 }
-DECLARE_XBOXKRNL_EXPORT1(NtFreeVirtualMemory, kMemory, kImplemented);
+DECLARE_XBOXKRNL_EXPORT2(NtFreeVirtualMemory, kMemory, kImplemented,
+                         kHighFrequency);
 
 struct X_MEMORY_BASIC_INFORMATION {
   be<uint32_t> base_address;

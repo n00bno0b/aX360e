@@ -559,7 +559,8 @@ void xeRtlInitializeCriticalSection(X_RTL_CRITICAL_SECTION* cs,
 void RtlInitializeCriticalSection_entry(pointer_t<X_RTL_CRITICAL_SECTION> cs) {
   xeRtlInitializeCriticalSection(cs, cs.guest_address());
 }
-DECLARE_XBOXKRNL_EXPORT1(RtlInitializeCriticalSection, kNone, kImplemented);
+DECLARE_XBOXKRNL_EXPORT2(RtlInitializeCriticalSection, kNone, kImplemented,
+                         kHighFrequency);
 
 X_STATUS xeRtlInitializeCriticalSectionAndSpinCount(X_RTL_CRITICAL_SECTION* cs,
                                                     uint32_t cs_ptr,
@@ -586,8 +587,8 @@ dword_result_t RtlInitializeCriticalSectionAndSpinCount_entry(
   return xeRtlInitializeCriticalSectionAndSpinCount(cs, cs.guest_address(),
                                                     spin_count);
 }
-DECLARE_XBOXKRNL_EXPORT1(RtlInitializeCriticalSectionAndSpinCount, kNone,
-                         kImplemented);
+DECLARE_XBOXKRNL_EXPORT2(RtlInitializeCriticalSectionAndSpinCount, kNone,
+                         kImplemented, kHighFrequency);
 
 static void CriticalSectionPrefetchW(const void* vp) {
 #if 0//XE_ARCH_AMD64 == 1

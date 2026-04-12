@@ -590,7 +590,8 @@ dword_result_t NtCreateEvent_entry(
   }
   return X_STATUS_SUCCESS;
 }
-DECLARE_XBOXKRNL_EXPORT1(NtCreateEvent, kThreading, kImplemented);
+DECLARE_XBOXKRNL_EXPORT2(NtCreateEvent, kThreading, kImplemented,
+                         kHighFrequency);
 
 uint32_t xeNtSetEvent(uint32_t handle, xe::be<uint32_t>* previous_state_ptr) {
   X_STATUS result = X_STATUS_SUCCESS;
@@ -831,7 +832,8 @@ dword_result_t NtReleaseMutant_entry(dword_t mutant_handle,
 
   return result;
 }
-DECLARE_XBOXKRNL_EXPORT1(NtReleaseMutant, kThreading, kImplemented);
+DECLARE_XBOXKRNL_EXPORT2(NtReleaseMutant, kThreading, kImplemented,
+                         kHighFrequency);
 
 dword_result_t NtCreateTimer_entry(lpdword_t handle_ptr,
                                    lpvoid_t obj_attributes_ptr,
@@ -1781,7 +1783,8 @@ pointer_result_t InterlockedFlushSList_entry(
 
   return first;
 }
-DECLARE_XBOXKRNL_EXPORT1(InterlockedFlushSList, kThreading, kImplemented);
+DECLARE_XBOXKRNL_EXPORT2(InterlockedFlushSList, kThreading, kImplemented,
+                         kHighFrequency);
 
 dword_result_t KeSetPriorityThread_entry(pointer_t<X_KTHREAD> thread_ptr,
                                          dword_t new_priority,

@@ -30,7 +30,7 @@ dword_result_t XMsgInProcessCall_entry(dword_t app, dword_t message,
   }
   return result;
 }
-DECLARE_XAM_EXPORT1(XMsgInProcessCall, kNone, kImplemented);
+DECLARE_XAM_EXPORT2(XMsgInProcessCall, kNone, kImplemented, kHighFrequency);
 
 dword_result_t XMsgSystemProcessCall_entry(dword_t app, dword_t message,
                                            dword_t buffer,

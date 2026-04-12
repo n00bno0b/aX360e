@@ -86,7 +86,8 @@ dword_result_t XamInputGetCapabilitiesEx_entry(
   auto lock = input_system->lock();
   return input_system->GetCapabilities(actual_user_index, actual_flags, caps);
 }
-DECLARE_XAM_EXPORT1(XamInputGetCapabilitiesEx, kInput, kSketchy);
+DECLARE_XAM_EXPORT2(XamInputGetCapabilitiesEx, kInput, kSketchy,
+                    kHighFrequency);
 
 // https://msdn.microsoft.com/en-us/library/windows/desktop/microsoft.directx_sdk.reference.xinputgetcapabilities(v=vs.85).aspx
 dword_result_t XamInputGetCapabilities_entry(
@@ -95,7 +96,8 @@ dword_result_t XamInputGetCapabilities_entry(
   // memset at the start regardless
   return XamInputGetCapabilitiesEx_entry(1, user_index, flags, caps);
 }
-DECLARE_XAM_EXPORT1(XamInputGetCapabilities, kInput, kSketchy);
+DECLARE_XAM_EXPORT2(XamInputGetCapabilities, kInput, kSketchy,
+                    kHighFrequency);
 
 // https://msdn.microsoft.com/en-us/library/windows/desktop/microsoft.directx_sdk.reference.xinputgetstate(v=vs.85).aspx
 dword_result_t XamInputGetState_entry(dword_t user_index, dword_t flags,
@@ -141,7 +143,7 @@ dword_result_t XamInputSetState_entry(
   auto lock = input_system->lock();
   return input_system->SetState(user_index, vibration);
 }
-DECLARE_XAM_EXPORT1(XamInputSetState, kInput, kImplemented);
+DECLARE_XAM_EXPORT2(XamInputSetState, kInput, kImplemented, kHighFrequency);
 
 // https://msdn.microsoft.com/en-us/library/windows/desktop/microsoft.directx_sdk.reference.xinputgetkeystroke(v=vs.85).aspx
 dword_result_t XamInputGetKeystroke_entry(
@@ -225,7 +227,8 @@ X_HRESULT_result_t XamUserGetDeviceContext_entry(dword_t user_index,
     return X_E_DEVICE_NOT_CONNECTED;
   }
 }
-DECLARE_XAM_EXPORT1(XamUserGetDeviceContext, kInput, kStub);
+DECLARE_XAM_EXPORT2(XamUserGetDeviceContext, kInput, kImplemented,
+                    kHighFrequency);
 
 X_HRESULT_result_t XamInputNonControllerGetRaw_entry(
     lpdword_t state_ptr, lpdword_t buffer_length_ptr, lpdword_t buffer_ptr) {

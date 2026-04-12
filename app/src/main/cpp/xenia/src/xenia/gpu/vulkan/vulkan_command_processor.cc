@@ -1329,6 +1329,24 @@ void VulkanCommandProcessor::IssueSwap(uint32_t frontbuffer_ptr,
             frontbuffer_format == xenos::TextureFormat::k_2_10_10_10 ||
             frontbuffer_format ==
                 xenos::TextureFormat::k_2_10_10_10_AS_16_16_16_16;
+#if XE_PLATFORM_ANDROID || XE_PLATFORM_AX360E
+        // Mobile Vulkan drivers appear to be more sensitive to the 10bpc PWL
+        // presentation path than desktop drivers. Prefer the simpler 256-entry
+        // table path on Android for correctness, even for 2_10_10_10 sources.
+        use_pwl_gamma_ramp = false;
+#endif
+        static int last_logged_swap_gamma_path = -1;
+        int current_swap_gamma_path = use_pwl_gamma_ramp ? 1 : 0;
+        if (use_pwl_gamma_ramp &&
+            last_logged_swap_gamma_path != current_swap_gamma_path) {
+          XELOGI("Vulkan swap gamma: using PWL ramp for 10bpc frontbuffer");
+          last_logged_swap_gamma_path = current_swap_gamma_path;
+        }
+        if (!use_pwl_gamma_ramp &&
+            last_logged_swap_gamma_path != current_swap_gamma_path) {
+          XELOGI("Vulkan swap gamma: using 256-entry table");
+          last_logged_swap_gamma_path = current_swap_gamma_path;
+        }
 
         // TODO(Triang3l): FXAA can result in more than 8 bits of precision.
         context.SetIs8bpc(!use_pwl_gamma_ramp);

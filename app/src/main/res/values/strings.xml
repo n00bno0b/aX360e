@@ -636,6 +636,10 @@ This Config requires you to pair an analog and digitial flag together while digi
     <string name="driver_custom">Custom Turnip Driver</string>
     <string name="vulkan_test_title">Vulkan 3D Test</string>
     <string name="vulkan_test">Vulkan GPU Test</string>
+    <string name="vulkan_test_initializing">Vulkan Test: Initializing...</string>
+    <string name="vulkan_driver_unknown">Driver: Unknown</string>
+    <string name="vulkan_rendering_surface">Vulkan rendering surface</string>
+    <string name="close_test">Close Test</string>
 
 </resources>
 

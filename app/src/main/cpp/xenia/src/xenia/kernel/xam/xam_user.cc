@@ -62,7 +62,8 @@ X_HRESULT_result_t XamUserGetXUID_entry(dword_t user_index, dword_t type_mask,
   *xuid_ptr = xuid;
   return result;
 }
-DECLARE_XAM_EXPORT1(XamUserGetXUID, kUserProfiles, kImplemented);
+DECLARE_XAM_EXPORT2(XamUserGetXUID, kUserProfiles, kImplemented,
+                    kHighFrequency);
 
 dword_result_t XamUserGetIndexFromXUID_entry(qword_t xuid, dword_t flags,
                                              lpdword_t index) {
