@@ -641,5 +641,11 @@ This Config requires you to pair an analog and digitial flag together while digi
     <string name="vulkan_rendering_surface">Vulkan rendering surface</string>
     <string name="close_test">Close Test</string>
 
+    <!-- Driver Configuration -->
+    <string name="_default">Default</string>
+    <string name="driver_library_path_dialog_add_hint">Add Custom Driver(*.zip)</string>
+    <string name="es_vulkan_vulkan_lib_path">Custom Driver Library Path</string>
+    <string name="es_vulkan_adrenotools_force_max_clocks">Custom Driver Force Max Clocks</string>
+
 </resources>
 
