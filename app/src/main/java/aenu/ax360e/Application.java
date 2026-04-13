@@ -11,6 +11,15 @@ import aenu.hardware.ProcessorInfo;
 // Created by aenu on 2025/7/31.
 // SPDX-License-Identifier: WTFPL
 public class Application extends android.app.Application{
+    static File get_internal_data_dir()
+    {
+        return new File(ctx.getApplicationInfo().dataDir,"ax360e");
+    }
+    //sdcardfs文件系统无法创建可执行文件，只能放在内部存储(ext4)
+    public static File get_custom_driver_dir()
+    {
+        return new File(get_internal_data_dir(),"driver");
+    }
     static File get_app_data_dir(){
         File publicDir = new File(android.os.Environment.getExternalStorageDirectory(), "ax360e++");
         if (!publicDir.exists()) {

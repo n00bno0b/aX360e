@@ -137,6 +137,8 @@ include(build/zstd.cmake)
 # Restore original build type
 set(CMAKE_BUILD_TYPE ${_ORIG_BUILD_TYPE})
 
+add_subdirectory(libadrenotools EXCLUDE_FROM_ALL)
+
 # TODO -O2/-O3会导致XThread::Reenter抛出c++异常后无法正常展开
 # 找到更好的解决方案后优化这里
 if(CMAKE_BUILD_TYPE STREQUAL Release)
@@ -221,6 +223,7 @@ target_link_libraries(emu
         pugixml
         xenia-hid-skylander
         xenia-patcher
+        adrenotools
         cutils
         utils
         hardware
