@@ -247,6 +247,11 @@ void vk_load(const char* lib_path, bool is_adreno_custom) {
 
   int dl_flags = RTLD_NOW | RTLD_GLOBAL;
   if (is_adreno_custom) {
+    // Force GMEM mode for better compatibility on mid-range Adreno (710/720)
+    setenv("TU_DEBUG", "gmem", 1);
+    // Enable specific Freedreno features for compatibility to fix OneUI graphical bugs
+    setenv("FD_DEV_FEATURES", "enable_tp_ubwc_flag_hint=1", 1);
+
     PreloadAndroidStubLibraries(lib_path);
     lib_handle = TryLoadCustomDriverFromMemFd(lib_path, nullptr, dl_flags);
     if (!lib_handle) {
