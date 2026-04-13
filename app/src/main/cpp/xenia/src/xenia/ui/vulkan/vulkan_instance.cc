@@ -9,6 +9,7 @@
 
 #include "xenia/ui/vulkan/vulkan_instance.h"
 
+#include <filesystem>
 #include <sstream>
 #include <string>
 #include <unordered_map>
@@ -31,6 +32,9 @@
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <unistd.h>
+#include "../libadrenotools/include/adrenotools/priv.h"
+#include "../libadrenotools/include/adrenotools/driver.h"
+extern std::string g_native_lib_dir;
 // android_get_exported_namespace is a bionic private API exported from
 // libdl.so but NOT declared in public NDK headers. Declare it ourselves as a
 // weak symbol so: (a) the compiler accepts the call, (b) if the dynamic linker
@@ -51,6 +55,12 @@ DEFINE_bool(
     "Write Vulkan VK_EXT_debug_utils messages to the Xenia log, as opposed to "
     "the OS debug output.",
     "Vulkan");
+
+DEFINE_string(vulkan_lib_path, "", "Custom Driver Library Path", "Vulkan");
+DEFINE_bool(
+        adrenotools_force_max_clocks, false,
+        "Custom Driver Force Max Clocks",
+        "Vulkan");
 
 namespace xe {
 namespace ui {
@@ -468,13 +478,62 @@ std::unique_ptr<VulkanInstance> VulkanInstance::Create(
   bool functions_loaded = true;
 #if XE_PLATFORM_LINUX
 #if XE_PLATFORM_ANDROID||XE_PLATFORM_AX360E
-  // On Android, check for a custom Turnip driver installed via CustomDriverUtils.
-  const char* custom_driver_path = std::getenv("CUSTOM_DRIVER_PATH");
+  // On Android, check for a custom Turnip driver installed via CustomDriverUtils
+  // or configured via vulkan_lib_path cvar (for adrenotools integration).
+  std::string custom_lib_path = cvars::vulkan_lib_path;
+  const char* custom_driver_path = nullptr;
+  bool using_adrenotools = false;
+
+  // Check if adrenotools path is configured via cvar
+  if (!custom_lib_path.empty() && std::filesystem::exists(custom_lib_path)) {
+    custom_driver_path = custom_lib_path.c_str();
+    using_adrenotools = true;
+    XELOGI("Using adrenotools driver path from cvar: {}", custom_lib_path);
+  } else {
+    // Fall back to CUSTOM_DRIVER_PATH environment variable (CustomDriverUtils)
+    custom_driver_path = std::getenv("CUSTOM_DRIVER_PATH");
+  }
+
   const char* loader_library_name;
   bool is_custom = (custom_driver_path && custom_driver_path[0] != '\0');
   custom_loader_requested = is_custom;
-  
+
   if (is_custom) {
+    if (using_adrenotools) {
+      // Use libadrenotools for driver loading
+      std::string hook_dir = g_native_lib_dir + '/';
+      std::string custom_lib_dir = custom_lib_path.substr(0, custom_lib_path.find_last_of('/') + 1);
+      std::string custom_lib_name = custom_lib_path.substr(custom_lib_path.find_last_of('/') + 1);
+
+      XELOGI("Loading custom driver via adrenotools: hook_dir={}, lib_dir={}, lib_name={}",
+             hook_dir, custom_lib_dir, custom_lib_name);
+
+      vulkan_instance->loader_ = adrenotools_open_libvulkan(
+          RTLD_NOW,
+          ADRENOTOOLS_DRIVER_CUSTOM,
+          nullptr,
+          hook_dir.c_str(),
+          custom_lib_dir.c_str(),
+          custom_lib_name.c_str(),
+          nullptr,
+          nullptr);
+
+      if (vulkan_instance->loader_) {
+        XELOGI("Successfully loaded custom driver via adrenotools");
+        adrenotools_set_turbo(cvars::adrenotools_force_max_clocks);
+        if (cvars::adrenotools_force_max_clocks) {
+          XELOGI("adrenotools GPU turbo mode enabled");
+        }
+        loader_library_name = custom_lib_path.c_str();
+        requested_loader_name = custom_lib_path;
+        active_loader_name = custom_lib_path + " [adrenotools]";
+        // Skip the normal loading paths since adrenotools handled it
+        goto adrenotools_loaded;
+      } else {
+        XELOGW("Failed to load custom driver via adrenotools, falling back to standard methods");
+        // Fall through to standard custom driver loading
+      }
+    }
     loader_library_name = custom_driver_path;
     XELOGI("Using custom Vulkan driver: {}", loader_library_name);
   } else {
@@ -625,6 +684,7 @@ std::unique_ptr<VulkanInstance> VulkanInstance::Create(
         return nullptr;
     }
   }
+adrenotools_loaded:
   if (loaded_system_fallback) {
     XELOGW(
         "Active Vulkan loader library: {} (requested custom loader {} failed: {})",
