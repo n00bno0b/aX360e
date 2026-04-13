@@ -10,11 +10,56 @@
 
 #define LOG_TAG "vkutil"
 #define LOGI(...)  __android_log_print(ANDROID_LOG_INFO,LOG_TAG,__VA_ARGS__)
- #define LOGE(...)  __android_log_print(ANDROID_LOG_ERROR,LOG_TAG,__VA_ARGS__)
+#define LOGW(...)  __android_log_print(ANDROID_LOG_WARN,LOG_TAG,__VA_ARGS__)
+#define LOGE(...)  __android_log_print(ANDROID_LOG_ERROR,LOG_TAG,__VA_ARGS__)
 std::optional<VkInstance> vk_create_instance(const char * name) {
         if (!vkCreateInstance_) {
             LOGE("vkCreateInstance function pointer is null - Vulkan library not loaded?");
             return std::nullopt;
+        }
+
+        // Query available extensions
+        uint32_t ext_count = 0;
+        if (vkEnumerateInstanceExtensionProperties_(nullptr, &ext_count, nullptr) != VK_SUCCESS) {
+            LOGE("vkEnumerateInstanceExtensionProperties (count) failed");
+            return std::nullopt;
+        }
+        std::vector<VkExtensionProperties> available_exts(ext_count);
+        vkEnumerateInstanceExtensionProperties_(nullptr, &ext_count, available_exts.data());
+
+        LOGI("Driver advertises %u instance extensions:", ext_count);
+        for (const auto& ext : available_exts) {
+            LOGI("  %s", ext.extensionName);
+        }
+
+        auto has_extension = [&](const char* name) {
+            for (const auto& ext : available_exts) {
+                if (strcmp(ext.extensionName, name) == 0) return true;
+            }
+            return false;
+        };
+
+        std::vector<const char*> requested_extensions = {
+            VK_KHR_SURFACE_EXTENSION_NAME,
+            VK_KHR_ANDROID_SURFACE_EXTENSION_NAME,
+            VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME
+        };
+
+        std::vector<const char*> enabled_extensions;
+        for (const char* ext : requested_extensions) {
+            if (has_extension(ext)) {
+                enabled_extensions.push_back(ext);
+                LOGI("Enabling instance extension: %s", ext);
+            } else {
+                LOGW("Requested instance extension NOT supported: %s", ext);
+            }
+        }
+
+        bool portability_supported = false;
+        if (has_extension("VK_KHR_portability_enumeration")) {
+            enabled_extensions.push_back("VK_KHR_portability_enumeration");
+            portability_supported = true;
+            LOGI("Enabling instance extension: VK_KHR_portability_enumeration");
         }
 
         VkApplicationInfo appinfo = {};
@@ -26,51 +71,11 @@ std::optional<VkInstance> vk_create_instance(const char * name) {
         appinfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
         appinfo.apiVersion = VK_API_VERSION_1_1;
 
-        std::vector<const char*> extensions = {
-            VK_KHR_SURFACE_EXTENSION_NAME,
-            VK_KHR_ANDROID_SURFACE_EXTENSION_NAME,
-            VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME
-        };
-
-        // Check for portability enumeration extension
-        if (!vkEnumerateInstanceExtensionProperties_) {
-            LOGE("vkEnumerateInstanceExtensionProperties function pointer is null");
-            return std::nullopt;
-        }
-        uint32_t ext_count = 0;
-        VkResult ext_result =
-            vkEnumerateInstanceExtensionProperties_(nullptr, &ext_count, nullptr);
-        if (ext_result != VK_SUCCESS && ext_result != VK_INCOMPLETE) {
-            LOGE("vkEnumerateInstanceExtensionProperties (count) failed: %d",
-                 ext_result);
-            return std::nullopt;
-        }
-        std::vector<VkExtensionProperties> available_exts(ext_count);
-        if (ext_count != 0) {
-            ext_result = vkEnumerateInstanceExtensionProperties_(
-                nullptr, &ext_count, available_exts.data());
-            if (ext_result != VK_SUCCESS && ext_result != VK_INCOMPLETE) {
-                LOGE("vkEnumerateInstanceExtensionProperties (fetch) failed: %d",
-                     ext_result);
-                return std::nullopt;
-            }
-            available_exts.resize(ext_count);
-        }
-
-        bool portability_supported = false;
-        for (const auto& ext : available_exts) {
-            if (std::string(ext.extensionName) == "VK_KHR_portability_enumeration") {
-                extensions.push_back("VK_KHR_portability_enumeration");
-                portability_supported = true;
-                break;
-            }
-        }
-
         VkInstanceCreateInfo inst_create_info = {};
         inst_create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
         inst_create_info.pApplicationInfo = &appinfo;
-        inst_create_info.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
-        inst_create_info.ppEnabledExtensionNames = extensions.data();
+        inst_create_info.enabledExtensionCount = static_cast<uint32_t>(enabled_extensions.size());
+        inst_create_info.ppEnabledExtensionNames = enabled_extensions.data();
         
         if (portability_supported) {
             inst_create_info.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;

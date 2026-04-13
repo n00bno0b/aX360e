@@ -31,7 +31,12 @@ public class CustomDriverUtils {
             "libhardware.so",
             "libutils.so",
             "libhidlbase.so",
-            "libsync.so"
+            "libsync.so",
+            "libnativewindow.so",
+            "libandroid.so",
+            "libbacktrace.so",
+            "libunwindstack.so",
+            "liblog.so"
     };
     private static volatile String lastDriverError = "";
     // Decompression bomb limits to prevent OOM from malicious zip files

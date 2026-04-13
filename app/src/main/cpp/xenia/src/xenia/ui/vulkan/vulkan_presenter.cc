@@ -19,6 +19,8 @@
 #include "xenia/ui/vulkan/vulkan_util.h"
 
 #if XE_PLATFORM_ANDROID||XE_PLATFORM_AX360E
+#include <android/native_window.h>
+
 #include "xenia/ui/surface_android.h"
 #endif
 #if XE_PLATFORM_GNU_LINUX
@@ -52,6 +54,78 @@ DEFINE_bool(
 namespace xe {
 namespace ui {
 namespace vulkan {
+
+#if XE_PLATFORM_ANDROID||XE_PLATFORM_AX360E
+bool CopyRawImageToAndroidWindow(ANativeWindow* window, const RawImage& image,
+                                 uint32_t target_width,
+                                 uint32_t target_height,
+                                 uint32_t& configured_width,
+                                 uint32_t& configured_height) {
+  if (window == nullptr) {
+    XELOGE("VulkanPresenter: No Android window is available for headless present");
+    return false;
+  }
+  if (!image.width || !image.height || image.data.empty()) {
+    XELOGW("VulkanPresenter: No guest output image is available for headless present");
+    return false;
+  }
+
+  target_width = target_width ? target_width : image.width;
+  target_height = target_height ? target_height : image.height;
+  if (configured_width != target_width || configured_height != target_height) {
+    int32_t geometry_result = ANativeWindow_setBuffersGeometry(
+        window, int32_t(target_width), int32_t(target_height),
+        WINDOW_FORMAT_RGBA_8888);
+    if (geometry_result != 0) {
+      XELOGW(
+          "VulkanPresenter: Failed to configure Android window buffers for "
+          "headless present, result {}",
+          geometry_result);
+    } else {
+      configured_width = target_width;
+      configured_height = target_height;
+    }
+  }
+
+  ANativeWindow_Buffer buffer;
+  if (ANativeWindow_lock(window, &buffer, nullptr) != 0) {
+    XELOGE("VulkanPresenter: Failed to lock the Android window for headless present");
+    return false;
+  }
+
+  if (buffer.bits == nullptr || buffer.stride <= 0 || buffer.height <= 0 ||
+      buffer.width <= 0) {
+    XELOGE("VulkanPresenter: Android window lock returned an invalid buffer");
+    ANativeWindow_unlockAndPost(window);
+    return false;
+  }
+
+  const uint32_t copy_width = uint32_t(std::max(buffer.width, 0));
+  const uint32_t copy_height = uint32_t(std::max(buffer.height, 0));
+  const uint32_t* src_pixels =
+      reinterpret_cast<const uint32_t*>(image.data.data());
+  uint32_t* dst_pixels = reinterpret_cast<uint32_t*>(buffer.bits);
+  for (uint32_t y = 0; y < copy_height; ++y) {
+    uint32_t src_y = std::min(
+        uint32_t((uint64_t(y) * image.height) / std::max(copy_height, 1u)),
+        image.height - 1);
+    const uint32_t* src_row = src_pixels + size_t(src_y) * image.width;
+    uint32_t* dst_row = dst_pixels + size_t(y) * buffer.stride;
+    for (uint32_t x = 0; x < copy_width; ++x) {
+      uint32_t src_x = std::min(
+          uint32_t((uint64_t(x) * image.width) / std::max(copy_width, 1u)),
+          image.width - 1);
+      dst_row[x] = src_row[src_x] | 0xFF000000u;
+    }
+  }
+
+  if (ANativeWindow_unlockAndPost(window) != 0) {
+    XELOGE("VulkanPresenter: Failed to post the Android window after headless present");
+    return false;
+  }
+  return true;
+}
+#endif
 
 // Generated with `xb buildshaders`.
 namespace shaders {
@@ -155,6 +229,10 @@ VulkanPresenter::~VulkanPresenter() {
   // just one sleep will likely be needed.
   ui_submission_tracker_.Shutdown();
   guest_output_image_refresher_submission_tracker_.Shutdown();
+#if XE_PLATFORM_ANDROID||XE_PLATFORM_AX360E
+  headless_capture_submission_tracker_.Shutdown();
+  DestroyHeadlessCaptureResources();
+#endif
 
   const VulkanDevice::Functions& dfn = vulkan_device_->functions();
   const VkDevice device = vulkan_device_->device();
@@ -204,12 +282,14 @@ VulkanPresenter::~VulkanPresenter() {
 
 Surface::TypeFlags VulkanPresenter::GetSurfaceTypesSupportedByInstance(
     const VulkanInstance::Extensions& instance_extensions) {
-  if (!instance_extensions.ext_KHR_surface) {
+  if (!instance_extensions.ext_KHR_surface &&
+      !instance_extensions.ext_EXT_headless_surface) {
     return 0;
   }
   Surface::TypeFlags type_flags = 0;
 #if XE_PLATFORM_ANDROID||XE_PLATFORM_AX360E
-  if (instance_extensions.ext_KHR_android_surface) {
+  if (instance_extensions.ext_KHR_android_surface ||
+      instance_extensions.ext_EXT_headless_surface) {
     type_flags |= Surface::kTypeFlag_AndroidNativeWindow;
   }
 #endif
@@ -227,11 +307,125 @@ Surface::TypeFlags VulkanPresenter::GetSurfaceTypesSupportedByInstance(
 }
 
 Surface::TypeFlags VulkanPresenter::GetSupportedSurfaceTypes() const {
-  if (!vulkan_device_->extensions().ext_KHR_swapchain) {
+  if (!vulkan_device_->extensions().ext_KHR_swapchain &&
+      !vulkan_device_->vulkan_instance()->extensions().ext_EXT_headless_surface) {
     return 0;
   }
   return GetSurfaceTypesSupportedByInstance(
       vulkan_device_->vulkan_instance()->extensions());
+}
+
+bool VulkanPresenter::EnsureHeadlessCaptureResources(VkExtent2D image_extent) {
+  assert_not_zero(image_extent.width);
+  assert_not_zero(image_extent.height);
+
+  const VkDeviceSize buffer_size =
+      VkDeviceSize(sizeof(uint32_t)) * image_extent.width * image_extent.height;
+  const VulkanDevice::Functions& dfn = vulkan_device_->functions();
+  const VkDevice device = vulkan_device_->device();
+
+  if (headless_capture_context_.buffer != VK_NULL_HANDLE &&
+      (headless_capture_context_.width != image_extent.width ||
+       headless_capture_context_.height != image_extent.height ||
+       headless_capture_context_.buffer_size < buffer_size)) {
+    DestroyHeadlessCaptureResources();
+  }
+
+  if (headless_capture_context_.command_pool == VK_NULL_HANDLE) {
+    VkCommandPoolCreateInfo command_pool_create_info;
+    command_pool_create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    command_pool_create_info.pNext = nullptr;
+    command_pool_create_info.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+    command_pool_create_info.queueFamilyIndex =
+        vulkan_device_->queue_family_graphics_compute();
+    if (dfn.vkCreateCommandPool(device, &command_pool_create_info, nullptr,
+                                &headless_capture_context_.command_pool) !=
+        VK_SUCCESS) {
+      XELOGE(
+          "VulkanPresenter: Failed to create the persistent guest output "
+          "capture command pool");
+      DestroyHeadlessCaptureResources();
+      return false;
+    }
+  }
+
+  if (headless_capture_context_.command_buffer == VK_NULL_HANDLE) {
+    VkCommandBufferAllocateInfo command_buffer_allocate_info;
+    command_buffer_allocate_info.sType =
+        VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    command_buffer_allocate_info.pNext = nullptr;
+    command_buffer_allocate_info.commandPool =
+        headless_capture_context_.command_pool;
+    command_buffer_allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    command_buffer_allocate_info.commandBufferCount = 1;
+    if (dfn.vkAllocateCommandBuffers(
+            device, &command_buffer_allocate_info,
+            &headless_capture_context_.command_buffer) != VK_SUCCESS) {
+      XELOGE(
+          "VulkanPresenter: Failed to allocate the persistent guest output "
+          "capture command buffer");
+      DestroyHeadlessCaptureResources();
+      return false;
+    }
+  }
+
+  if (headless_capture_context_.buffer == VK_NULL_HANDLE) {
+    if (!util::CreateDedicatedAllocationBuffer(
+            vulkan_device_, buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            util::MemoryPurpose::kReadback, headless_capture_context_.buffer,
+            headless_capture_context_.buffer_memory)) {
+      XELOGE(
+          "VulkanPresenter: Failed to create the persistent guest output "
+          "capture buffer");
+      DestroyHeadlessCaptureResources();
+      return false;
+    }
+    if (dfn.vkMapMemory(device, headless_capture_context_.buffer_memory, 0,
+                        VK_WHOLE_SIZE, 0,
+                        &headless_capture_context_.buffer_mapping) !=
+        VK_SUCCESS) {
+      XELOGE(
+          "VulkanPresenter: Failed to map the persistent guest output "
+          "capture memory");
+      DestroyHeadlessCaptureResources();
+      return false;
+    }
+    headless_capture_context_.buffer_size = buffer_size;
+    headless_capture_context_.width = image_extent.width;
+    headless_capture_context_.height = image_extent.height;
+  }
+
+  return true;
+}
+
+void VulkanPresenter::DestroyHeadlessCaptureResources() {
+  const VulkanDevice::Functions& dfn = vulkan_device_->functions();
+  const VkDevice device = vulkan_device_->device();
+
+  if (headless_capture_context_.buffer_mapping != nullptr &&
+      headless_capture_context_.buffer_memory != VK_NULL_HANDLE) {
+    dfn.vkUnmapMemory(device, headless_capture_context_.buffer_memory);
+    headless_capture_context_.buffer_mapping = nullptr;
+  }
+  if (headless_capture_context_.buffer != VK_NULL_HANDLE) {
+    dfn.vkDestroyBuffer(device, headless_capture_context_.buffer, nullptr);
+    headless_capture_context_.buffer = VK_NULL_HANDLE;
+  }
+  if (headless_capture_context_.buffer_memory != VK_NULL_HANDLE) {
+    dfn.vkFreeMemory(device, headless_capture_context_.buffer_memory, nullptr);
+    headless_capture_context_.buffer_memory = VK_NULL_HANDLE;
+  }
+  if (headless_capture_context_.command_pool != VK_NULL_HANDLE) {
+    dfn.vkDestroyCommandPool(device, headless_capture_context_.command_pool,
+                             nullptr);
+    headless_capture_context_.command_pool = VK_NULL_HANDLE;
+    headless_capture_context_.command_buffer = VK_NULL_HANDLE;
+  }
+  headless_capture_context_.buffer_size = 0;
+  headless_capture_context_.width = 0;
+  headless_capture_context_.height = 0;
+  headless_capture_context_.configured_window_width = 0;
+  headless_capture_context_.configured_window_height = 0;
 }
 
 bool VulkanPresenter::CaptureGuestOutput(RawImage& image_out) {
@@ -255,202 +449,135 @@ bool VulkanPresenter::CaptureGuestOutput(RawImage& image_out) {
 
   VkExtent2D image_extent = guest_output_image->extent();
   size_t pixel_count = size_t(image_extent.width) * image_extent.height;
-  VkDeviceSize buffer_size = VkDeviceSize(sizeof(uint32_t) * pixel_count);
-  VkBuffer buffer;
-  VkDeviceMemory buffer_memory;
-  if (!util::CreateDedicatedAllocationBuffer(
-          vulkan_device_, buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-          util::MemoryPurpose::kReadback, buffer, buffer_memory)) {
-    XELOGE("VulkanPresenter: Failed to create the guest output capture buffer");
+  if (!EnsureHeadlessCaptureResources(image_extent)) {
     return false;
   }
 
   const VulkanDevice::Functions& dfn = vulkan_device_->functions();
   const VkDevice device = vulkan_device_->device();
-
-  {
-    VkCommandPoolCreateInfo command_pool_create_info;
-    command_pool_create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    command_pool_create_info.pNext = nullptr;
-    command_pool_create_info.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
-    command_pool_create_info.queueFamilyIndex =
-        vulkan_device_->queue_family_graphics_compute();
-    VkCommandPool command_pool;
-    if (dfn.vkCreateCommandPool(device, &command_pool_create_info, nullptr,
-                                &command_pool) != VK_SUCCESS) {
-      XELOGE(
-          "VulkanPresenter: Failed to create the guest output capturing "
-          "command pool");
-      dfn.vkDestroyBuffer(device, buffer, nullptr);
-      dfn.vkFreeMemory(device, buffer_memory, nullptr);
-      return false;
-    }
-
-    VkCommandBufferAllocateInfo command_buffer_allocate_info;
-    command_buffer_allocate_info.sType =
-        VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    command_buffer_allocate_info.pNext = nullptr;
-    command_buffer_allocate_info.commandPool = command_pool;
-    command_buffer_allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    command_buffer_allocate_info.commandBufferCount = 1;
-    VkCommandBuffer command_buffer;
-    if (dfn.vkAllocateCommandBuffers(device, &command_buffer_allocate_info,
-                                     &command_buffer) != VK_SUCCESS) {
-      XELOGE(
-          "VulkanPresenter: Failed to allocate the guest output capturing "
-          "command buffer");
-      dfn.vkDestroyCommandPool(device, command_pool, nullptr);
-      dfn.vkDestroyBuffer(device, buffer, nullptr);
-      dfn.vkFreeMemory(device, buffer_memory, nullptr);
-      return false;
-    }
-
-    VkCommandBufferBeginInfo command_buffer_begin_info;
-    command_buffer_begin_info.sType =
-        VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    command_buffer_begin_info.pNext = nullptr;
-    command_buffer_begin_info.flags =
-        VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    command_buffer_begin_info.pInheritanceInfo = nullptr;
-    if (dfn.vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info) !=
-        VK_SUCCESS) {
-      XELOGE(
-          "VulkanPresenter: Failed to begin recording the guest output "
-          "capturing command buffer");
-      dfn.vkDestroyCommandPool(device, command_pool, nullptr);
-      dfn.vkDestroyBuffer(device, buffer, nullptr);
-      dfn.vkFreeMemory(device, buffer_memory, nullptr);
-      return false;
-    }
-
-    VkImageMemoryBarrier image_memory_barrier;
-    image_memory_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    image_memory_barrier.pNext = nullptr;
-    image_memory_barrier.srcAccessMask = kGuestOutputInternalAccessMask;
-    image_memory_barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-    image_memory_barrier.oldLayout = kGuestOutputInternalLayout;
-    image_memory_barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-    image_memory_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    image_memory_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    image_memory_barrier.image = guest_output_image->image();
-    image_memory_barrier.subresourceRange = util::InitializeSubresourceRange();
-    dfn.vkCmdPipelineBarrier(command_buffer, kGuestOutputInternalStageMask,
-                             VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0,
-                             nullptr, 1, &image_memory_barrier);
-
-    VkBufferImageCopy buffer_image_copy = {};
-    buffer_image_copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    buffer_image_copy.imageSubresource.layerCount = 1;
-    buffer_image_copy.imageExtent.width = image_extent.width;
-    buffer_image_copy.imageExtent.height = image_extent.height;
-    buffer_image_copy.imageExtent.depth = 1;
-    dfn.vkCmdCopyImageToBuffer(command_buffer, guest_output_image->image(),
-                               VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, buffer, 1,
-                               &buffer_image_copy);
-
-    // A fence doesn't guarantee host visibility and availability.
-    VkBufferMemoryBarrier buffer_memory_barrier;
-    buffer_memory_barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    buffer_memory_barrier.pNext = nullptr;
-    buffer_memory_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    buffer_memory_barrier.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
-    buffer_memory_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    buffer_memory_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    buffer_memory_barrier.buffer = buffer;
-    buffer_memory_barrier.offset = 0;
-    buffer_memory_barrier.size = VK_WHOLE_SIZE;
-    std::swap(image_memory_barrier.srcAccessMask,
-              image_memory_barrier.dstAccessMask);
-    std::swap(image_memory_barrier.oldLayout, image_memory_barrier.newLayout);
-    dfn.vkCmdPipelineBarrier(
-        command_buffer, VK_PIPELINE_STAGE_TRANSFER_BIT,
-        VK_PIPELINE_STAGE_HOST_BIT | kGuestOutputInternalStageMask, 0, 0,
-        nullptr, 1, &buffer_memory_barrier, 1, &image_memory_barrier);
-
-    if (dfn.vkEndCommandBuffer(command_buffer) != VK_SUCCESS) {
-      XELOGE(
-          "VulkanPresenter: Failed to end recording the guest output capturing "
-          "command buffer");
-      dfn.vkDestroyCommandPool(device, command_pool, nullptr);
-      dfn.vkDestroyBuffer(device, buffer, nullptr);
-      dfn.vkFreeMemory(device, buffer_memory, nullptr);
-      return false;
-    }
-
-    VkSubmitInfo submit_info = {};
-    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &command_buffer;
-    VulkanSubmissionTracker submission_tracker(vulkan_device_);
-    {
-      VulkanSubmissionTracker::FenceAcquisition fence_acqusition(
-          submission_tracker.AcquireFenceToAdvanceSubmission());
-      if (!fence_acqusition.fence()) {
-        XELOGE(
-            "VulkanPresenter: Failed to acquire a fence for guest output "
-            "capturing");
-        fence_acqusition.SubmissionFailedOrDropped();
-        dfn.vkDestroyCommandPool(device, command_pool, nullptr);
-        dfn.vkDestroyBuffer(device, buffer, nullptr);
-        dfn.vkFreeMemory(device, buffer_memory, nullptr);
-        return false;
-      }
-      VkResult submit_result;
-      {
-        const VulkanDevice::Queue::Acquisition queue_acquisition =
-            vulkan_device_->AcquireQueue(
-                vulkan_device_->queue_family_graphics_compute(), 0);
-        submit_result =
-            dfn.vkQueueSubmit(queue_acquisition.queue(), 1, &submit_info,
-                              fence_acqusition.fence());
-      }
-      if (submit_result != VK_SUCCESS) {
-        XELOGE(
-            "VulkanPresenter: Failed to submit the guest output capturing "
-            "command buffer");
-        fence_acqusition.SubmissionFailedOrDropped();
-        dfn.vkDestroyCommandPool(device, command_pool, nullptr);
-        dfn.vkDestroyBuffer(device, buffer, nullptr);
-        dfn.vkFreeMemory(device, buffer_memory, nullptr);
-        return false;
-      }
-    }
-    if (!submission_tracker.AwaitAllSubmissionsCompletion()) {
-      XELOGE(
-          "VulkanPresenter: Failed to await the guest output capturing fence");
-      dfn.vkDestroyCommandPool(device, command_pool, nullptr);
-      dfn.vkDestroyBuffer(device, buffer, nullptr);
-      dfn.vkFreeMemory(device, buffer_memory, nullptr);
-      return false;
-    }
-
-    dfn.vkDestroyCommandPool(device, command_pool, nullptr);
+  if (dfn.vkResetCommandPool(device, headless_capture_context_.command_pool,
+                             0) != VK_SUCCESS) {
+    XELOGE(
+        "VulkanPresenter: Failed to reset the persistent guest output capture "
+        "command pool");
+    return false;
   }
 
-  // Don't need the buffer anymore, just its memory.
-  dfn.vkDestroyBuffer(device, buffer, nullptr);
+  VkCommandBuffer command_buffer = headless_capture_context_.command_buffer;
+  VkBuffer buffer = headless_capture_context_.buffer;
+  void* mapping = headless_capture_context_.buffer_mapping;
 
-  void* mapping;
-  if (dfn.vkMapMemory(device, buffer_memory, 0, VK_WHOLE_SIZE, 0, &mapping) !=
+  VkCommandBufferBeginInfo command_buffer_begin_info;
+  command_buffer_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  command_buffer_begin_info.pNext = nullptr;
+  command_buffer_begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+  command_buffer_begin_info.pInheritanceInfo = nullptr;
+  if (dfn.vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info) !=
       VK_SUCCESS) {
-    XELOGE("VulkanPresenter: Failed to map the guest output capture memory");
-    dfn.vkFreeMemory(device, buffer_memory, nullptr);
+    XELOGE(
+        "VulkanPresenter: Failed to begin recording the persistent guest "
+        "output capture command buffer");
+    return false;
+  }
+
+  VkImageMemoryBarrier image_memory_barrier;
+  image_memory_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+  image_memory_barrier.pNext = nullptr;
+  image_memory_barrier.srcAccessMask = kGuestOutputInternalAccessMask;
+  image_memory_barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+  image_memory_barrier.oldLayout = kGuestOutputInternalLayout;
+  image_memory_barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+  image_memory_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  image_memory_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  image_memory_barrier.image = guest_output_image->image();
+  image_memory_barrier.subresourceRange = util::InitializeSubresourceRange();
+  dfn.vkCmdPipelineBarrier(command_buffer, kGuestOutputInternalStageMask,
+                           VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0,
+                           nullptr, 1, &image_memory_barrier);
+
+  VkBufferImageCopy buffer_image_copy = {};
+  buffer_image_copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+  buffer_image_copy.imageSubresource.layerCount = 1;
+  buffer_image_copy.imageExtent.width = image_extent.width;
+  buffer_image_copy.imageExtent.height = image_extent.height;
+  buffer_image_copy.imageExtent.depth = 1;
+  dfn.vkCmdCopyImageToBuffer(command_buffer, guest_output_image->image(),
+                             VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, buffer, 1,
+                             &buffer_image_copy);
+
+  // A fence doesn't guarantee host visibility and availability.
+  VkBufferMemoryBarrier buffer_memory_barrier;
+  buffer_memory_barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+  buffer_memory_barrier.pNext = nullptr;
+  buffer_memory_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+  buffer_memory_barrier.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
+  buffer_memory_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  buffer_memory_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  buffer_memory_barrier.buffer = buffer;
+  buffer_memory_barrier.offset = 0;
+  buffer_memory_barrier.size = VK_WHOLE_SIZE;
+  std::swap(image_memory_barrier.srcAccessMask,
+            image_memory_barrier.dstAccessMask);
+  std::swap(image_memory_barrier.oldLayout, image_memory_barrier.newLayout);
+  dfn.vkCmdPipelineBarrier(
+      command_buffer, VK_PIPELINE_STAGE_TRANSFER_BIT,
+      VK_PIPELINE_STAGE_HOST_BIT | kGuestOutputInternalStageMask, 0, 0,
+      nullptr, 1, &buffer_memory_barrier, 1, &image_memory_barrier);
+
+  if (dfn.vkEndCommandBuffer(command_buffer) != VK_SUCCESS) {
+    XELOGE(
+        "VulkanPresenter: Failed to end recording the persistent guest "
+        "output capture command buffer");
+    return false;
+  }
+
+  VkSubmitInfo submit_info = {};
+  submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+  submit_info.commandBufferCount = 1;
+  submit_info.pCommandBuffers = &command_buffer;
+  {
+    VulkanSubmissionTracker::FenceAcquisition fence_acqusition(
+        headless_capture_submission_tracker_.AcquireFenceToAdvanceSubmission());
+    if (!fence_acqusition.fence()) {
+      XELOGE(
+          "VulkanPresenter: Failed to acquire a fence for persistent guest "
+          "output capturing");
+      fence_acqusition.SubmissionFailedOrDropped();
+      return false;
+    }
+    VkResult submit_result;
+    {
+      const VulkanDevice::Queue::Acquisition queue_acquisition =
+          vulkan_device_->AcquireQueue(
+              vulkan_device_->queue_family_graphics_compute(), 0);
+      submit_result = dfn.vkQueueSubmit(queue_acquisition.queue(), 1,
+                                        &submit_info, fence_acqusition.fence());
+    }
+    if (submit_result != VK_SUCCESS) {
+      XELOGE(
+          "VulkanPresenter: Failed to submit the persistent guest output "
+          "capture command buffer");
+      fence_acqusition.SubmissionFailedOrDropped();
+      return false;
+    }
+  }
+  if (!headless_capture_submission_tracker_.AwaitAllSubmissionsCompletion()) {
+    XELOGE(
+        "VulkanPresenter: Failed to await the persistent guest output "
+        "capture fence");
     return false;
   }
 
   image_out.width = image_extent.width;
   image_out.height = image_extent.height;
   image_out.stride = sizeof(uint32_t) * image_extent.width;
-  image_out.data.resize(size_t(buffer_size));
+  image_out.data.resize(pixel_count * sizeof(uint32_t));
   uint32_t* image_out_pixels =
       reinterpret_cast<uint32_t*>(image_out.data.data());
   for (size_t i = 0; i < pixel_count; ++i) {
     image_out_pixels[i] = Packed10bpcRGBTo8bpcBytes(
         reinterpret_cast<const uint32_t*>(mapping)[i]);
   }
-
-  // Unmapping will be done by freeing.
-  dfn.vkFreeMemory(device, buffer_memory, nullptr);
 
   return true;
 }
@@ -558,6 +685,16 @@ VulkanPresenter::ConnectOrReconnectPaintingToSurfaceFromUIThread(
   const VkDevice device = vulkan_device_->device();
 
   VkFormat new_swapchain_format;
+#if XE_PLATFORM_ANDROID||XE_PLATFORM_AX360E
+  const bool can_use_android_headless_present =
+      new_surface.GetType() == Surface::kTypeIndex_AndroidNativeWindow &&
+      !vulkan_device_->extensions().ext_KHR_swapchain &&
+      vulkan_instance->extensions().ext_EXT_headless_surface &&
+      ifn.vkCreateHeadlessSurfaceEXT != nullptr;
+  if (can_use_android_headless_present && paint_context_.vulkan_surface != VK_NULL_HANDLE) {
+    paint_context_.DestroySwapchainAndVulkanSurface();
+  }
+#endif
 
   // ConnectOrReconnectToSurfaceFromUIThread may be called only for the
   // ui::Surface of the current swapchain or when the old swapchain and
@@ -567,7 +704,8 @@ VulkanPresenter::ConnectOrReconnectPaintingToSurfaceFromUIThread(
   // The retirement or destruction of the swapchain here will also cause
   // awaiting completion of the usage of the swapchain and the surface on the
   // GPU.
-  if (paint_context_.vulkan_surface != VK_NULL_HANDLE) {
+  if (paint_context_.vulkan_surface != VK_NULL_HANDLE &&
+      vulkan_device_->extensions().ext_KHR_swapchain) {
     VkSwapchainKHR old_swapchain =
         paint_context_.PrepareForSwapchainRetirement();
     bool surface_unusable;
@@ -607,15 +745,44 @@ VulkanPresenter::ConnectOrReconnectPaintingToSurfaceFromUIThread(
       case Surface::kTypeIndex_AndroidNativeWindow: {
         auto& android_native_window_surface =
             static_cast<const AndroidNativeWindowSurface&>(new_surface);
-        VkAndroidSurfaceCreateInfoKHR surface_create_info;
-        surface_create_info.sType =
-            VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR;
-        surface_create_info.pNext = nullptr;
-        surface_create_info.flags = 0;
-        surface_create_info.window = android_native_window_surface.window();
-        vulkan_surface_create_result = ifn.vkCreateAndroidSurfaceKHR(
-            instance, &surface_create_info, nullptr,
-            &paint_context_.vulkan_surface);
+        if (paint_context_.android_window != android_native_window_surface.window()) {
+          headless_capture_context_.configured_window_width = 0;
+          headless_capture_context_.configured_window_height = 0;
+        }
+        paint_context_.android_window = android_native_window_surface.window();
+        if (ifn.vkCreateAndroidSurfaceKHR != nullptr &&
+            vulkan_device_->vulkan_instance()->extensions()
+                .ext_KHR_android_surface) {
+          VkAndroidSurfaceCreateInfoKHR surface_create_info;
+          surface_create_info.sType =
+              VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR;
+          surface_create_info.pNext = nullptr;
+          surface_create_info.flags = 0;
+          surface_create_info.window = android_native_window_surface.window();
+          XELOGI("VulkanPresenter: Creating Android Vulkan surface");
+          vulkan_surface_create_result = ifn.vkCreateAndroidSurfaceKHR(
+              instance, &surface_create_info, nullptr,
+              &paint_context_.vulkan_surface);
+        } else if (ifn.vkCreateHeadlessSurfaceEXT != nullptr &&
+                   vulkan_device_->vulkan_instance()->extensions()
+                       .ext_EXT_headless_surface) {
+          VkHeadlessSurfaceCreateInfoEXT surface_create_info;
+          surface_create_info.sType =
+              VK_STRUCTURE_TYPE_HEADLESS_SURFACE_CREATE_INFO_EXT;
+          surface_create_info.pNext = nullptr;
+          surface_create_info.flags = 0;
+          XELOGW(
+              "VulkanPresenter: Android surface creation is unavailable; "
+              "falling back to VK_EXT_headless_surface");
+          vulkan_surface_create_result = ifn.vkCreateHeadlessSurfaceEXT(
+              instance, &surface_create_info, nullptr,
+              &paint_context_.vulkan_surface);
+        } else {
+          XELOGE(
+              "VulkanPresenter: Neither Android nor headless Vulkan surface "
+              "creation is available");
+          vulkan_surface_create_result = VK_ERROR_EXTENSION_NOT_PRESENT;
+        }
       } break;
 #endif
 #if XE_PLATFORM_GNU_LINUX
@@ -658,9 +825,21 @@ VulkanPresenter::ConnectOrReconnectPaintingToSurfaceFromUIThread(
         return SurfacePaintConnectResult::kFailureSurfaceUnusable;
     }
     if (vulkan_surface_create_result != VK_SUCCESS) {
-      XELOGE("VulkanPresenter: Failed to create a Vulkan surface");
+      XELOGE("VulkanPresenter: Failed to create a Vulkan surface, result {}",
+             int32_t(vulkan_surface_create_result));
       return SurfacePaintConnectResult::kFailure;
     }
+#if XE_PLATFORM_ANDROID||XE_PLATFORM_AX360E
+    if (can_use_android_headless_present) {
+      paint_context_.headless_present = true;
+      paint_context_.swapchain_extent.width = new_surface_width;
+      paint_context_.swapchain_extent.height = new_surface_height;
+      is_vsync_implicit_out = false;
+      XELOGW(
+          "VulkanPresenter: Using headless Android present path without VK_KHR_swapchain");
+      return SurfacePaintConnectResult::kSuccess;
+    }
+#endif
     bool surface_unusable;
     paint_context_.swapchain = PaintContext::CreateSwapchainForVulkanSurface(
         vulkan_device_, paint_context_.vulkan_surface, new_surface_width,
@@ -1297,6 +1476,10 @@ void VulkanPresenter::PaintContext::DestroySwapchainAndVulkanSurface() {
                                                      old_swapchain, nullptr);
   }
   present_queue_family = UINT32_MAX;
+#if XE_PLATFORM_ANDROID||XE_PLATFORM_AX360E
+  android_window = nullptr;
+  headless_present = false;
+#endif
   if (vulkan_surface != VK_NULL_HANDLE) {
     const VulkanInstance* vulkan_instance = vulkan_device->vulkan_instance();
     vulkan_instance->functions().vkDestroySurfaceKHR(
@@ -1304,6 +1487,29 @@ void VulkanPresenter::PaintContext::DestroySwapchainAndVulkanSurface() {
     vulkan_surface = VK_NULL_HANDLE;
   }
 }
+
+#if XE_PLATFORM_ANDROID||XE_PLATFORM_AX360E
+Presenter::PaintResult VulkanPresenter::PaintAndPresentHeadlessToAndroidWindow(
+    bool execute_ui_drawers) {
+  if (execute_ui_drawers) {
+    XELOGW(
+        "VulkanPresenter: UI drawers are skipped on the Android headless present path");
+  }
+
+  RawImage image;
+  if (!CaptureGuestOutput(image)) {
+    return PaintResult::kNotPresented;
+  }
+  if (!CopyRawImageToAndroidWindow(paint_context_.android_window, image,
+                                   paint_context_.swapchain_extent.width,
+                                   paint_context_.swapchain_extent.height,
+                                   headless_capture_context_.configured_window_width,
+                                   headless_capture_context_.configured_window_height)) {
+    return PaintResult::kNotPresented;
+  }
+  return PaintResult::kPresented;
+}
+#endif
 
 VulkanPresenter::GuestOutputImage::~GuestOutputImage() {
   const VulkanDevice::Functions& dfn = vulkan_device_->functions();
@@ -1378,6 +1584,11 @@ bool VulkanPresenter::GuestOutputImage::Initialize() {
 
 Presenter::PaintResult VulkanPresenter::PaintAndPresentImpl(
     bool execute_ui_drawers) {
+#if XE_PLATFORM_ANDROID||XE_PLATFORM_AX360E
+  if (paint_context_.headless_present) {
+    return PaintAndPresentHeadlessToAndroidWindow(execute_ui_drawers);
+  }
+#endif
   // Begin the submission in place of the one not currently potentially used on
   // the GPU.
   uint64_t current_paint_submission_index =

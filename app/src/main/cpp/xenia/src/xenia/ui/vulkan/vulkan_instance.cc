@@ -80,15 +80,20 @@ struct AndroidHwModule {
   const char* author;
   AndroidHwModuleMethods* methods;
   void* dso;
-  uint32_t reserved[32 - 8];
+  // On LP64 (AArch64), the reserved array is uint64_t[32-7] = uint64_t[25]
+  // to pad the struct to 32*8=256 bytes.  On ILP32 it would be uint32_t[25].
+  // We always target LP64 here so use uint64_t.
+  uint64_t reserved[32 - 7];
 };
 
 struct AndroidHwDevice {
   uint32_t tag;
   uint32_t version;
   AndroidHwModule* module;
+  // On LP64 the reserved field comes BEFORE close, and is uint64_t[12] = 96 B.
+  // Total hw_device_t size: 4+4+8 + 96 + 8 = 120 bytes.
+  uint64_t reserved[12];
   int (*close)(AndroidHwDevice* device);
-  uint32_t reserved[32 - 4];
 };
 
 struct AndroidHwVulkanModule {
@@ -111,16 +116,43 @@ struct AndroidHalVulkanFunctions {
 };
 
 GetAndroidNamespaceFn ResolveAndroidGetExportedNamespace() {
+  // Check the compile-time weak symbol first (resolved by the NDK linker).
   GetAndroidNamespaceFn fn_get_ns = &android_get_exported_namespace;
   if (fn_get_ns) {
     return fn_get_ns;
   }
-  void* libdl = dlopen("libdl.so", RTLD_NOW);
-  if (!libdl) {
-    return nullptr;
+  // On Android 12+ the public symbol lives in libdl_android.so rather than
+  // libdl.so.  On Android 12+ the adrenotools approach also finds a
+  // __loader_-prefixed version in ld-android.so (the actual dynamic linker).
+  // Try all three, with RTLD_NOLOAD first to avoid unnecessary library loads.
+  struct {
+    const char* lib;
+    const char* sym;
+  } kCandidates[] = {
+      {"libdl.so",         "android_get_exported_namespace"},
+      {"libdl_android.so", "android_get_exported_namespace"},
+      // bionic/linker exports __loader_ prefixed versions that apps can reach
+      // even when the public wrappers are stripped or namespaced away.
+      {"ld-android.so",    "__loader_android_get_exported_namespace"},
+      {nullptr,            nullptr},
+  };
+  for (int i = 0; kCandidates[i].lib; i++) {
+    void* lib = dlopen(kCandidates[i].lib, RTLD_NOW | RTLD_NOLOAD);
+    if (!lib) {
+      lib = dlopen(kCandidates[i].lib, RTLD_NOW | RTLD_GLOBAL);
+    }
+    if (!lib) {
+      continue;
+    }
+    auto fn = reinterpret_cast<GetAndroidNamespaceFn>(
+        dlsym(lib, kCandidates[i].sym));
+    if (fn) {
+      XELOGI("Resolved android_get_exported_namespace via {}:{}",
+             kCandidates[i].lib, kCandidates[i].sym);
+      return fn;
+    }
   }
-  return reinterpret_cast<GetAndroidNamespaceFn>(
-      dlsym(libdl, "android_get_exported_namespace"));
+  return nullptr;
 }
 
 int OpenReadOnlyNoInterrupt(const char* path) {
@@ -172,6 +204,13 @@ void PreloadAndroidStubLibraries(const char* source_path) {
       "libcutils.so",
       "libhardware.so",
       "libsync.so",
+      "libnativewindow.so",
+      "libandroid.so",
+      "libutils.so",
+      "libbacktrace.so",
+      "libunwindstack.so",
+      "libhidlbase.so",
+      "liblog.so",
   };
 
   std::string stub_dir = data_root + "/android_stub";
@@ -287,27 +326,39 @@ void* TryLoadCustomDriverFromMemFd(const char* source_path,
     return nullptr;
   }
 
-  android_dlextinfo extinfo = {};
-  extinfo.flags = ANDROID_DLEXT_USE_LIBRARY_FD | ANDROID_DLEXT_FORCE_LOAD;
-  extinfo.library_fd = memfd;
-  if (ns) {
-    extinfo.flags |= ANDROID_DLEXT_USE_NAMESPACE;
-    extinfo.library_namespace = ns;
-  }
+  void* handle = nullptr;
 
-  void* handle =
-      android_dlopen_ext(source_path, RTLD_NOW | RTLD_GLOBAL, &extinfo);
-  if (handle) {
-    if (ns_name) {
+  if (ns) {
+    // Namespace-backed path: use android_dlopen_ext so the linker resolves
+    // the driver's dependencies from the sphal/vndk system namespace.
+    android_dlextinfo extinfo = {};
+    extinfo.flags = ANDROID_DLEXT_USE_LIBRARY_FD |
+                    ANDROID_DLEXT_USE_NAMESPACE |
+                    ANDROID_DLEXT_FORCE_LOAD;
+    extinfo.library_fd = memfd;
+    extinfo.library_namespace = ns;
+
+    dlerror();
+    handle = android_dlopen_ext(source_path, RTLD_NOW | RTLD_GLOBAL, &extinfo);
+    if (handle) {
       XELOGI("Custom driver loaded from memfd via '{}' namespace", ns_name);
     } else {
-      XELOGI("Custom driver loaded from memfd without explicit namespace");
+      XELOGW("android_dlopen_ext from memfd via '{}' namespace failed: {}",
+             ns_name, dlerror());
     }
   } else {
-    XELOGW("android_dlopen_ext from memfd{} failed: {}",
-           ns_name ? (" via '" + std::string(ns_name) + "' namespace").c_str()
-                   : "",
-           dlerror());
+    // No namespace available. android_dlopen_ext without USE_NAMESPACE crashes
+    // on Android 12+ (Adreno 830) when the .so has unresolvable HAL deps.
+    // Use plain dlopen via the /proc/self/fd/<fd> path which is safe and
+    // works if the stub libraries were already pre-loaded into RTLD_GLOBAL.
+    std::string fd_path = "/proc/self/fd/" + std::to_string(memfd);
+    dlerror();
+    handle = dlopen(fd_path.c_str(), RTLD_NOW | RTLD_GLOBAL);
+    if (handle) {
+      XELOGI("Custom driver loaded from memfd via /proc/self/fd path");
+    } else {
+      XELOGW("dlopen via /proc/self/fd failed: {}", dlerror());
+    }
   }
 
   close(memfd);
@@ -484,6 +535,10 @@ std::unique_ptr<VulkanInstance> VulkanInstance::Create(
       android_namespace_lookup_unavailable = true;
     }
     if (!vulkan_instance->loader_) {
+      // memfd is only useful when combined with a namespace (so the driver's
+      // HAL deps resolve from sphal). Without a namespace, plain dlopen of the
+      // install path is both simpler and avoids potential linker issues with
+      // tmpfs-backed fds on Android 15+.
       if (fn_get_ns) {
         for (int i = 0; ns_names[i] && !vulkan_instance->loader_; i++) {
           android_namespace_t* ns = fn_get_ns(ns_names[i]);
@@ -496,20 +551,14 @@ std::unique_ptr<VulkanInstance> VulkanInstance::Create(
               TryLoadCustomDriverFromMemFd(loader_library_name, ns, ns_names[i]);
         }
       }
-      if (!vulkan_instance->loader_) {
-        XELOGI("Attempting memfd-backed custom driver load without explicit namespace");
-        vulkan_instance->loader_ =
-            TryLoadCustomDriverFromMemFd(loader_library_name, nullptr, nullptr);
-      }
       if (vulkan_instance->loader_) {
         active_loader_name += " [memfd]";
-      } else {
-        XELOGI(
-            "Memfd-backed custom driver load did not succeed; falling back "
-            "to direct dlopen");
       }
     }
     if (!vulkan_instance->loader_) {
+      // Direct dlopen: stubs are already in RTLD_GLOBAL so libcutils/libhardware
+      // deps resolve from there. Try this before memfd-without-namespace since
+      // it is simpler and more reliable on Android 15+.
       XELOGI("Attempting direct dlopen for custom driver after stub preload: {}",
              loader_library_name);
       dlerror();
@@ -523,6 +572,17 @@ std::unique_ptr<VulkanInstance> VulkanInstance::Create(
             direct_load_error ? direct_load_error : "unknown error";
         XELOGW("Direct dlopen for custom driver failed after stub preload: {}",
                custom_loader_error);
+        // Last resort: memfd without namespace. This path previously caused
+        // SIGSEGV on Android 15 (tmpfs execute restriction) so we try it last.
+        XELOGI("Attempting memfd-backed custom driver load without explicit namespace");
+        vulkan_instance->loader_ =
+            TryLoadCustomDriverFromMemFd(loader_library_name, nullptr, nullptr);
+        if (vulkan_instance->loader_) {
+          active_loader_name += " [memfd]";
+          XELOGI("Custom driver loaded via memfd fallback (no namespace)");
+        } else {
+          XELOGW("All custom driver load paths failed");
+        }
       }
     }
     if (!vulkan_instance->loader_ && custom_loader_error.empty() &&
@@ -635,6 +695,44 @@ std::unique_ptr<VulkanInstance> VulkanInstance::Create(
       using_android_hal_bridge = true;
       XELOGI("Using Android HAL GetInstanceProcAddr bridge");
       functions_loaded = true;
+    }
+  }
+
+  // If a surface-capable instance is needed, quickly probe whether the
+  // custom driver advertises VK_KHR_android_surface. Some Turnip builds
+  // compiled without Android WSI support won't enumerate it.
+  if (functions_loaded && custom_loader_requested && with_surface) {
+    PFN_vkEnumerateInstanceExtensionProperties enumerate_extensions = nullptr;
+    if (using_android_hal_bridge) {
+      enumerate_extensions = android_hal_functions.EnumerateInstanceExtensionProperties;
+    } else {
+      enumerate_extensions = PFN_vkEnumerateInstanceExtensionProperties(
+          ifn.vkGetInstanceProcAddr(nullptr, "vkEnumerateInstanceExtensionProperties"));
+    }
+
+    if (enumerate_extensions) {
+      uint32_t ext_count = 0;
+      enumerate_extensions(nullptr, &ext_count, nullptr);
+      bool has_surface = false;
+      if (ext_count > 0) {
+        std::vector<VkExtensionProperties> exts(ext_count);
+        enumerate_extensions(nullptr, &ext_count, exts.data());
+        for (uint32_t ei = 0; ei < ext_count && !has_surface; ++ei) {
+          if (std::string_view(exts[ei].extensionName) == "VK_KHR_android_surface") {
+            has_surface = true;
+          }
+        }
+      }
+
+      if (has_surface) {
+        XELOGI("Custom driver '{}' successfully advertises VK_KHR_android_surface", active_loader_name);
+      } else {
+        XELOGW(
+            "Custom driver '{}' does NOT advertise VK_KHR_android_surface. "
+            "Proceeding anyway as requested — surface creation may fail if the "
+            "driver lacks internal WSI support.",
+            active_loader_name);
+      }
     }
   }
 #endif
@@ -752,6 +850,9 @@ std::unique_ptr<VulkanInstance> VulkanInstance::Create(
         "VK_KHR_android_surface",
         &vulkan_instance->extensions_.ext_KHR_android_surface);
 #endif
+    requested_extensions.emplace(
+        "VK_EXT_headless_surface",
+        &vulkan_instance->extensions_.ext_EXT_headless_surface);
 #ifdef VK_USE_PLATFORM_WIN32_KHR
     // #10.
     requested_extensions.emplace(
@@ -792,6 +893,12 @@ std::unique_ptr<VulkanInstance> VulkanInstance::Create(
     supported_implementation_extensions.resize(
         supported_implementation_extension_count);
     break;
+  }
+
+  XELOGI("Driver advertises {} instance extensions:",
+         supported_implementation_extensions.size());
+  for (const VkExtensionProperties& ext : supported_implementation_extensions) {
+    XELOGI("  {}", ext.extensionName);
   }
 
   for (const VkExtensionProperties& supported_extension :
@@ -1059,6 +1166,9 @@ std::unique_ptr<VulkanInstance> VulkanInstance::Create(
 #include "xenia/ui/vulkan/functions/instance_khr_win32_surface.inc"
   }
 #endif
+  if (vulkan_instance->extensions_.ext_EXT_headless_surface) {
+#include "xenia/ui/vulkan/functions/instance_ext_headless_surface.inc"
+  }
   if (vulkan_instance->extensions_.ext_KHR_surface) {
 #include "xenia/ui/vulkan/functions/instance_khr_surface.inc"
   }

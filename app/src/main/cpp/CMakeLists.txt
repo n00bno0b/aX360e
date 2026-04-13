@@ -155,13 +155,26 @@ add_library(cutils SHARED dummy_libs.cpp)
 add_library(utils SHARED dummy_libs.cpp)
 add_library(hardware SHARED dummy_libs.cpp)
 add_library(hidlbase SHARED dummy_libs.cpp)
+add_library(nativewindow SHARED dummy_libs.cpp)
 add_library(android_stub_sync SHARED dummy_libs.cpp)
 set_target_properties(android_stub_sync PROPERTIES OUTPUT_NAME "sync")
+add_library(android_stub_android SHARED dummy_libs.cpp)
+set_target_properties(android_stub_android PROPERTIES OUTPUT_NAME "android")
+add_library(backtrace SHARED dummy_libs.cpp)
+add_library(unwindstack SHARED dummy_libs.cpp)
+add_library(android_stub_log SHARED dummy_libs.cpp)
+set_target_properties(android_stub_log PROPERTIES OUTPUT_NAME "log")
+
 target_link_libraries(cutils PRIVATE log)
 target_link_libraries(utils PRIVATE log)
 target_link_libraries(hardware PRIVATE log)
 target_link_libraries(hidlbase PRIVATE log)
+target_link_libraries(nativewindow PRIVATE log)
 target_link_libraries(android_stub_sync PRIVATE log)
+target_link_libraries(android_stub_android PRIVATE log)
+target_link_libraries(backtrace PRIVATE log)
+target_link_libraries(unwindstack PRIVATE log)
+target_link_libraries(android_stub_log PRIVATE log)
 
 target_include_directories(emu PRIVATE
         xenia
@@ -212,6 +225,12 @@ target_link_libraries(emu
         utils
         hardware
         hidlbase
+        nativewindow
+        android_stub_sync
+        android_stub_android
+        backtrace
+        unwindstack
+        android_stub_log
 )
 
 #xenia-patcher

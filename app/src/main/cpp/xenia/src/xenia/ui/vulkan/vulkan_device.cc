@@ -95,6 +95,14 @@ std::unique_ptr<VulkanDevice> VulkanDevice::CreateIfSupported(
   std::unique_ptr<VulkanDevice> device(
       new VulkanDevice(vulkan_instance, physical_device));
 
+#if XE_PLATFORM_ANDROID||XE_PLATFORM_AX360E
+  const bool allow_headless_presentation =
+      with_swapchain &&
+      vulkan_instance->extensions().ext_EXT_headless_surface;
+#else
+  const bool allow_headless_presentation = false;
+#endif
+
   const bool get_physical_device_properties2_supported =
       vulkan_instance->extensions().ext_1_1_KHR_get_physical_device_properties2;
 
@@ -243,10 +251,17 @@ std::unique_ptr<VulkanDevice> VulkanDevice::CreateIfSupported(
     }
   }
 
-  if (with_swapchain && !device->extensions_.ext_KHR_swapchain) {
+  if (with_swapchain && !device->extensions_.ext_KHR_swapchain &&
+      !allow_headless_presentation) {
     XELOGW("Vulkan device '{}' doesn't support swapchains",
            properties.deviceName);
     return nullptr;
+  }
+  if (with_swapchain && !device->extensions_.ext_KHR_swapchain &&
+      allow_headless_presentation) {
+    XELOGW(
+        "Vulkan device '{}' doesn't support swapchains - continuing with VK_EXT_headless_surface fallback",
+        properties.deviceName);
   }
 
   VkDeviceCreateInfo device_create_info = {

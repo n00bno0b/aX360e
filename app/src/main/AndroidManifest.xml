@@ -62,9 +62,10 @@
             android:label="@string/settings"/>
 
         <activity android:name="aenu.ax360e.VulkanTestActivity"
-            android:exported="false"
+            android:exported="true"
             android:label="@string/vulkan_test_title"
-            android:screenOrientation="landscape"/>
+            android:screenOrientation="landscape"
+            android:process=":vktest"/>
         <activity android:name="aenu.ax360e.CustomDriverTypeActivity"
             android:exported="false"
             android:label="@string/custom_driver_type_editor_title"/>

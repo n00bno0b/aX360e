@@ -165,6 +165,10 @@ class VulkanPresenter final : public Presenter {
   PaintResult PaintAndPresentImpl(bool execute_ui_drawers) override;
 
  private:
+  PaintResult PaintAndPresentHeadlessToAndroidWindow(bool execute_ui_drawers);
+  bool EnsureHeadlessCaptureResources(VkExtent2D image_extent);
+  void DestroyHeadlessCaptureResources();
+
   // Usable for both the guest output image itself and for intermediate images.
   class GuestOutputImage {
    public:
@@ -440,6 +444,10 @@ class VulkanPresenter final : public Presenter {
     VkSwapchainKHR swapchain = VK_NULL_HANDLE;
     VkExtent2D swapchain_extent = {};
     bool swapchain_is_fifo = false;
+#if XE_PLATFORM_ANDROID||XE_PLATFORM_AX360E
+    ANativeWindow* android_window = nullptr;
+    bool headless_present = false;
+#endif
     std::vector<VkImage> swapchain_images;
     std::vector<SwapchainFramebuffer> swapchain_framebuffers;
   };
@@ -451,6 +459,7 @@ class VulkanPresenter final : public Presenter {
         vulkan_device_(vulkan_device),
         ui_samplers_(ui_samplers),
         guest_output_image_refresher_submission_tracker_(vulkan_device),
+        headless_capture_submission_tracker_(vulkan_device),
         ui_submission_tracker_(vulkan_device),
         paint_context_(vulkan_device) {
     assert_not_null(vulkan_device);
@@ -461,6 +470,19 @@ class VulkanPresenter final : public Presenter {
 
   [[nodiscard]] VkPipeline CreateGuestOutputPaintPipeline(
       GuestOutputPaintEffect effect, VkRenderPass render_pass);
+
+  struct HeadlessCaptureContext {
+    VkCommandPool command_pool = VK_NULL_HANDLE;
+    VkCommandBuffer command_buffer = VK_NULL_HANDLE;
+    VkBuffer buffer = VK_NULL_HANDLE;
+    VkDeviceMemory buffer_memory = VK_NULL_HANDLE;
+    void* buffer_mapping = nullptr;
+    VkDeviceSize buffer_size = 0;
+    uint32_t width = 0;
+    uint32_t height = 0;
+    uint32_t configured_window_width = 0;
+    uint32_t configured_window_height = 0;
+  };
 
   const VulkanDevice* vulkan_device_;
   const UISamplers* ui_samplers_;
@@ -490,6 +512,8 @@ class VulkanPresenter final : public Presenter {
   std::array<GuestOutputImageInstance, kGuestOutputMailboxSize>
       guest_output_images_;
   VulkanSubmissionTracker guest_output_image_refresher_submission_tracker_;
+  HeadlessCaptureContext headless_capture_context_;
+  VulkanSubmissionTracker headless_capture_submission_tracker_;
 
   // UI submission tracker with the submission index that can be given to UI
   // drawers (accessible from the UI thread only, at any time).
