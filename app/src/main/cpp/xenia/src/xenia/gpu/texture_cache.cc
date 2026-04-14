@@ -9,6 +9,7 @@
 
 #include "xenia/gpu/texture_cache.h"
 
+#include "emulator_ax360e.h"
 #include "xenia/base/clock.h"
 #include "xenia/base/cvar.h"
 #include "xenia/base/logging.h"
@@ -189,6 +190,11 @@ bool TextureCache::GetConfigDrawResolutionScale(uint32_t& x_out,
 
 void TextureCache::ClearCache() { DestroyAllTextures(); }
 
+double TextureCache::GetMemoryPressureScaleFactor() const {
+  // Get the scale factor from global memory pressure state
+  return g_memory_pressure.GetScaleFactor();
+}
+
 void TextureCache::CompletedSubmissionUpdated(
     uint64_t completed_submission_index) {
   // If memory usage is too high, destroy unused textures.
@@ -199,10 +205,14 @@ void TextureCache::CompletedSubmissionUpdated(
   uint32_t limit_scaled_resolve_add_mb =
       cvars::texture_cache_memory_limit_render_to_texture *
       (draw_resolution_scale_x() * draw_resolution_scale_y() - 1);
-  uint32_t limit_soft_mb =
-      cvars::texture_cache_memory_limit_soft + limit_scaled_resolve_add_mb;
-  uint32_t limit_hard_mb =
-      cvars::texture_cache_memory_limit_hard + limit_scaled_resolve_add_mb;
+
+  // Apply memory pressure scaling to texture cache limits
+  double pressure_scale = GetMemoryPressureScaleFactor();
+  uint32_t limit_soft_mb = static_cast<uint32_t>(
+      (cvars::texture_cache_memory_limit_soft + limit_scaled_resolve_add_mb) * pressure_scale);
+  uint32_t limit_hard_mb = static_cast<uint32_t>(
+      (cvars::texture_cache_memory_limit_hard + limit_scaled_resolve_add_mb) * pressure_scale);
+
   uint32_t limit_soft_lifetime =
       cvars::texture_cache_memory_limit_soft_lifetime * 1000;
   bool destroyed_any = false;

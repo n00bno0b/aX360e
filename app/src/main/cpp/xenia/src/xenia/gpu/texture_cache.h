@@ -527,6 +527,11 @@ class TextureCache {
   // invalid if the implementation is destroyed before the texture.
   void DestroyAllTextures(bool from_destructor = false);
 
+  // Get memory pressure scale factor for dynamic texture cache limits.
+  // Returns 0.5-1.0 based on system memory pressure and thermal state.
+  double GetMemoryPressureScaleFactor() const;
+
+
   // Whether the signed version of the texture has a different representation on
   // the host than its unsigned version (for example, if it's a fixed-point
   // texture emulated with a larger host pixel format).
