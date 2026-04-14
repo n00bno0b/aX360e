@@ -90,6 +90,7 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
 
     private String gameUri; // Store for environment resolution
     private PerformanceMonitor performanceMonitor;
+    private MemoryPressureManager memoryPressureManager;
     private Handler metricsHandler;
     private Runnable metricsUpdateRunnable;
     private android.widget.TextView performanceOverlay;
@@ -130,6 +131,7 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
 
         // Initialize performance monitoring
         performanceMonitor = new PerformanceMonitor(this);
+        memoryPressureManager = new MemoryPressureManager(this);
         metricsHandler = new Handler();
         metricsUpdateRunnable = new Runnable() {
             @Override
@@ -137,6 +139,7 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
                 if (started && Emulator.get != null) {
                     performanceMonitor.updateMetrics();
                     performanceMonitor.pushMetricsToNative();
+                    updateMemoryPressure();
                     updatePerformanceOverlay();
                 }
                 metricsHandler.postDelayed(this, 2000); // Update every 2 seconds
@@ -159,6 +162,16 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
 
         performanceOverlay.setText(sb.toString());
     }
+
+    private void updateMemoryPressure() {
+        MemoryPressureManager.MemoryPressure pressure = memoryPressureManager.getMemoryPressure();
+        Emulator.get.update_memory_pressure(
+            pressure.level.getValue(),
+            pressure.availableMB,
+            pressure.thermalLevel
+        );
+    }
+
     void vibrator(){
         if(vibrator!=null) {
             vibrator.vibrate(vibrationEffect);
