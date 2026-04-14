@@ -2998,6 +2998,9 @@ bool VulkanCommandProcessor::BeginSubmission(bool is_guest_command) {
     primitive_processor_->BeginFrame();
 
     texture_cache_->BeginFrame();
+
+    // Advance occlusion query cache frame
+    occlusion_query_cache_.AdvanceFrame();
   }
 
   return true;
