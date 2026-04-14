@@ -55,6 +55,20 @@ public class Emulator extends aenu.emulator.Emulator{
             float temperature
     );
 
+    /**
+     * Update memory pressure status for dynamic texture cache management.
+     * Called periodically (every 5s) to adjust GPU memory limits based on system RAM pressure.
+     *
+     * @param pressureLevel Pressure level (0=NONE, 1=LOW, 2=MEDIUM, 3=HIGH, 4=CRITICAL)
+     * @param availableMB Available RAM in MB
+     * @param thermalLevel Thermal status (0-6, from PowerManager.THERMAL_STATUS_*)
+     */
+    public native void update_memory_pressure(
+            int pressureLevel,
+            long availableMB,
+            int thermalLevel
+    );
+
     public static int nc_open_uri_fd(Context ctx,Uri uri) {
         ParcelFileDescriptor pfd_ = null;
         try {
