@@ -9,6 +9,7 @@
 
 #include "xenia/gpu/vulkan/vulkan_pipeline_cache.h"
 
+#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -221,6 +222,17 @@ void VulkanPipelineCache::ShutdownPipelineCache() {
       command_processor_.GetVulkanDevice();
   const ui::vulkan::VulkanDevice::Functions& dfn = vulkan_device->functions();
   const VkDevice device = vulkan_device->device();
+
+  // Log cache statistics before shutdown
+  if (cache_stats_.pipeline_count > 0) {
+    uint64_t avg_compile_time = cache_stats_.total_compilation_time_ms /
+                                 cache_stats_.pipeline_count;
+    double cache_hit_rate = (cache_stats_.cache_hits * 100.0) /
+                            (cache_stats_.cache_hits + cache_stats_.cache_misses);
+    XELOGI("VulkanPipelineCache: Statistics - {} pipelines compiled, "
+           "avg {}ms per pipeline, {:.1f}% cache hit rate",
+           cache_stats_.pipeline_count, avg_compile_time, cache_hit_rate);
+  }
 
   if (vk_pipeline_cache_ != VK_NULL_HANDLE) {
     // Save pipeline cache to disk before destroying
@@ -2303,9 +2315,14 @@ bool VulkanPipelineCache::EnsurePipelineCreated(
   const ui::vulkan::VulkanDevice::Functions& dfn = vulkan_device->functions();
   const VkDevice device = vulkan_device->device();
   VkPipeline pipeline;
+
+  // Track pipeline compilation time
+  auto compile_start = std::chrono::high_resolution_clock::now();
+
   if (dfn.vkCreateGraphicsPipelines(device, vk_pipeline_cache_, 1,
                                     &pipeline_create_info, nullptr,
                                     &pipeline) != VK_SUCCESS) {
+    cache_stats_.cache_misses++;
     // TODO(Triang3l): Move these error messages outside.
     /* if (creation_arguments.pixel_shader) {
       XELOGE(
@@ -2318,6 +2335,21 @@ bool VulkanPipelineCache::EnsurePipelineCreated(
     } */
     return false;
   }
+
+  auto compile_end = std::chrono::high_resolution_clock::now();
+  auto compile_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+      compile_end - compile_start).count();
+
+  cache_stats_.total_compilation_time_ms += compile_time_ms;
+  cache_stats_.pipeline_count++;
+  cache_stats_.cache_hits++; // Pipeline was created (potentially from cache)
+
+  if (compile_time_ms > 100) {
+    XELOGD("Pipeline compilation took {}ms (total: {}, avg: {}ms)",
+           compile_time_ms, cache_stats_.pipeline_count,
+           cache_stats_.total_compilation_time_ms / cache_stats_.pipeline_count);
+  }
+
   creation_arguments.pipeline->second.pipeline = pipeline;
   return true;
 }
