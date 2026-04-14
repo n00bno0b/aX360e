@@ -337,10 +337,10 @@ class VulkanPipelineCache {
 
   // Pipeline cache statistics
   struct CacheStatistics {
-    uint64_t cache_hits = 0;
-    uint64_t cache_misses = 0;
-    uint64_t total_compilation_time_ms = 0;
-    uint64_t pipeline_count = 0;
+    std::atomic<uint64_t> cache_hits{0};
+    std::atomic<uint64_t> cache_misses{0};
+    std::atomic<uint64_t> total_compilation_time_ms{0};
+    std::atomic<uint64_t> pipeline_count{0};
   } cache_stats_;
 };
 

@@ -9,6 +9,7 @@
 
 #include "xenia/gpu/vulkan/vulkan_pipeline_cache.h"
 
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
@@ -224,14 +225,24 @@ void VulkanPipelineCache::ShutdownPipelineCache() {
   const VkDevice device = vulkan_device->device();
 
   // Log cache statistics before shutdown
-  if (cache_stats_.pipeline_count > 0) {
-    uint64_t avg_compile_time = cache_stats_.total_compilation_time_ms /
-                                 cache_stats_.pipeline_count;
-    double cache_hit_rate = (cache_stats_.cache_hits * 100.0) /
-                            (cache_stats_.cache_hits + cache_stats_.cache_misses);
-    XELOGI("VulkanPipelineCache: Statistics - {} pipelines compiled, "
-           "avg {}ms per pipeline, {:.1f}% cache hit rate",
-           cache_stats_.pipeline_count, avg_compile_time, cache_hit_rate);
+  uint64_t pipeline_count = cache_stats_.pipeline_count.load();
+  if (pipeline_count > 0) {
+    uint64_t total_time = cache_stats_.total_compilation_time_ms.load();
+    uint64_t avg_compile_time = total_time / pipeline_count;
+
+    uint64_t hits = cache_stats_.cache_hits.load();
+    uint64_t misses = cache_stats_.cache_misses.load();
+    uint64_t total_requests = hits + misses;
+
+    if (total_requests > 0) {
+      double cache_hit_rate = (hits * 100.0) / total_requests;
+      XELOGI("VulkanPipelineCache: {} pipelines compiled, avg {}ms per pipeline, "
+             "{:.1f}% cache hit rate ({}/{} requests)",
+             pipeline_count, avg_compile_time, cache_hit_rate, hits, total_requests);
+    } else {
+      XELOGI("VulkanPipelineCache: {} pipelines compiled, avg {}ms per pipeline",
+             pipeline_count, avg_compile_time);
+    }
   }
 
   if (vk_pipeline_cache_ != VK_NULL_HANDLE) {
@@ -435,12 +446,14 @@ bool VulkanPipelineCache::ConfigurePipeline(
     return false;
   }
   if (last_pipeline_ && last_pipeline_->first == description) {
+    cache_stats_.cache_hits++;
     pipeline_out = last_pipeline_->second.pipeline;
     pipeline_layout_out = last_pipeline_->second.pipeline_layout;
     return true;
   }
   auto it = pipelines_.find(description);
   if (it != pipelines_.end()) {
+    cache_stats_.cache_hits++;
     last_pipeline_ = &*it;
     pipeline_out = it->second.pipeline;
     pipeline_layout_out = it->second.pipeline_layout;
@@ -2316,13 +2329,13 @@ bool VulkanPipelineCache::EnsurePipelineCreated(
   const VkDevice device = vulkan_device->device();
   VkPipeline pipeline;
 
-  // Track pipeline compilation time
+  // Track pipeline compilation time for cache miss
+  cache_stats_.cache_misses++;
   auto compile_start = std::chrono::high_resolution_clock::now();
 
   if (dfn.vkCreateGraphicsPipelines(device, vk_pipeline_cache_, 1,
                                     &pipeline_create_info, nullptr,
                                     &pipeline) != VK_SUCCESS) {
-    cache_stats_.cache_misses++;
     // TODO(Triang3l): Move these error messages outside.
     /* if (creation_arguments.pixel_shader) {
       XELOGE(
@@ -2342,12 +2355,11 @@ bool VulkanPipelineCache::EnsurePipelineCreated(
 
   cache_stats_.total_compilation_time_ms += compile_time_ms;
   cache_stats_.pipeline_count++;
-  cache_stats_.cache_hits++; // Pipeline was created (potentially from cache)
 
   if (compile_time_ms > 100) {
-    XELOGD("Pipeline compilation took {}ms (total: {}, avg: {}ms)",
-           compile_time_ms, cache_stats_.pipeline_count,
-           cache_stats_.total_compilation_time_ms / cache_stats_.pipeline_count);
+    XELOGD("Pipeline compilation took {}ms (total pipelines: {}, avg: {}ms)",
+           compile_time_ms, cache_stats_.pipeline_count.load(),
+           cache_stats_.total_compilation_time_ms.load() / cache_stats_.pipeline_count.load());
   }
 
   creation_arguments.pipeline->second.pipeline = pipeline;
