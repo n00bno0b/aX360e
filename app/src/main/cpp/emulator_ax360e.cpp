@@ -40,6 +40,9 @@ std::string g_uri_info_list_file_path;
 // Global performance metrics cache
 PerformanceMetrics g_performance_metrics;
 
+// Global memory pressure state
+MemoryPressureState g_memory_pressure;
+
 static void j_setup_context(JNIEnv* env,jobject self,jobject context ){
     g_context = env->NewGlobalRef(context);
 }
@@ -748,6 +751,32 @@ static void j_push_performance_metrics(JNIEnv* env, jobject self,
     }
 }
 
+//public native void update_memory_pressure(int pressureLevel, long availableMB, int thermalLevel);
+static void j_update_memory_pressure(JNIEnv* env, jobject self,
+                                     jint pressure_level, jlong available_mb, jint thermal_level) {
+    // Update global memory pressure state
+    g_memory_pressure.pressure_level.store(pressure_level, std::memory_order_relaxed);
+    g_memory_pressure.available_mb.store(available_mb, std::memory_order_relaxed);
+    g_memory_pressure.thermal_level.store(thermal_level, std::memory_order_relaxed);
+
+    // Get current time in milliseconds
+    auto now = std::chrono::steady_clock::now();
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+    g_memory_pressure.last_update_time_ms.store(ms, std::memory_order_relaxed);
+
+    // Log on pressure level changes
+    static int last_logged_level = -1;
+    if (pressure_level != last_logged_level) {
+        const char* level_names[] = {"NONE", "LOW", "MEDIUM", "HIGH", "CRITICAL"};
+        const char* level_name = (pressure_level >= 0 && pressure_level <= 4) ? level_names[pressure_level] : "UNKNOWN";
+        double scale_factor = g_memory_pressure.GetScaleFactor();
+        __android_log_print(ANDROID_LOG_INFO, "MemoryPressure",
+                          "Level: %s, Available: %lld MB, Thermal: %d, Scale: %.2f",
+                          level_name, (long long)available_mb, thermal_level, scale_factor);
+        last_logged_level = pressure_level;
+    }
+}
+
 int register_ax360e_Emulator(JNIEnv* env){
 
     jclass localDocFile=env->FindClass("androidx/documentfile/provider/DocumentFile");
@@ -781,7 +810,8 @@ int register_ax360e_Emulator(JNIEnv* env){
             { "setup_uri_info_list_file", "(Ljava/lang/String;)V", (void *) j_setup_uri_info_list_file },
             {"simple_device_info", "()Ljava/lang/String;", (void *) j_simple_device_info},
             {"generate_config_xml", "(Ljava/lang/String;)Ljava/lang/String;", (void *) generate_config_xml},
-            {"push_performance_metrics", "(FFIFFF)V", (void *) j_push_performance_metrics}
+            {"push_performance_metrics", "(FFIFFF)V", (void *) j_push_performance_metrics},
+            {"update_memory_pressure", "(IJI)V", (void *) j_update_memory_pressure}
     };
     return env->RegisterNatives(g_class_Emulator,methods, sizeof(methods)/sizeof(methods[0]));
 }

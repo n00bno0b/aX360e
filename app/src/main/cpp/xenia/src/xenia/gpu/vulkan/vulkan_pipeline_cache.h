@@ -334,6 +334,14 @@ class VulkanPipelineCache {
   VkPipelineCache vk_pipeline_cache_ = VK_NULL_HANDLE;
   std::filesystem::path pipeline_cache_path_;
   uint32_t pipeline_cache_title_id_ = 0;
+
+  // Pipeline cache statistics
+  struct CacheStatistics {
+    std::atomic<uint64_t> cache_hits{0};
+    std::atomic<uint64_t> cache_misses{0};
+    std::atomic<uint64_t> total_compilation_time_ms{0};
+    std::atomic<uint64_t> pipeline_count{0};
+  } cache_stats_;
 };
 
 }  // namespace vulkan

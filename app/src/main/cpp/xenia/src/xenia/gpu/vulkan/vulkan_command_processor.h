@@ -749,6 +749,59 @@ class VulkanCommandProcessor final : public CommandProcessor {
   // System shader constants.
   SpirvShaderTranslator::SystemConstants system_constants_;
 
+  // Occlusion query result cache for reducing GPU synchronization
+  struct OcclusionQueryCache {
+    struct Entry {
+      uint64_t last_frame_tested;
+      uint32_t last_result;
+      bool result_valid;
+    };
+
+    std::unordered_map<uint32_t, Entry> cache;
+    uint64_t current_frame = 0;
+
+    static constexpr uint32_t kMaxCacheAge = 10; // frames
+
+    bool TryGetCachedResult(uint32_t query_address, uint32_t& result_out) {
+      auto it = cache.find(query_address);
+      if (it != cache.end() && it->second.result_valid &&
+          (current_frame - it->second.last_frame_tested) < kMaxCacheAge) {
+        result_out = it->second.last_result;
+        return true;
+      }
+      return false;
+    }
+
+    void StoreResult(uint32_t query_address, uint32_t result) {
+      cache[query_address] = {current_frame, result, true};
+    }
+
+    void AdvanceFrame() {
+      current_frame++;
+      // Evict old entries every 20 frames to prevent unbounded growth
+      if (current_frame % 20 == 0) {
+        for (auto it = cache.begin(); it != cache.end();) {
+          if (current_frame - it->second.last_frame_tested > kMaxCacheAge * 2) {
+            it = cache.erase(it);
+          } else {
+            ++it;
+          }
+        }
+      }
+    }
+
+    uint32_t PredictResult(uint32_t query_address, uint32_t default_result) {
+      auto it = cache.find(query_address);
+      if (it != cache.end()) {
+        // Object visible last time? Likely visible this time
+        return it->second.last_result;
+      }
+      // Conservative: return default (assume visible)
+      return default_result;
+    }
+  };
+  OcclusionQueryCache occlusion_query_cache_;
+
   // Temporary storage for memexport stream constants used in the draw.
   std::vector<draw_util::MemExportRange> memexport_ranges_;
 };

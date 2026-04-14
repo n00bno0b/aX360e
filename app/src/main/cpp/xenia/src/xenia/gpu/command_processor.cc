@@ -56,11 +56,10 @@ DEFINE_bool(
     "GPU");
 
 DEFINE_bool(
-    readback_memexport, false,
-    "[D3D12 Only] Read data written by memory export in shaders on the CPU. "
-    "This may be needed in some games (but many only access exported data on "
-    "the GPU, and this flag isn't needed to handle such behavior), but causes "
-    "mid-frame synchronization, so it has a huge performance impact.",
+    readback_memexport, true,
+    "Read data written by memory export in shaders on the CPU. "
+    "This is needed for MT Framework, Frostbite, and other engines that rely "
+    "on memexport operations. Performance impact is minimized in Vulkan backend.",
     "GPU");
 
 namespace xe {

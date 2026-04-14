@@ -2225,7 +2225,14 @@ bool VulkanCommandProcessor::IssueDraw(xenos::PrimitiveType prim_type,
   // tessellation.
   if (vertex_shader->memexport_eM_written() != 0 &&
       device_properties.vertexPipelineStoresAndAtomics) {
+    size_t memexport_count_before = memexport_ranges_.size();
     draw_util::AddMemExportRanges(regs, *vertex_shader, memexport_ranges_);
+    size_t memexport_count_after = memexport_ranges_.size();
+    if (memexport_count_after > memexport_count_before) {
+      XELOGD("Vertex shader memexport: added {} ranges (total: {})",
+             memexport_count_after - memexport_count_before,
+             memexport_count_after);
+    }
   }
 
   // Pixel shader analysis.
@@ -2256,7 +2263,14 @@ bool VulkanCommandProcessor::IssueDraw(xenos::PrimitiveType prim_type,
   }
   if (pixel_shader && pixel_shader->memexport_eM_written() != 0 &&
       device_properties.fragmentStoresAndAtomics) {
+    size_t memexport_count_before = memexport_ranges_.size();
     draw_util::AddMemExportRanges(regs, *pixel_shader, memexport_ranges_);
+    size_t memexport_count_after = memexport_ranges_.size();
+    if (memexport_count_after > memexport_count_before) {
+      XELOGD("Pixel shader memexport: added {} ranges (total: {})",
+             memexport_count_after - memexport_count_before,
+             memexport_count_after);
+    }
   }
 
   uint32_t ps_param_gen_pos = UINT32_MAX;
@@ -2984,6 +2998,9 @@ bool VulkanCommandProcessor::BeginSubmission(bool is_guest_command) {
     primitive_processor_->BeginFrame();
 
     texture_cache_->BeginFrame();
+
+    // Advance occlusion query cache frame
+    occlusion_query_cache_.AdvanceFrame();
   }
 
   return true;
