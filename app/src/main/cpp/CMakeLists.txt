@@ -199,6 +199,7 @@ target_include_directories(emu PRIVATE
         xenia
         xenia/src
         xenia/third_party
+        xenia/third_party/Vulkan-Headers/include
 )
 
 if(HAS_LIBADRENOTOOLS)
