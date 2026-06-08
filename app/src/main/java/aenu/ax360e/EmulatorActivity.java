@@ -153,6 +153,21 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
         sf = (SurfaceView) findViewById(R.id.surface_view);
         sf.getHolder().addCallback(EmulatorActivity.this);
 
+        // Resolve and apply launch environment (driver + Turnip vars) AFTER library is loaded
+        Log.i("ax360e", "Calling LaunchEnvironmentResolver.resolveAndApply for: " + gameUri);
+        LaunchEnvironmentResolver envResolver = new LaunchEnvironmentResolver(this);
+        envResolver.resolveAndApply(gameUri);
+        Log.i("ax360e", "LaunchEnvironmentResolver done, calling boot");
+
+        try {
+            Emulator.get.boot();
+        } catch (aenu.emulator.Emulator.BootException e) {
+            throw new RuntimeException(e);
+        }
+
+        // Verify custom driver loaded after boot
+        verifyCustomDriverLoaded();
+
         sf.setFocusable(true);
         sf.setFocusableInTouchMode(true);
         sf.requestFocus();
@@ -413,26 +428,17 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
     }
     @Override
     public void surfaceCreated(@NonNull SurfaceHolder holder) {
-        Log.i("ax360e", "=== surfaceCreated START === started=" + started);
+        Log.i("ax360e", "=== surfaceCreated START === started=" + started + " emulator=" + (Emulator.get != null));
+
+        if (Emulator.get == null) {
+            Log.w("ax360e", "surfaceCreated: library not loaded yet, skipping");
+            return;
+        }
 
         if(!started){
             started=true;
-
-            // Resolve and apply launch environment (driver + Turnip vars)
-            Log.i("ax360e", "Calling LaunchEnvironmentResolver.resolveAndApply for: " + gameUri);
-            LaunchEnvironmentResolver envResolver = new LaunchEnvironmentResolver(this);
-            envResolver.resolveAndApply(gameUri);
-            Log.i("ax360e", "LaunchEnvironmentResolver done, calling setup_surface");
-
+            Log.i("ax360e", "surfaceCreated: setting up surface");
             Emulator.get.setup_surface(holder.getSurface());
-            try {
-                Emulator.get.boot();
-            } catch (aenu.emulator.Emulator.BootException e) {
-                throw new RuntimeException(e);
-            }
-
-            // Verify custom driver loaded after boot
-            verifyCustomDriverLoaded();
         }
         else{
             Emulator.get.setup_surface(holder.getSurface());
@@ -440,8 +446,6 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
             if(Emulator.get.is_paused())
                 Emulator.get.resume();
         }
-
-
     }
 
     private void verifyCustomDriverLoaded() {
