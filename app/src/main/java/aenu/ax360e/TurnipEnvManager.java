@@ -148,6 +148,9 @@ public class TurnipEnvManager {
                 if (value.length() >= 2 && value.startsWith("\"") && value.endsWith("\"")) {
                     value = value.substring(1, value.length() - 1);
                 }
+                if (value.length() >= 2 && value.startsWith("\"") && value.endsWith("\"")) {
+                    value = value.substring(1, value.length() - 1);
+                }
                 values.put(currentSection + "|" + key, value);
             }
         } catch (IOException e) {

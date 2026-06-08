@@ -107,8 +107,8 @@ void CheckDecrementerInterrupt(PPCContext* ppc_context, void* arg0, void* arg1) 
   ppc_context->dec_pending = 0;
 
   // Record underflow at actual delivery point (covers cases set in mfspr but delivered here).
-  ax360e::perf::g_cpu_accuracy.RecordDecUnderflowFired();
-  ax360e::perf::g_cpu_accuracy.RecordDecReentered();
+  g_cpu_accuracy.RecordDecUnderflowFired();
+  g_cpu_accuracy.RecordDecReentered();
 
   // Save for proper exception context (SRR0 = "next" address, SRR1 = MSR image).
   // POLISH (CAPTAIN DEC): SRR0 now documented as continuation (LR approx for JIT reenter

@@ -26,6 +26,7 @@ public class CustomDriverUtils {
     private static final String TAG = "CustomDriverUtils";
     private static final String DRIVER_DIR_NAME = "custom_drivers";
     // Old stub library logic has been completely removed (libadrenotools migration)
+    private static final String BACKUP_DIR_NAME = "custom_drivers_backup";
     private static volatile String lastDriverError = "";
     // Decompression bomb limits to prevent OOM from malicious zip files
     private static final long MAX_TOTAL_UNCOMPRESSED_SIZE = 100 * 1024 * 1024; // 100MB total
@@ -38,6 +39,33 @@ public class CustomDriverUtils {
         return context.getDir(DRIVER_DIR_NAME, Context.MODE_PRIVATE);
     }
 
+    public static String validateDriverPackage(Context context, Uri zipUri) {
+        setLastDriverError("");
+        try (InputStream is = context.getContentResolver().openInputStream(zipUri)) {
+            if (is == null) {
+                return "Could not open the selected file.";
+            }
+            java.util.zip.ZipInputStream zis = new java.util.zip.ZipInputStream(is);
+            java.util.zip.ZipEntry entry;
+            boolean hasVulkanSo = false;
+            boolean hasIcdJson = false;
+            boolean hasMetaJson = false;
+            while ((entry = zis.getNextEntry()) != null) {
+                if (entry.isDirectory()) continue;
+                String name = entry.getName();
+                if (name.endsWith(".so") && name.contains("vulkan")) hasVulkanSo = true;
+                if (name.equals("vk_icd.json")) hasIcdJson = true;
+                if (name.equals("meta.json")) hasMetaJson = true;
+                zis.closeEntry();
+            }
+            if (!hasVulkanSo) return "Package missing required Vulkan driver library (vulkan_*.so)";
+            if (!hasIcdJson && !hasMetaJson) Log.w(TAG, "Package has neither vk_icd.json nor meta.json");
+            return null;
+        } catch (Exception e) {
+            return "Failed to validate package: " + e.getMessage();
+        }
+    }
+
     public static boolean installDriver(Context context, Uri zipUri) {
         setLastDriverError("");
         File dir = getDriverDirectory(context);
@@ -48,6 +76,10 @@ public class CustomDriverUtils {
             deleteRecursive(stagingDir);
         }
         stagingDir.mkdirs();
+
+        if (isDriverInstalled(context)) {
+            backupCurrentDriver(context);
+        }
 
         String driverSoName = null;
         try {
@@ -323,6 +355,75 @@ public class CustomDriverUtils {
 
         File dir = getDriverDirectory(context);
         deleteRecursive(dir);
+    }
+
+    public static File getBackupDirectory(Context context) {
+        File dir = new File(context.getFilesDir(), BACKUP_DIR_NAME);
+        if (!dir.exists()) dir.mkdirs();
+        return dir;
+    }
+
+    public static boolean backupCurrentDriver(Context context) {
+        File driverDir = getDriverDirectory(context);
+        if (!driverDir.exists() || !isDriverInstalled(context)) {
+            Log.i(TAG, "No driver to backup");
+            return false;
+        }
+        try {
+            File backupDir = getBackupDirectory(context);
+            deleteRecursive(backupDir);
+            backupDir.mkdirs();
+            copyDirRecursive(driverDir, backupDir);
+            Log.i(TAG, "Driver backed up successfully");
+            return true;
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to backup driver", e);
+            return false;
+        }
+    }
+
+    public static boolean restoreDriverFromBackup(Context context) {
+        File backupDir = getBackupDirectory(context);
+        if (!backupDir.exists() || backupDir.listFiles() == null || backupDir.listFiles().length == 0) {
+            Log.i(TAG, "No driver backup found");
+            return false;
+        }
+        try {
+            File driverDir = getDriverDirectory(context);
+            if (driverDir.exists()) deleteRecursive(driverDir);
+            copyDirRecursive(backupDir, driverDir);
+            chmodSoFilesRecursive(driverDir);
+            Log.i(TAG, "Driver restored from backup");
+            return true;
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to restore driver from backup", e);
+            return false;
+        }
+    }
+
+    public static boolean hasDriverBackup(Context context) {
+        File backupDir = getBackupDirectory(context);
+        return backupDir.exists() && backupDir.listFiles() != null && backupDir.listFiles().length > 0;
+    }
+
+    private static void copyDirRecursive(File src, File dst) throws IOException {
+        if (src.isDirectory()) {
+            if (!dst.exists()) dst.mkdirs();
+            File[] children = src.listFiles();
+            if (children != null) {
+                for (File child : children) {
+                    copyDirRecursive(child, new File(dst, child.getName()));
+                }
+            }
+        } else {
+            java.io.FileInputStream in = new java.io.FileInputStream(src);
+            java.io.FileOutputStream out = new java.io.FileOutputStream(dst);
+            byte[] buf = new byte[16384];
+            int len;
+            while ((len = in.read(buf)) > 0) out.write(buf, 0, len);
+            in.close();
+            out.close();
+        }
     }
 
     private static boolean chmodSoFilesRecursive(File dir) {

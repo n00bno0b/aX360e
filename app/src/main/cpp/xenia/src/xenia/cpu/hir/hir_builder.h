@@ -269,12 +269,12 @@ class HIRBuilder {
  protected:
   void DumpValue(StringBuffer* str, Value* value);
   void DumpOp(StringBuffer* str, OpcodeSignatureType sig_type, Instr::Op* op);
+  Instr* AppendInstr(const OpcodeInfo& opcode, uint16_t flags, Value* dest = 0);
 
  private:
   Block* AppendBlock();
   void EndBlock();
   bool IsUnconditionalJump(Instr* instr);
-  Instr* AppendInstr(const OpcodeInfo& opcode, uint16_t flags, Value* dest = 0);
   void CommentBuffer(const char* p);
   Value* CompareXX(const OpcodeInfo& opcode, Value* value1, Value* value2);
   Value* VectorCompareXX(const OpcodeInfo& opcode, Value* value1, Value* value2,

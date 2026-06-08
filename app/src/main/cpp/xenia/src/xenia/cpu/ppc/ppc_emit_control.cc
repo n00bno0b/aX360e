@@ -772,7 +772,7 @@ int InstrEmit_mtspr(PPCHIRBuilder& f, const InstrData& i) {
         f.StoreContext(offsetof(PPCContext, gqr) + (gqr_index * sizeof(uint64_t)), f.ZeroExtend(val32, INT64_TYPE));
       }
       break;
-    case 22:
+    case 22: {
       // DEC - record written value + current timebase for accurate countdown
       // emulation. This enables timing-sensitive games to use decrementer
       // interrupts and polled mfdec with correct fidelity to guest ticks.
@@ -785,6 +785,7 @@ int InstrEmit_mtspr(PPCHIRBuilder& f, const InstrData& i) {
       f.StoreContext(offsetof(PPCContext, dec_fire_time), fire_time);
       f.StoreContext(offsetof(PPCContext, dec_pending), f.LoadZeroInt64());  // clear pending on new set
       break;
+    }
     default:
       XEINSTRNOTIMPLEMENTED();
       return 1;

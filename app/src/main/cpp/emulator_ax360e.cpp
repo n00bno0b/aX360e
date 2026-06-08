@@ -147,19 +147,23 @@ static jobject j_meta_info_from_god_game(JNIEnv* env,jobject self,jobject contex
     jobject uri = env->CallStaticObjectMethod(uri_class, parse_method, uri_str);
 
     xe::vfs::XContentContainerHeader header;
-    // read header
     {
-        //public static int nc_open_uri_fd(Context ctx,Uri uri)
         int header_file_fd = env->CallStaticIntMethod(g_class_Emulator, mid_open_uri_fd, context, uri);
 
         if (header_file_fd == -1) {
+            env->DeleteLocalRef(uri);
+            env->DeleteLocalRef(uri_class);
             return NULL;
         }
         std::unique_ptr<xe::MappedMemory> mmap = xe::MappedMemory::OpenForUnixFd(header_file_fd);
         if (!mmap) {
+            env->DeleteLocalRef(uri);
+            env->DeleteLocalRef(uri_class);
             return NULL;
         }
         if(mmap->size() < sizeof(header)) {
+            env->DeleteLocalRef(uri);
+            env->DeleteLocalRef(uri_class);
             return NULL;
         }
         std::memcpy(&header, mmap->data(), sizeof(header));
@@ -171,6 +175,9 @@ static jobject j_meta_info_from_god_game(JNIEnv* env,jobject self,jobject contex
     jbyteArray icon = env->NewByteArray(header.content_metadata.thumbnail_size);
     env->SetByteArrayRegion(icon, 0, header.content_metadata.thumbnail_size, (const jbyte*)header.content_metadata.thumbnail);
     env->SetObjectField(game_info, fid_icon, icon);
+
+    env->DeleteLocalRef(uri);
+    env->DeleteLocalRef(uri_class);
     return game_info;
 }
 #if 0

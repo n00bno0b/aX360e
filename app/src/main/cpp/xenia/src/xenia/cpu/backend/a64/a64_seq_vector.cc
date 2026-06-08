@@ -565,20 +565,20 @@ struct VECTOR_SHL_V128
       }
       case INT16_TYPE: {
         e.MOVI(Q2.H8(), 0x0F);
-        e.AND(Q1.H8(), shamt.H8(), Q2.H8());
+        e.AND(Q1.B16(), shamt.B16(), Q2.B16());
         e.USHL(i.dest.reg().H8(), src1.H8(), Q1.H8());
         break;
       }
       case INT32_TYPE: {
         e.MOVI(Q2.S4(), 0x1F);
-        e.AND(Q1.S4(), shamt.S4(), Q2.S4());
+        e.AND(Q1.B16(), shamt.B16(), Q2.B16());
         e.USHL(i.dest.reg().S4(), src1.S4(), Q1.S4());
         break;
       }
       case INT64_TYPE: {
         e.MOV(X0, 0x3F);
         e.DUP(Q2.D2(), X0);
-        e.AND(Q1.D2(), shamt.D2(), Q2.D2());
+        e.AND(Q1.B16(), shamt.B16(), Q2.B16());
         e.USHL(i.dest.reg().D2(), src1.D2(), Q1.D2());
         break;
       }
@@ -722,14 +722,14 @@ struct VECTOR_SHR_V128
       }
       case INT16_TYPE: {
         e.MOVI(Q2.H8(), 0x0F);
-        e.AND(Q1.H8(), shamt.H8(), Q2.H8());
+        e.AND(Q1.B16(), shamt.B16(), Q2.B16());
         e.NEG(Q2.H8(), Q1.H8());
         e.USHL(i.dest.reg().H8(), src1.H8(), Q2.H8());
         break;
       }
       case INT32_TYPE: {
         e.MOVI(Q2.S4(), 0x1F);
-        e.AND(Q1.S4(), shamt.S4(), Q2.S4());
+        e.AND(Q1.B16(), shamt.B16(), Q2.B16());
         e.NEG(Q2.S4(), Q1.S4());
         e.USHL(i.dest.reg().S4(), src1.S4(), Q2.S4());
         break;
@@ -737,7 +737,7 @@ struct VECTOR_SHR_V128
       case INT64_TYPE: {
         e.MOV(X0, 0x3F);
         e.DUP(Q2.D2(), X0);
-        e.AND(Q1.D2(), shamt.D2(), Q2.D2());
+        e.AND(Q1.B16(), shamt.B16(), Q2.B16());
         e.NEG(Q2.D2(), Q1.D2());
         e.USHL(i.dest.reg().D2(), src1.D2(), Q2.D2());
         break;
@@ -857,14 +857,14 @@ struct VECTOR_SHA_V128
       }
       case INT16_TYPE: {
         e.MOVI(Q2.H8(), 0x0F);
-        e.AND(Q1.H8(), shamt.H8(), Q2.H8());
+        e.AND(Q1.B16(), shamt.B16(), Q2.B16());
         e.NEG(Q2.H8(), Q1.H8());
         e.SSHL(i.dest.reg().H8(), src1.H8(), Q2.H8());
         break;
       }
       case INT32_TYPE: {
         e.MOVI(Q2.S4(), 0x1F);
-        e.AND(Q1.S4(), shamt.S4(), Q2.S4());
+        e.AND(Q1.B16(), shamt.B16(), Q2.B16());
         e.NEG(Q2.S4(), Q1.S4());
         e.SSHL(i.dest.reg().S4(), src1.S4(), Q2.S4());
         break;
@@ -872,7 +872,7 @@ struct VECTOR_SHA_V128
       case INT64_TYPE: {
         e.MOV(X0, 0x3F);
         e.DUP(Q2.D2(), X0);
-        e.AND(Q1.D2(), shamt.D2(), Q2.D2());
+        e.AND(Q1.B16(), shamt.B16(), Q2.B16());
         e.NEG(Q2.D2(), Q1.D2());
         e.SSHL(i.dest.reg().D2(), src1.D2(), Q2.D2());
         break;
@@ -1029,11 +1029,11 @@ struct VECTOR_ROTATE_LEFT_V128
       }
       case INT16_TYPE: {
         e.MOVI(Q2.H8(), 0x0F);
-        e.AND(Q1.H8(), shamt.H8(), Q2.H8());  // Q1 = k
+        e.AND(Q1.B16(), shamt.B16(), Q2.B16());  // Q1 = k
         e.MOVI(Q2.H8(), 0x10);
         e.SUB(Q3.H8(), Q2.H8(), Q1.H8());
         e.MOVI(Q2.H8(), 0x0F);
-        e.AND(Q3.H8(), Q3.H8(), Q2.H8());  // m
+        e.AND(Q3.B16(), Q3.B16(), Q2.B16());  // m
         e.NEG(Q2.H8(), Q3.H8());
         e.USHL(Q3.H8(), src1.H8(), Q1.H8());
         e.USHL(Q2.H8(), src1.H8(), Q2.H8());
@@ -1042,11 +1042,11 @@ struct VECTOR_ROTATE_LEFT_V128
       }
       case INT32_TYPE: {
         e.MOVI(Q2.S4(), 0x1F);
-        e.AND(Q1.S4(), shamt.S4(), Q2.S4());
+        e.AND(Q1.B16(), shamt.B16(), Q2.B16());
         e.MOVI(Q2.S4(), 0x20);
         e.SUB(Q3.S4(), Q2.S4(), Q1.S4());
         e.MOVI(Q2.S4(), 0x1F);
-        e.AND(Q3.S4(), Q3.S4(), Q2.S4());
+        e.AND(Q3.B16(), Q3.B16(), Q2.B16());
         e.NEG(Q2.S4(), Q3.S4());
         e.USHL(Q3.S4(), src1.S4(), Q1.S4());
         e.USHL(Q2.S4(), src1.S4(), Q2.S4());
@@ -1056,13 +1056,13 @@ struct VECTOR_ROTATE_LEFT_V128
       case INT64_TYPE: {
         e.MOV(X0, 0x3F);
         e.DUP(Q2.D2(), X0);
-        e.AND(Q1.D2(), shamt.D2(), Q2.D2());
+        e.AND(Q1.B16(), shamt.B16(), Q2.B16());
         e.MOV(X0, 64);
         e.DUP(Q2.D2(), X0);
         e.SUB(Q3.D2(), Q2.D2(), Q1.D2());
         e.MOV(X0, 0x3F);
         e.DUP(Q2.D2(), X0);
-        e.AND(Q3.D2(), Q3.D2(), Q2.D2());
+        e.AND(Q3.B16(), Q3.B16(), Q2.B16());
         e.NEG(Q2.D2(), Q3.D2());
         e.USHL(Q3.D2(), src1.D2(), Q1.D2());
         e.USHL(Q2.D2(), src1.D2(), Q2.D2());
@@ -1711,12 +1711,10 @@ struct SWIZZLE
         e.MOV(i.dest.reg().B16(), src.B16());
       } else if (sel0 == 0 && sel1 == 0) {
         // Dup low 64 to both halves (common)
-        e.MOV(i.dest.reg().D1()[0], src.D1()[0]);
-        e.MOV(i.dest.reg().D1()[1], src.D1()[0]);
+        e.DUP(i.dest.reg().D2(), src.Delem()[0]);
       } else if (sel0 == 1 && sel1 == 1) {
         // Dup high 64 to both halves
-        e.MOV(i.dest.reg().D1()[0], src.D1()[1]);
-        e.MOV(i.dest.reg().D1()[1], src.D1()[1]);
+        e.DUP(i.dest.reg().D2(), src.Delem()[1]);
       } else if (sel0 == 1 && sel1 == 0) {
         // Swap the two 64-bit halves
         e.EXT(i.dest.reg().B16(), src.B16(), src.B16(), 8);

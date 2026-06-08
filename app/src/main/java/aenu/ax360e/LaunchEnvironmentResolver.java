@@ -18,10 +18,12 @@ public class LaunchEnvironmentResolver {
 
     private final Context context;
     private final EngineProfileManager engineProfileManager;
+    private final GameProfileManager profileManager;
 
     public LaunchEnvironmentResolver(Context context) {
         this.context = context;
         this.engineProfileManager = new EngineProfileManager(context);
+        this.profileManager = new GameProfileManager(context);
     }
 
     /**
@@ -34,7 +36,6 @@ public class LaunchEnvironmentResolver {
         Log.i(TAG, "Resolving launch environment for: " + gameUri);
 
         // Get per-game profile
-        GameProfileManager profileManager = new GameProfileManager(context);
         GameProfile profile = profileManager.getProfile(gameUri);
 
         // Detect engine and get engine profile

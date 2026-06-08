@@ -190,6 +190,9 @@
             <Preference app:title="@string/refresh_driver_state"
                 app:key="CustomDrivers|refresh_driver_state"
                 app:summary="@string/refresh_driver_state_summary" />
+            <Preference app:title="Restore Driver from Backup"
+                app:key="CustomDrivers|gpu_driver_restore"
+                app:summary="Revert to the previous driver version" />
         </PreferenceCategory>
         <Preference app:title="@string/es_custom_drivers_load_type"
             app:key="CustomDrivers|load_driver_type"

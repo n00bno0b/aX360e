@@ -220,8 +220,7 @@ public class CoverArtScraper {
     }
 
     private String getSafeFilename(String uri) {
-        // Create a safe filename from the URI
-        return String.valueOf(uri.hashCode());
+        return Integer.toHexString(uri.hashCode()) + "_" + Long.toHexString(System.identityHashCode(uri));
     }
 
     private String cleanGameName(String gameName) {

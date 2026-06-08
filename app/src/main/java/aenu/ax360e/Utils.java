@@ -127,17 +127,30 @@ public class Utils {
             }
 
             String[] filesToExtract = assetManager.list(assertDir);
-            if (filesToExtract!= null) {
+            if (filesToExtract != null) {
                 for (String file : filesToExtract) {
+                    String assetPath = assertDir + "/" + file;
                     File outputFile = new File(outputDir, file);
-                    if(outputFile.exists())continue;
 
-                    try(InputStream in = assetManager.open(assertDir + "/" + file);
-                        FileOutputStream out = new FileOutputStream(outputFile)){
-                        byte[] buffer = new byte[16384];
-                        int read;
-                        while ((read = in.read(buffer))!= -1) {
-                            out.write(buffer, 0, read);
+                    // Try to list children — if it succeeds, it's a subdirectory
+                    String[] children = assetManager.list(assetPath);
+                    if (children != null && children.length > 0) {
+                        // It's a directory — recurse
+                        if (!outputFile.exists()) {
+                            outputFile.mkdirs();
+                        }
+                        extractAssetsDir(context, assetPath, outputFile);
+                    } else {
+                        // It's a file — extract it
+                        if (outputFile.exists()) continue;
+
+                        try (InputStream in = assetManager.open(assetPath);
+                             FileOutputStream out = new FileOutputStream(outputFile)) {
+                            byte[] buffer = new byte[16384];
+                            int read;
+                            while ((read = in.read(buffer)) != -1) {
+                                out.write(buffer, 0, read);
+                            }
                         }
                     }
                 }

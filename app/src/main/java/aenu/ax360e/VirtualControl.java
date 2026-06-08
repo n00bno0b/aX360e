@@ -20,7 +20,6 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -200,6 +199,9 @@ public class VirtualControl extends android.view.SurfaceView implements View.OnT
         }
 
         void setup_bitmap(){
+            if (bitmap != null && !bitmap.isRecycled()) bitmap.recycle();
+            if (pressed_bitmap != null && !pressed_bitmap.isRecycled()) pressed_bitmap.recycle();
+            if (pressed_2_bitmap != null && !pressed_2_bitmap.isRecycled()) pressed_2_bitmap.recycle();
             bitmap=VirtualControl.create_ratio_bitmap(context,res_id,ratio* scale);
             pressed_bitmap=VirtualControl.create_ratio_bitmap(context,pressed_res_id,ratio* scale);
             pressed_2_bitmap=VirtualControl.create_ratio_bitmap(context,pressed_2_res_id,ratio* scale);
@@ -892,7 +894,8 @@ public class VirtualControl extends android.view.SurfaceView implements View.OnT
             component.set_gamepad_event_listener(key_listener);
         }
 
-        new Timer().schedule(new TimerTask() {
+        hide_timer = new Timer();
+        hide_timer.schedule(new TimerTask() {
 
             void task(){
                 if(System.currentTimeMillis()-last_time>5*1000&&show){
@@ -1156,4 +1159,14 @@ public class VirtualControl extends android.view.SurfaceView implements View.OnT
     List<Component> components=new ArrayList<>();
     long last_time=0;
     boolean show;
+    Timer hide_timer;
+
+    @Override
+    protected void onDetachedFromWindow() {
+        if (hide_timer != null) {
+            hide_timer.cancel();
+            hide_timer = null;
+        }
+        super.onDetachedFromWindow();
+    }
 }

@@ -50,5 +50,6 @@ DECLARE_bool(break_on_debugbreak);
 // (FMA/sub/sel, GQR VBO fidelity, psq+lockfree audio/physics+barriers, TLB shootdown,
 // crown psq_l+sub/sel+psq_st+pairing+TLB cases) + 3 new R1-gap counters now exercised.
 DECLARE_bool(a64_accuracy_debug);
+DECLARE_bool(a64_ps_accuracy_stress);
 
 #endif  // XENIA_CPU_CPU_FLAGS_H_

@@ -107,22 +107,29 @@ public class TurnipDriverInfo {
     }
     
     private void parseVersionFromFilename(String filename) {
-        // Common pattern: libvulkan_freedreno.so or turnip_26.0.0.so
-        if (filename.contains("26.0") || filename.contains("26_0")) {
-            mesaVersion = "Mesa 26.0.0";
-        } else if (filename.contains("25.2") || filename.contains("25_2")) {
-            mesaVersion = "Mesa 25.2.0";
-        } else if (filename.contains("25.0") || filename.contains("25_0")) {
-            mesaVersion = "Mesa 25.0.0";
+        java.util.regex.Pattern p = java.util.regex.Pattern.compile("(\\d+)\\.(\\d+)\\.(\\d+)");
+        java.util.regex.Matcher m = p.matcher(filename);
+        if (m.find()) {
+            mesaVersion = "Mesa " + m.group(1) + "." + m.group(2) + "." + m.group(3);
+        } else {
+            p = java.util.regex.Pattern.compile("(\\d+)[_.](\\d+)");
+            m = p.matcher(filename);
+            if (m.find()) {
+                mesaVersion = "Mesa " + m.group(1) + "." + m.group(2) + ".0";
+            }
         }
-        
-        // Try to extract R version (R7, R8, etc.)
-        if (filename.toLowerCase().contains("r8")) {
+
+        String lower = filename.toLowerCase();
+        if (lower.contains("r8") || lower.contains("R8")) {
             mesaVersion += " R8";
-        } else if (filename.toLowerCase().contains("r7")) {
+        } else if (lower.contains("r7") || lower.contains("R7")) {
             mesaVersion += " R7";
-        } else if (filename.toLowerCase().contains("r6")) {
+        } else if (lower.contains("r6") || lower.contains("R6")) {
             mesaVersion += " R6";
+        } else if (lower.contains("r248")) {
+            mesaVersion = "Mesa 26.1.0 R248";
+        } else if (lower.contains("git")) {
+            mesaVersion += " (git)";
         }
     }
     

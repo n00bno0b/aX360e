@@ -1435,9 +1435,7 @@ void Run128BReservationStressTestHarness() {
   XELOGI("  - Real Xenon PPE: 128-byte reservation granule (not 64B) + strict per-thread pairing constraints/errata.");
   XELOGI("  - Normal (non-reserved) stores *must* invalidate any overlapping reservation in the granule.");
   XELOGI("  - False sharing at 128B boundaries is a real production risk (audio + physics lock-free cross-core atomics).");
-  XELOGI("  - See a64_seq_memory.cc:ClearXenonReservationIfStoreOverlaps + recommended test cases.");
-
-  using ax360e::perf::g_cpu_accuracy;
+  // See a64_seq_memory.cc:ClearXenonReservationIfStoreOverlaps + recommended test cases.
 
   // === Simulated Sequence 1: Thread A does lwarx on address X (128B granule base 0) ===
   // In real emitted code: LOAD_RESERVED sets cached_reserve_offset + flags bit + last_reserved_address.
@@ -1492,6 +1490,7 @@ void Run128BReservationStressTestHarness() {
 // No heavy framework. Reuses CpuAccuracyTracker + XELOGI + existing F32 paths.
 // ============================================================================
 void RunPairedSingleAccuracyHarness() {
+  using namespace ppc;
   // Guard (defensive; caller usually checks already).
   if (!cvars::a64_ps_accuracy_stress && !cvars::a64_accuracy_debug) {
     return;
@@ -1526,7 +1525,6 @@ void RunPairedSingleAccuracyHarness() {
   XELOGI("    cross-thread pairing from pairing work). Heavy citations to own prior (three + their seqs + harness),");
   XELOGI("    recent ps_subx/ps_sel landing, GQR, R1, 128B/pairing throughout (emitters + this harness).");
 
-  using ax360e::perf::g_cpu_accuracy;
 
   // === Simulated Sequence 1: ps_madd on known values (highest priority FMA path) ===
   // Real emitted: ps_maddx psD, psA, psC, psB  ->  psD.ps0 = (psA.ps0 * psC.ps0) + psB.ps0 ; same for .ps1
@@ -1794,7 +1792,6 @@ void RunPairedSingleAccuracyHarness() {
   XELOGI("    R1 55-tool ps_* report (psq_l highest-impact quantized loads for vertex/skin/anim/physics; GQR LD scale/type critical; explicit prereq),");
   XELOGI("    master plan (ppc_emit_fpu.cc:100 'Phase 2: psq_l / psq_st ... + full GQR quantization', :125),");
   XELOGI("    ax360e_perf_log.h:471 RecordPsqLQuantizedLoadRoundtrip + 479 RecordPsqGQRCase + 423 QLoadStore + 682 snapshot psq_l_roundtrips + harness a64_backend integration.");
-  using ax360e::perf::g_cpu_accuracy;
 
   // Case 1: D-form style, GQR s16 LD_TYPE=7 scale=-4, realistic loaded raw (from mem s16)
   {
@@ -1863,7 +1860,6 @@ void RunPairedSingleAccuracyHarness() {
   // R1 ps research report (single-prec per-element NaN/denorm/FMA fidelity on Xenon PPE).
   // ==========================================================================
   XELOGI("  === RE-TASK DEDICATED PS_* DEBUG SEQUENCES (new fma_executed/nan/denorm counters) ===");
-  using ax360e::perf::g_cpu_accuracy;
 
   // Simulated ps_maddx / ps_msubx FMA execution path (ps_* specific, distinguishes execution count).
   // In real: ps_maddx lowers to MUL_ADD_F32 which can also call under debug (see sequences).
@@ -1941,9 +1937,9 @@ void RunPairedSingleAccuracyHarness() {
   g_cpu_accuracy.RecordPsSubSelArith(2);
 
   // ps_sel known (conditional per-element select, high value for morph/anim conditionals per R1).
-  float sel_r0 = (0.5f >= 0.0f ? 7.0f : 1.0f);  // 7.0
-  float sel_r1 = (-0.1f >= 0.0f ? 3.0f : 9.0f); // 9.0
-  XELOGI("      ps_sel known: ps0=%.6f (expect 7.0), ps1=%.6f (expect 9.0) [live emitter]", sel_r0, sel_r1);
+  float live_sel_r0 = (0.5f >= 0.0f ? 7.0f : 1.0f);  // 7.0
+  float live_sel_r1 = (-0.1f >= 0.0f ? 3.0f : 9.0f); // 9.0
+  XELOGI("      ps_sel known: ps0=%.6f (expect 7.0), ps1=%.6f (expect 9.0) [live emitter]", live_sel_r0, live_sel_r1);
   g_cpu_accuracy.RecordPairedSingleArith(2);
   g_cpu_accuracy.RecordPsSubSelArith(2);
 
@@ -1985,7 +1981,6 @@ void RunPairedSingleAccuracyHarness() {
   XELOGI("  === BARRIER+RES+PSQ_ST CROSS-GRANULE SEQUENCES (lwsync + CAS + __lwsync + psq_st 128B) ===");
   XELOGI("  Citations (barriers research + R1 ps): lwsync dominant in audio/physics/lockfree; CAS+__lwsync most common 360 pattern (see seq_memory 128B recs); psq_st crossing granule MUST clear res like any store.");
 
-  using ax360e::perf::g_cpu_accuracy;
 
   // Simulated CAS + __lwsync (LIGHT_SYNC) pattern (common real-title lockfree).
   // In guest: lwarx (establish res); compute; __lwsync (LIGHT_SYNC barrier emit);
@@ -2064,7 +2059,6 @@ void RunPairedSingleAccuracyHarness() {
   // ============================================================================
   XELOGI("  === TLB-AWARE DEBUG SEQUENCES (R2 TLB/ERAT integration into ps_* + 128B harness) ===");
   XELOGI("  Citations (R2 TLB report owner + 128B pairing + R1 ps harness): Xenon ERAT realities + hashed PT low title impact (flat+HLE model); TLB ops HV-managed (tlbie etc NOP-safe); big.LITTLE Adreno thread migration causes real TLB shootdowns + res monitor loss (ties PE-local errata in 128B work); psq_st/FPU stores as hot paths that can coincide with TLB inval (protection/AV risk surfaced via ESR polish); 128B granule false-share + per-thread pairing now validated with TLB context.");
-  using ax360e::perf::g_cpu_accuracy;
 
   // === Targeted Sequence 1: TLB invalidation/shootdown + reservation migration on big.LITTLE ===
   // Sim: guest does tlbie/tlbivax (or slbie) around active lwarx res in 128B granule;
@@ -2138,7 +2132,6 @@ void RunPairedSingleAccuracyHarness() {
   XELOGI("      a64_seq_memory.cc (STORE_F32 Clear + 128B pairing probe), psq_st skeletons (ppc_emit_memory),");
   XELOGI("      128B pairing report (XenonReservesOverlapAcrossThreads + counters), barriers research (lwsync dominant).");
 
-  using ax360e::perf::g_cpu_accuracy;
 
   // --- Sub-block 1: Specific ps_madd patterns from UE3/Forza/Halo vertex/skinning/physics ---
   // Realistic floats: world positions in ~[-2048,2048] range, small weights/deltas, bone contribs.
@@ -2306,7 +2299,6 @@ void RunPairedSingleAccuracyHarness() {
   XELOGI("      barriers research, 128B pairing report (XenonReservesOverlapAcrossThreads + last_* + counters), ax360e_perf_log.h.");
   XELOGI("    - New counters from R1 report gaps now exercised here for definitive validation.");
 
-  using ax360e::perf::g_cpu_accuracy;
 
   // --- Richer Sub-block A: More specific FMA + sub + sel patterns from UE3/Forza/Halo (physics/vertex/skin/anim) ---
   // Extends prior ps_madd with ps_sub (delta/velocity correction common in R1) + ps_sel (bone weight conditional,
@@ -2320,9 +2312,9 @@ void RunPairedSingleAccuracyHarness() {
   g_cpu_accuracy.RecordPairedSingleArith(2);
 
   // Anim morph target conditional sel (psA >=0 ? targetC : targetB) per-element for blend vs fallback pose
-  float sel_a0 = 0.4f, sel_c0 = 7.25f, sel_b0 = 1.1f; float sel_r0 = (sel_a0 >= 0.0f ? sel_c0 : sel_b0);
-  float sel_a1 = -0.1f, sel_c1 = -2.8f, sel_b1 = 9.3f; float sel_r1 = (sel_a1 >= 0.0f ? sel_c1 : sel_b1);
-  XELOGI("      anim_sel_morph: ps0=%.4f, ps1=%.4f (conditional select per-elem; UE3/Forza anim per R1)", sel_r0, sel_r1);
+  float anim_a0 = 0.4f, anim_c0 = 7.25f, anim_b0 = 1.1f; float anim_res0 = (anim_a0 >= 0.0f ? anim_c0 : anim_b0);
+  float anim_a1 = -0.1f, anim_c1 = -2.8f, anim_b1 = 9.3f; float anim_res1 = (anim_a1 >= 0.0f ? anim_c1 : anim_b1);
+  XELOGI("      anim_sel_morph: ps0=%.4f, ps1=%.4f (conditional select per-elem; UE3/Forza anim per R1)", anim_res0, anim_res1);
   g_cpu_accuracy.RecordPsSubSelArith(2);
 
   // Vertex skin combined madd + sub (weight*bone + offset sub correction common in R1 title skin kernels)
@@ -2429,6 +2421,11 @@ void RunPairedSingleAccuracyHarness() {
   g_cpu_accuracy.RecordBarrierLightSync();  // post-psq_st lwsync (physics release)
   XELOGI("        psq_st GQR + lwsync barrier: qst0=%d (quantized store as normal per R1)", (int)qst0);
 
+  // 128B granule cross + pairing enforcement (lwarx sibling thread sim)
+  uint64_t fs_base = 0x00006000;
+  uint64_t psq_st_fs = fs_base + 0x40;
+  bool fs_overlap_val = XenonReserveGranulesOverlap(fs_base, psq_st_fs);
+
   // DEEPENED LIGHTER LWSYNC OPT-IN VALIDATION CASE (this re-task): explicit integration
   // with pairing/128B enforcement (via harness primitives) + richer observability.
   // Exercises the new a64_light_sync_fidelity variants (0/1/2) under experiment cvar
@@ -2444,22 +2441,18 @@ void RunPairedSingleAccuracyHarness() {
     int lwsync_fid = cvars::a64_light_sync_fidelity;
     XELOGI("        LIGHTER LWSYNC VARIANT VALIDATION (fidelity=%d): under experiment, confirm psq_st+sub/sel physics update + CAS lwsync + 128B granule still enforces inval/pairing correctly (per barriers research weakest-sufficient)", lwsync_fid);
     // Re-exercise the 128B/pairing path under the variant context (harness ref to enforcement).
-    if (fs_overlap) {  // reuse prior overlap calc
+    if (fs_overlap_val) {  // reuse prior overlap calc
       g_cpu_accuracy.RecordBarrierLightSync();  // variant emission simulated in this validation
       g_cpu_accuracy.RecordPsqReservationPairingTest(true);
     }
   }
 
-  // 128B granule cross + pairing enforcement (lwarx sibling thread sim)
-  uint64_t fs_base = 0x00006000;
-  uint64_t psq_st_fs = fs_base + 0x40;
-  bool fs_overlap = XenonReserveGranulesOverlap(fs_base, psq_st_fs);
-  if (fs_overlap) {
+  if (fs_overlap_val) {
     g_cpu_accuracy.RecordPsqStReservationInvalidation();
     g_cpu_accuracy.RecordPsqReservationPairingTest(true);
     g_cpu_accuracy.RecordPsqStoreReservationPairingViolation();
   }
-  XELOGI("        128B pairing (psq_st cross res granule): overlap=%d (Clear + probe exercised per 128B+R1)", fs_overlap?1:0);
+  XELOGI("        128B pairing (psq_st cross res granule): overlap=%d (Clear + probe exercised per 128B+R1)", fs_overlap_val?1:0);
 
   // TLB shootdown concurrent (big.LITTLE migration during the psq+barrier physics update)
   g_cpu_accuracy.RecordTlbOpIgnored();  // tlbie/tlbsync in migration window
@@ -2496,13 +2489,12 @@ void RunPairedSingleAccuracyHarness() {
   XELOGI("      128B psq_st res invalidation (R1 explicit warning) + cross-thread pairing violation (SMT errata from pairing work).");
   XELOGI("    - Wires emitter Record sites (ps_arith + ps_sub_sel + ps_fma_executed) + harness counters + snapshot.");
 
-  using ax360e::perf::g_cpu_accuracy;
 
   // Combined 1: FMA + sub/sel arith on GQR-dequant VBO data (roundtrip fidelity) + psq_st write.
   uint32_t gqr_comb = 0x0007C003u;  // s16 scale ~3 common for pos
   int16_t vbo0=1024, vbo1=-512; float d0 = GQRDequantizeFromGQR(gqr_comb, vbo0, false); float d1 = GQRDequantizeFromGQR(gqr_comb, vbo1, false);
-  float fma_c = (d0 * 1.1f) + 0.2f; float sub_r = fma_c - 0.05f; float sel_r = (sub_r > 0 ? sub_r * 0.9f : 0.1f);
-  XELOGI("    combined[FMA+sub+sel+GQR]: deq(%.4f,%.4f) -> fma=%.4f sub=%.4f sel=%.4f (ps arith family + GQR rt)", d0,d1, fma_c, sub_r, sel_r);
+  float fma_c_v3 = (d0 * 1.1f) + 0.2f; float sub_r_v3 = fma_c_v3 - 0.05f; float sel_r_v3 = (sub_r_v3 > 0 ? sub_r_v3 * 0.9f : 0.1f);
+  XELOGI("    combined[FMA+sub+sel+GQR]: deq(%.4f,%.4f) -> fma=%.4f sub=%.4f sel=%.4f (ps arith family + GQR rt)", d0,d1, fma_c_v3, sub_r_v3, sel_r_v3);
   g_cpu_accuracy.RecordPsFmaExecuted(1);
   g_cpu_accuracy.RecordPairedSingleArith(2);
   g_cpu_accuracy.RecordPsSubSelArith(2);
@@ -2510,17 +2502,17 @@ void RunPairedSingleAccuracyHarness() {
   g_cpu_accuracy.RecordPsqLQuantizedLoadRoundtrip(1);
 
   // psq_st GQR quant roundtrip write of result (as normal store).
-  int32_t q_comb = GQRQuantize(sel_r, GQRGetScale(gqr_comb, true), true, 16);
+  int32_t q_comb = GQRQuantize(sel_r_v3, GQRGetScale(gqr_comb, true), true, 16);
   g_cpu_accuracy.RecordPsqSQuantizedStoreRoundtrip(1);
   g_cpu_accuracy.RecordPsqStExecuted(1);
   g_cpu_accuracy.RecordPsqStGqrCase();
   XELOGI("    psq_st GQR quant write of combined result: q=%d (roundtrip + GQR exercised)", q_comb);
 
   // 128B psq_st reservation invalidation (R1 warning exercised).
-  uint64_t res_gran = 0x00008000;
-  uint64_t psq_st_comb = res_gran + 0x30;  // overlaps
-  bool inv = XenonReserveGranulesOverlap(res_gran, psq_st_comb);
-  if (inv) {
+  uint64_t res_gran_v3 = 0x00008000;
+  uint64_t psq_st_comb_v3 = res_gran_v3 + 0x30;  // overlaps
+  bool inv_v3 = XenonReserveGranulesOverlap(res_gran_v3, psq_st_comb_v3);
+  if (inv_v3) {
     g_cpu_accuracy.RecordPsqStReservationInvalidation();
     g_cpu_accuracy.RecordPairedSingleQLoadStore(1);
     XELOGI("    128B psq_st inv: overlap detected (ClearXenon must fire per R1 + 128B work)");
@@ -2528,14 +2520,14 @@ void RunPairedSingleAccuracyHarness() {
 
   // Cross-thread pairing violation case (from 119-tool pairing enforcement + 128B).
   // lwarx threadA ; psq_st threadB overlapping 128B granule (psq_st as normal store).
-  uintptr_t ctxA = 0xA000ULL, ctxB = 0xB000ULL;
-  uint64_t granA = res_gran & XENON_RESERVE_GRANULE_MASK;
-  bool cross_pair = XenonReservesOverlapAcrossThreads(granA, ctxA, psq_st_comb & XENON_RESERVE_GRANULE_MASK, ctxB);
-  if (cross_pair || inv) {
+  uintptr_t ctxA_v3 = 0xA000ULL, ctxB_v3 = 0xB000ULL;
+  uint64_t granA_v3 = res_gran_v3 & XENON_RESERVE_GRANULE_MASK;
+  bool cross_pair_v3 = XenonReservesOverlapAcrossThreads(granA_v3, ctxA_v3, psq_st_comb_v3 & XENON_RESERVE_GRANULE_MASK, ctxB_v3);
+  if (cross_pair_v3 || inv_v3) {
     g_cpu_accuracy.RecordPsqReservationPairingTest(true);
     g_cpu_accuracy.RecordPsqStoreReservationPairingViolation();
     g_cpu_accuracy.RecordPsqStReservationInvalidation();
-    XELOGI("    cross-thread pairing viol (psq_st B on lwarx A 128B): XenonReservesOverlapAcrossThreads=%d (pairing enforcement + counters)", cross_pair?1:0);
+    XELOGI("    cross-thread pairing viol (psq_st B on lwarx A 128B): XenonReservesOverlapAcrossThreads=%d (pairing enforcement + counters)", cross_pair_v3?1:0);
   }
 
   XELOGI("  === END RICHER COMBINED SEQUENCES (FMA+new sub/sel arith + GQR rt + psq + 128B psq_st inv + cross-thread pairing; citations to emitters+seqs+landing+GQR+R1+128B/pairing+harness complete) ===");
@@ -2577,7 +2569,6 @@ void RunPairedSingleAccuracyHarness() {
   // ============================================================================
   XELOGI("  === PSQ_ST PRODUCTION FULL-STACK RICHER VALIDATION (emitters now prod: GQR+types/edges/W/I/HIR + complete stack GQR+128B+pair+bar+TLB) ===");
   XELOGI("  Citations (above + R1 author): UE3/Forza/Halo patterns (quantized vertex/skin/anim/physics + 128B false-share lockfree); post psq_st GQR production (ppc_emit_memory); 128B/pairing/barriers/TLB recent; GQR foundation.");
-  using ax360e::perf::g_cpu_accuracy;
 
   // Case 1: UE3/Forza vertex s16 scale4 W=0 psq_st + 128B overlap (Clear + psq_st counters).
   uint32_t gqr_vtx = (7u<<0)|(4u<<3); int scv = GQRGetScale(gqr_vtx,true); int bv; bool sgv; GQRTypeToWidthSign(7,&bv,&sgv);
@@ -2646,7 +2637,6 @@ void ExercisePsqStoreReservationPairingViolationSequence() {
   // Directly ensure the new psq-specific pairing violation counters fire for this memory-side call
   // (covers the case where psq_st quantized store hits ClearXenon cross-thread probe).
   // THIS TASK: also fire the new psq_st dedicated GQR/execution/res-inv counters.
-  using ax360e::perf::g_cpu_accuracy;
   g_cpu_accuracy.RecordPsqReservationPairingTest(true);
   g_cpu_accuracy.RecordPsqStoreReservationPairingViolation();
   g_cpu_accuracy.RecordPsqStExecuted(1);
@@ -2674,7 +2664,6 @@ void ExercisePsqLoadReservationPairingSequence() {
   }
   XELOGI("A64 psq_load_reservation_pairing: Exercise helper invoked from supporting path (seq_memory / psq_l load emission).");
   RunPairedSingleAccuracyHarness();
-  using ax360e::perf::g_cpu_accuracy;
   g_cpu_accuracy.RecordPsqLReservationPairingTest(true);
   g_cpu_accuracy.RecordPsqLExecuted(1);
   g_cpu_accuracy.RecordPairedSingleQLoadStore(1);
@@ -2687,7 +2676,6 @@ void ExercisePsqLoadReservationPairingSequence() {
   // Fire load-side specific counters (lwarx A + psq_l B cross tests exercise EA/res
   // tracking on load paths; loads do not invalidate res but validate granule math +
   // no false violation on pure loads).
-  using ax360e::perf::g_cpu_accuracy;
   g_cpu_accuracy.RecordPsqLExecuted(1);
   g_cpu_accuracy.RecordPsqLReservationPairingTest(true);  // cross load case (EA/res tracking)
   XELOGI("psq_load_reservation_pairing sequence exercised via helper (128B pairing enforcement + psq_l skeleton EA + R1 ps_* integration; load side symmetric to psq_st store).");

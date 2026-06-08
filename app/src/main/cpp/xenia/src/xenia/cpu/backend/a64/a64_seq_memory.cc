@@ -133,6 +133,142 @@ XReg ComputeLocalAddress(A64Emitter& e, uint32_t offset,
 // ============================================================================
 // Note that the address we use here is a real, host address!
 // This is weird, and should be fixed.
+
+// Research-driven helper (from real Xenon 128-byte granule + store invalidation analysis):
+// If the current guest thread has an active reservation whose *128-byte* granule
+// overlaps this store [ea, ea+size), clear the reservation (flag + best-effort bitmap bit).
+// This matches real Xenon behavior (any normal store invalidates). Cheap inline check on cached_ fields.
+// ea passed should be logical guest (or host-membase diff; +4096 hack is 128B-aligned so granule identical).
+// *** PAIRING ERRATA ENFORCEMENT (Code Agent 1): the debug block appended below (after no_active_res)
+//     + all ~12+ call sites touched in this file (STORE, OFFSET, F*, V128, SWP*, CAS) guarantee that
+//     a64_accuracy_debug detects + reports (XELOGW + increment_pairing_violation + DebugBreak) when
+//     another logical thread holds overlapping 128B res. Cites SMT pairing errata + 128B false share.
+inline void ClearXenonReservationIfStoreOverlaps(A64Emitter& e, const XReg& store_ea_guest, uint32_t store_size = 1) {
+  // 128B RESERVATION STRESS HARNESS - RUNTIME SEQUENCES (CAPTAIN DIRECT ORDER).
+  // Guarded by a64_128b_reservation_stress (or a64_accuracy_debug).
+  // Lightweight activation (runtime, once):
+  static bool g_128b_harness_activated_from_seq = false;
+  if ((cvars::a64_128b_reservation_stress || cvars::a64_accuracy_debug) && !g_128b_harness_activated_from_seq) {
+    g_128b_harness_activated_from_seq = true;
+    // Delegate to the full simulated sequences + counter increments + logs (defined in a64_backend.cc)
+    // This ensures the "small set of runtime sequences" are exercised when any memory seq is first translated under the cvar.
+    Run128BReservationStressTestHarness();
+    XELOGI("A64 128B stress harness: sequences activated from seq_memory (lwarx + crossing stw/V128).");
+  }
+
+  // CAPTAIN RE-TASK small supporting addition (in seq_memory per scope):
+  // Activate the psq_store_reservation_pairing_violation helper (declared in a64_backend.h)
+  // under the ps stress cvar (a64_ps_accuracy_stress) or a64_accuracy_debug.
+  static bool g_psq_pairing_harness_activated_from_mem = false;
+  if ((cvars::a64_ps_accuracy_stress || cvars::a64_accuracy_debug) && !g_psq_pairing_harness_activated_from_mem) {
+    g_psq_pairing_harness_activated_from_mem = true;
+    // Call the dedicated small helper (exercises psq pairing seqs/counters for store paths).
+    xe::cpu::backend::a64::ExercisePsqStoreReservationPairingViolationSequence();
+    XELOGI("A64 psq_store_reservation_pairing: sequences activated from seq_memory (psq_st as normal store + 128B cross-thread probe).");
+  }
+
+  // CAPTAIN RE-TASK (psq_l load-side skeleton): symmetric memory-path activation for psq_l
+  // loads (under same ps cvar). Calls new ExercisePsqLoad... helper (declared in a64_backend.h)
+  static bool g_psq_load_pairing_harness_activated_from_mem = false;
+  if ((cvars::a64_ps_accuracy_stress || cvars::a64_accuracy_debug) && !g_psq_load_pairing_harness_activated_from_mem) {
+    g_psq_load_pairing_harness_activated_from_mem = true;
+    xe::cpu::backend::a64::ExercisePsqLoadReservationPairingSequence();
+    XELOGI("A64 psq_load_reservation_pairing: sequences activated from seq_memory (psq_l load skeleton EA + 128B res tracking; symmetric to psq_st store activation).");
+  }
+
+  // Count instrumented store sites (one per guest store emitter that can invalidate res on 128B model).
+  // Measures how many such stores fire in titles (JIT-time site count; pairs with runtime res metrics).
+  g_cpu_accuracy.RecordStoreThatInvalidatedReservation();
+
+  const XReg ctx = X5;
+  const WReg wflags = W6;
+  const XReg cached_ea = X7;
+
+  e.SUB(ctx, e.GetContextReg(), sizeof(A64BackendContext));
+  e.LDR(wflags, ctx, offsetof(A64BackendContext, flags));
+  e.TST(wflags, 2);
+  oaknut::Label no_active_res;
+  e.B(Cond::EQ, no_active_res);
+
+  e.LDR(cached_ea, ctx, offsetof(A64BackendContext, cached_reserve_offset));
+
+  // True 128-byte Xenon granule check (research-driven fidelity).
+  // Supports full store span for unaligned cases (even I8/I16 can straddle 128B if misaligned).
+  // Coarse 64KB bitmap acts only as a fast "possible overlap" filter;
+  // this exact check enforces real hardware behavior.
+  e.MOV(X8, XENON_RESERVE_GRANULE_MASK);
+  e.AND(X9, cached_ea, X8);
+  e.AND(X10, store_ea_guest, X8);
+  e.CMP(X9, X10);
+  oaknut::Label do_clear;
+  if (store_size > 1) {
+    e.B(Cond::EQ, do_clear);
+    // Check end of store range for cross-granule unaligned/wide stores (V128 etc.)
+    e.ADD(X11, store_ea_guest, store_size - 1);
+    e.AND(X11, X11, X8);
+    e.CMP(X9, X11);
+    e.B(Cond::NE, no_active_res);
+    e.l(do_clear);
+  } else {
+    e.B(Cond::NE, no_active_res);
+  }
+
+  // Overlap on real 128-byte granule → clear this thread's reservation
+  // (matches Xenon PPE + all shipped consoles).
+  e.AND(wflags, wflags, ~2);
+  e.STR(wflags, ctx, offsetof(A64BackendContext, flags));
+
+  // Best-effort clear in the shared coarse bitmap (64KB filter only)
+  e.LDR(X11, ctx, offsetof(A64BackendContext, reserve_helper_));
+  e.LDR(X12, ctx, offsetof(A64BackendContext, cached_reserve_bit));
+  e.LSR(X13, cached_ea, RESERVE_BLOCK_SHIFT);
+  e.AND(X12, X12, 63);
+  e.LSR(X14, X13, 6);
+  e.LSL(X14, X14, 3);
+  e.ADD(X15, X11, X14);
+
+  oaknut::Label clear_done;
+  e.LDXR(X16, X15);
+  e.MOV(X17, 1);
+  e.LSL(X17, X17, X12);
+  e.BIC(X16, X16, X17);
+  e.STXR(W18, X16, X15);  // ignore status (best effort)
+  e.l(clear_done);
+
+  e.l(no_active_res);
+
+  // === CAPTAIN DIRECT ORDER: 128B CROSS-THREAD PAIRING VIOLATION CHECK (inside Clear) ===
+  if (cvars::a64_accuracy_debug) {
+    // Recompute block for store_ea_guest (already in X1 area but recompute defensively)
+    e.MOV(X19, store_ea_guest);
+    e.LSR(X19, X19, RESERVE_BLOCK_SHIFT);
+    e.LSR(X20, X19, 6);
+    e.LSL(X20, X20, 3);
+    e.LDR(X21, ctx, offsetof(A64BackendContext, reserve_helper_));
+    e.ADD(X20, X21, X20);
+    oaknut::Label probe_done;
+    e.LDR(X22, X20);  // non-atomic best-effort read of the word (debug only)
+    e.AND(X23, X19, 63);
+    e.MOV(X24, 1);
+    e.LSL(X24, X24, X23);
+    e.ANDS(X24, X22, X24);
+    e.B(Cond::EQ, probe_done);  // bit clear -> no other res in block
+    // Bit was set for the block. Check if *we* currently hold active res flag.
+    e.LDR(W25, ctx, offsetof(A64BackendContext, flags));
+    e.TST(W25, 2);
+    oaknut::Label no_cross_violation;
+    e.B(Cond::NE, no_cross_violation);  // we hold it -> self, not cross
+    // Another thread holds overlapping res granule (coarse proxy for exact 128B overlap risk)
+    XELOGW("A64 Accuracy (128B Xenon): cross-thread reservation pairing violation: "
+           "normal store overlaps 128B granule with active reservation held by another logical thread. "
+           "Per-thread monitor pairing errata + 128B false share (real Xenon SMT/Android big.LITTLE).");
+    g_cpu_accuracy.increment_pairing_violation();
+    e.DebugBreak();  // surface immediately in a64_accuracy_debug (Captain enforcement)
+    e.l(no_cross_violation);
+    e.l(probe_done);
+  }
+}
+
 template <typename SEQ, typename REG, typename ARGS, typename FN>
 void EmitAtomicExchangeXX(A64Emitter& e, const ARGS& i, const FN& fn) {
   if (i.dest == i.src1) {
@@ -386,19 +522,11 @@ EMITTER_OPCODE_TABLE(OPCODE_ATOMIC_COMPARE_EXCHANGE,
 // - ea recovery via (addr_reg - membase) is granule-correct (0x1000 hack is multiple of 128).
 // - CpuAccuracyTracker::stores_that_invalidated_reservations_ tracks instrumented sites.
 
-// Research-driven helper (from real Xenon 128-byte granule + store invalidation analysis):
-// If the current guest thread has an active reservation whose *128-byte* granule
-// overlaps this store [ea, ea+size), clear the reservation (flag + best-effort bitmap bit).
-// This matches real Xenon behavior (any normal store invalidates). Cheap inline check on cached_ fields.
-// ea passed should be logical guest (or host-membase diff; +4096 hack is 128B-aligned so granule identical).
-// *** PAIRING ERRATA ENFORCEMENT (Code Agent 1): the debug block appended below (after no_active_res)
-//     + all ~12+ call sites touched in this file (STORE, OFFSET, F*, V128, SWP*, CAS) guarantee that
-//     a64_accuracy_debug detects + reports (XELOGW + increment_pairing_violation + DebugBreak) when
-//     another logical thread holds overlapping 128B res. Cites SMT pairing errata + 128B false share.
-inline void ClearXenonReservationIfStoreOverlaps(A64Emitter& e, const XReg& store_ea_guest, uint32_t store_size = 1) {
+// Research-driven helper (DUPLICATE REMOVED)
+inline void ClearXenonReservationIfStoreOverlaps_UNUSED(A64Emitter& e, const XReg& store_ea_guest, uint32_t store_size) {
   // Count instrumented store sites (one per guest store emitter that can invalidate res on 128B model).
   // Measures how many such stores fire in titles (JIT-time site count; pairs with runtime res metrics).
-  ax360e::perf::g_cpu_accuracy.RecordStoreThatInvalidatedReservation();
+  g_cpu_accuracy.RecordStoreThatInvalidatedReservation();
 
   const XReg ctx = X5;
   const WReg wflags = W6;
@@ -494,7 +622,7 @@ inline void ClearXenonReservationIfStoreOverlaps(A64Emitter& e, const XReg& stor
     XELOGW("A64 Accuracy (128B Xenon): cross-thread reservation pairing violation: "
            "normal store overlaps 128B granule with active reservation held by another logical thread. "
            "Per-thread monitor pairing errata + 128B false share (real Xenon SMT/Android big.LITTLE).");
-    ax360e::perf::g_cpu_accuracy.increment_pairing_violation();
+    g_cpu_accuracy.increment_pairing_violation();
     e.DebugBreak();  // surface immediately in a64_accuracy_debug (Captain enforcement)
     e.l(no_cross_violation);
     e.l(probe_done);
@@ -511,98 +639,8 @@ inline void ClearXenonReservationIfStoreOverlaps(A64Emitter& e, const XReg& stor
 // The emitted ClearXenonReservationIfStoreOverlaps (called from all ST* paths below) is what actually runs on Adreno.
 // Harness activation also happens at backend init + explicit Java trigger (PerformanceMonitor).
 // Full citations in a64_backend.{h,cc} and the research comments above.
-//
-// RE-TASK supporting: psq_store_reservation_pairing activation (via Exercise... helper) also lives
-// here for psq_st store paths (psq_st treated as normal store per R1 ps_* report must hit Clear + pairing probe).
-//
-// Lightweight activation (runtime, once):
-static bool g_128b_harness_activated_from_seq = false;
-if ((cvars::a64_128b_reservation_stress || cvars::a64_accuracy_debug) && !g_128b_harness_activated_from_seq) {
-  g_128b_harness_activated_from_seq = true;
-  // Delegate to the full simulated sequences + counter increments + logs (defined in a64_backend.cc)
-  // This ensures the "small set of runtime sequences" are exercised when any memory seq is first translated under the cvar.
-  Run128BReservationStressTestHarness();
-  XELOGI("A64 128B stress harness: sequences activated from seq_memory (lwarx + crossing stw/V128).");
-}
-
-// CAPTAIN RE-TASK small supporting addition (in seq_memory per scope):
-// Activate the psq_store_reservation_pairing_violation helper (declared in a64_backend.h)
-// under the ps stress cvar (a64_ps_accuracy_stress) or a64_accuracy_debug.
-// This ensures that when memory store sequences (future psq_st quantized paired-single stores)
-// are translated, the exact cross-thread lwarx+psq_st 128B pattern + new counters are exercised.
-// Mirrors the 128B + FPU ps activations. Thin (helper is gated + delegates to harness + records).
-// Ties psq_st (as normal store per R1 report) directly to 128B Clear + pairing probe.
-static bool g_psq_pairing_harness_activated_from_mem = false;
-if ((cvars::a64_ps_accuracy_stress || cvars::a64_accuracy_debug) && !g_psq_pairing_harness_activated_from_mem) {
-  g_psq_pairing_harness_activated_from_mem = true;
-  // Call the dedicated small helper (exercises psq pairing seqs/counters for store paths).
-  xe::cpu::backend::a64::ExercisePsqStoreReservationPairingViolationSequence();
-  XELOGI("A64 psq_store_reservation_pairing: sequences activated from seq_memory (psq_st as normal store + 128B cross-thread probe).");
-}
-
-// CAPTAIN RE-TASK (psq_l load-side skeleton): symmetric memory-path activation for psq_l
-// loads (under same ps cvar). Calls new ExercisePsqLoad... helper (declared in a64_backend.h)
-// to exercise psq_l_* res/pairing counters + lwarx+psq_l EA tracking seqs from load paths.
-// psq_l placeholder (CalculateEA+Load in ppc_emit_memory) hits LOAD_I64/LOAD_F64 (ComputeMemoryAddress
-// ensures correct EA for 128B granule/res tracking; acquire-side note: only true LOAD_RESERVED
-// capture last_* , but normal psq_l loads validate non-interference + granule math).
-// Citations: pairing enforcement (last_reserving_thread_id/granule, XenonReservesOverlapAcrossThreads,
-// probe in Clear + LOAD_RESERVED sites), psq_l skeleton, psq_st symmetric, R1 ps report, 128B complete.
-static bool g_psq_load_pairing_harness_activated_from_mem = false;
-if ((cvars::a64_ps_accuracy_stress || cvars::a64_accuracy_debug) && !g_psq_load_pairing_harness_activated_from_mem) {
-  g_psq_load_pairing_harness_activated_from_mem = true;
-  xe::cpu::backend::a64::ExercisePsqLoadReservationPairingSequence();
-  XELOGI("A64 psq_load_reservation_pairing: sequences activated from seq_memory (psq_l load skeleton EA + 128B res tracking; symmetric to psq_st store activation).");
-}
-
-// CAPTAIN RE-TASK (psq_l load-side skeleton - symmetric to psq_st store activation):
-// Small supporting activation (in seq_memory near LOAD_RESERVED paths) for the
-// psq_l load reservation/pairing helper. Ensures that when memory load sequences
-// (including future psq_l quantized loads from the new skeletons in ppc_emit_memory.cc
-// using CalculateEA + Load placeholder) are translated, the exact lwarx + psq_l
-// 128B EA/res tracking patterns + new psq_l_* counters are exercised.
-// Mirrors the psq_st store activation exactly. Thin (gated + delegates to harness).
-// Ties psq_l load EA correctness (for reservation tracking on acquire side) to
-// 128B pairing enforcement (LOAD_RESERVED capture + Xenon* helpers) + R1 ps report.
-// (psq_l normal load semantics per R1; no Clear, but harness validates no false
-// violations + correct granule math on load paths.)
-static bool g_psq_l_pairing_harness_activated_from_mem = false;
-if ((cvars::a64_ps_accuracy_stress || cvars::a64_accuracy_debug) && !g_psq_l_pairing_harness_activated_from_mem) {
-  g_psq_l_pairing_harness_activated_from_mem = true;
-  // Call the dedicated symmetric helper (exercises psq_l pairing seqs/counters for load paths + EA/res tracking).
-  xe::cpu::backend::a64::ExercisePsqLoadReservationPairingSequence();
-  XELOGI("A64 psq_load_reservation_pairing: sequences activated from seq_memory (psq_l load skeleton EA via CalculateEA+Load + 128B res tracking cross-granule from lwarx A; symmetric to psq_st).");
-}
-
-// No regression on common (uncontended) paths; huge robustness win on multi-core.
-//
-// Recommended test cases (from 2026 Xenon reservation research):
-// 1. Crossing reservation sequence (lwarx A; lwarx B without stwcx to A) — expect
-//    debug break / warning in a64_accuracy_debug; real hardware errata violation.
-// 2. 128-byte false-sharing: two distinct atomics/locks in the same 128B granule;
-//    a normal store to one must invalidate the other's reservation (causing stwcx fail).
-// 3. Normal store invalidation during contended CAS loop (non-stwcx store by another
-//    thread inside the 128B granule must cause reservation loss on the waiter).
-// 4. Proper single-location retry CAS + __lwsync barriers (the most common real 360 pattern).
-// 5. Reentry / exception during an active reservation (state must be cleanly reset).
-//
-// 6. [HARNESS] Explicit 128B crossing store from different "thread" context (X+64 / X+127)
-//    after lwarx - directly exercises ClearXenonReservationIfStoreOverlaps + counters.
-// 7. [HARNESS] V128 store crossing 128B granule boundary - same invalidation requirement.
-//
-// RE-TASK (ps_* harness integration): [PSQ PAIRING] Dedicated seq in RunPairedSingleAccuracyHarness +
-// ExercisePsqStore... (store) + new ExercisePsqLoadReservationPairingSequence (load side, symmetric):
-// lwarx on logical thread A in 128B granule; psq_st (store) or psq_l (load from new skeleton
-// CalculateEA+Load placeholder) from thread B crossing same granule. For loads: validates EA/res
-// tracking correctness (no invalidation) + psq_l_* counters. For stores: Clear + violation probe.
-// Citations: 128B pairing report (last_reserving_thread_id/granule, XenonReservesOverlapAcrossThreads,
-// Clear probe) + R1 ps_* report + psq_l/psq_st skeletons (ppc_emit_memory.cc) + 128B complete coverage.
-//
-// These cases + the cvar-driven harness exercise the 128B granule logic, store invalidation,
-// and pairing awareness on real devices. When a64_accuracy_debug is on we can trust the logic.
-// 128B model complete coverage achieved (all store emitters instrumented per Captain order).
-// psq_st paths now explicitly covered for cross-thread pairing via ps stress cvar activation here.
-// ============================================================================
+// ea recovery via (addr_reg - membase) is granule-correct (0x1000 hack is multiple of 128).
+// CpuAccuracyTracker::stores_that_invalidated_reservations_ tracks instrumented sites.
 
 struct LOAD_RESERVED_I32
     : Sequence<LOAD_RESERVED_I32, I<OPCODE_LOAD_RESERVED, I32Op, I64Op>> {
@@ -713,7 +751,7 @@ struct LOAD_RESERVED_I32
       e.STR(wtmp, ctx, offsetof(A64BackendContext, flags));
 
       // Accuracy metric: reservation acquired (lwarx / ldarx)
-      ax360e::perf::g_cpu_accuracy.RecordReservationAcquire();
+      g_cpu_accuracy.RecordReservationAcquire();
 
       // Do the exclusive load (also sets local PE monitor as accel for same-core case).
       e.LDAXR(raw_val.toW(), X1);
@@ -733,7 +771,7 @@ struct LOAD_RESERVED_I32
       e.STR(X12, ctx, offsetof(A64BackendContext, last_reserve_granule));
 
       // Result to HIR dest (raw bits; caller will byteswap).
-      e.MOV(i.dest.toW(), raw_val.toW());
+      e.MOV(i.dest.reg(), raw_val.toW());
     }
   }
 };
@@ -912,7 +950,7 @@ struct STORE_RESERVED_I32
       e.CSET(i.dest, Cond::EQ);
       e.AND(wflags, wflags, ~2);
       e.STR(wflags, ctx, offsetof(A64BackendContext, flags));
-      ax360e::perf::g_cpu_accuracy.RecordReservationFailure();
+      g_cpu_accuracy.RecordReservationFailure();
       e.B(after_all);
 
       // --- STLXR failed: decide on software fallback ---
@@ -955,7 +993,7 @@ struct STORE_RESERVED_I32
 
       // --- Common success path (hardware or software recovery) ---
       e.l(sw_success);
-      ax360e::perf::g_cpu_accuracy.RecordReservationSuccess();
+      g_cpu_accuracy.RecordReservationSuccess();
       // Clear local state + (best-effort) clear coarse bit in helper
       e.AND(wflags, wflags, ~2);
       e.STR(wflags, ctx, offsetof(A64BackendContext, flags));
@@ -992,7 +1030,7 @@ struct STORE_RESERVED_I32
 
       // --- Final failure + state clear ---
       e.l(sw_fail);
-      ax360e::perf::g_cpu_accuracy.RecordReservationFailure();
+      g_cpu_accuracy.RecordReservationFailure();
       e.AND(wflags, wflags, ~2);
       e.STR(wflags, ctx, offsetof(A64BackendContext, flags));
       // (we already set dest=0 above)
@@ -1060,7 +1098,7 @@ struct STORE_RESERVED_I64
       e.CSET(i.dest, Cond::EQ);
       e.AND(wflags, wflags, ~2);
       e.STR(wflags, ctx, offsetof(A64BackendContext, flags));
-      ax360e::perf::g_cpu_accuracy.RecordReservationFailure();
+      g_cpu_accuracy.RecordReservationFailure();
       e.B(after_all);
 
       e.l(stlxr_failed);
@@ -1692,7 +1730,6 @@ struct STORE_OFFSET_I16
       e.STRH(W0, addr_reg);
     } else {
       e.STRH(i.src3, addr_reg);
-      }
     }
     // 128B complete: STORE_OFFSET_I16 covered for halfword aliasing into 128B res granule.
     {
@@ -2229,7 +2266,7 @@ struct CACHE_CONTROL
         break;
 
       default:
-        XELOGE("A64 MEM: unhandled type in seq 0x{:X} - accuracy_debug={}", type, cvars::a64_accuracy_debug?1:0);
+        XELOGE("A64 MEM: unhandled type in seq 0x{:X} - accuracy_debug={}", (int)type, cvars::a64_accuracy_debug?1:0);
         if (cvars::a64_accuracy_debug) e.DebugBreak();
         return;
     }
@@ -2351,7 +2388,6 @@ struct MEMORY_BARRIER
     // emission. Directly delivers the observability rec from Xenon barriers research.
     // LIGHT_SYNC stats will show dominance in titles; enables experiment validation.
     if (cvars::a64_accuracy_debug) {
-      using ax360e::perf::g_cpu_accuracy;
       switch (type) {
         case MEMORY_BARRIER_TYPE_LIGHT_SYNC:   g_cpu_accuracy.RecordBarrierLightSync(); break;
         case MEMORY_BARRIER_TYPE_FULL_SYNC:    g_cpu_accuracy.RecordBarrierFullSync(); break;

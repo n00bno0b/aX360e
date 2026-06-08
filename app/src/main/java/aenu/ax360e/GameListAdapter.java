@@ -3,6 +3,8 @@ package aenu.ax360e;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -144,13 +146,16 @@ public class GameListAdapter extends RecyclerView.Adapter<GameListAdapter.GameVi
             holder.gameName.setText(game.name);
         } else {
             DocumentFile file = DocumentFile.fromSingleUri(context, Uri.parse(game.uri));
-            if (file != null) {
-                holder.gameName.setText(file.getName());
-            }
+            holder.gameName.setText(file != null && file.getName() != null ? file.getName() : game.uri);
         }
 
         // Set game icon
         if (game.icon != null) {
+            Drawable oldDrawable = holder.gameIcon.getDrawable();
+            if (oldDrawable instanceof BitmapDrawable) {
+                Bitmap oldBmp = ((BitmapDrawable) oldDrawable).getBitmap();
+                if (oldBmp != null && !oldBmp.isRecycled()) oldBmp.recycle();
+            }
             Bitmap iconBmp = BitmapFactory.decodeByteArray(game.icon, 0, game.icon.length);
             holder.gameIcon.setImageBitmap(iconBmp);
         } else if (metadata.coverArtPath != null) {

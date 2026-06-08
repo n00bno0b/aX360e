@@ -3,6 +3,7 @@
 // Created by aenu on 2025/5/31.
 //
 #include "cpuinfo.h"
+#include <cstring>
 #include <fstream>
 #include <sstream>
 #include <algorithm>
@@ -31,6 +32,10 @@ std::vector<core_info_t> cpu_get_core_info(){
     while (std::getline(cpuinfo, line)) {
         try {
         if (line.find("processor") != std::string::npos) {
+            if (core.processor != 0 || !core.features.empty() || core.implementer != 0) {
+                cores.push_back(core);
+                core = core_info_t();
+            }
             core.processor = std::stoi(line.substr(line.find(":") + 2));
         }
         else if (line.find("CPU implementer") != std::string::npos) {
@@ -41,7 +46,6 @@ std::vector<core_info_t> cpu_get_core_info(){
         }
         else if (line.find("CPU part") != std::string::npos) {
             core.part = std::stoi(line.substr(line.find(":") + 2), nullptr, 16);
-            cores.push_back(core);
         }
         else if (line.find("Features") != std::string::npos) {
             std::string features = line.substr(line.find(":") + 2);
@@ -56,6 +60,9 @@ std::vector<core_info_t> cpu_get_core_info(){
         } catch (const std::out_of_range&) {
             continue;
         }
+    }
+    if (core.processor != 0 || !core.features.empty() || core.implementer != 0) {
+        cores.push_back(core);
     }
     std::sort(cores.begin(), cores.end(), [](const core_info_t& a, const core_info_t& b) {
         return a.processor < b.processor;

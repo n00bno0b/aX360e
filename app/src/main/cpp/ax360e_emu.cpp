@@ -648,9 +648,11 @@ namespace xe {
                     jmethodID parse_method = env->GetStaticMethodID(uri_class, "parse", "(Ljava/lang/String;)Landroid/net/Uri;");
                     jstring uri_string = env->NewStringUTF(path.c_str());
                     jobject uri = env->CallStaticObjectMethod(uri_class, parse_method, uri_string);
+                    env->DeleteLocalRef(uri_string);
 
                     std::unique_ptr<DocumentFile> file =
                             DocumentFile::find(g_jvm,uri);
+                    env->DeleteLocalRef(uri);
 
                     std::string name = file->getName();
                     if(name.ends_with(".xex")){
@@ -666,12 +668,15 @@ namespace xe {
                         std::string data_dir = path+".data";
                         jstring data_dir_str = env->NewStringUTF(data_dir.c_str());
                         jobject data_dir_uri = env->CallStaticObjectMethod(uri_class, parse_method, data_dir_str);
+                        env->DeleteLocalRef(data_dir_str);
 
                         std::unique_ptr<DocumentFile> data_dir_file =
                                 DocumentFile::find(g_jvm,data_dir_uri);
+                        env->DeleteLocalRef(data_dir_uri);
 
                         result = emu->LaunchStfsContainer(std::move(file), std::move(data_dir_file));
                     }
+                    env->DeleteLocalRef(uri_class);
 
                     /*result = emu->LaunchPath(abs_path);*//*app_context().CallInUIThread(
                             [this, abs_path]() { return emu_window->RunTitle(abs_path); });*/
@@ -718,6 +723,7 @@ namespace xe {
 
                 XELOGI("QUIT");
                 app_context().QuitFromUIThread();
+                g_jvm->DetachCurrentThread();
             }
         };
     }

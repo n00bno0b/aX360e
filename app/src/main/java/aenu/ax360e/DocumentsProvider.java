@@ -223,6 +223,13 @@ public class DocumentsProvider extends android.provider.DocumentsProvider{
     @Override
     public String createDocument(String documentId, String mimeType, String displayName)
             throws FileNotFoundException {
+        if (displayName == null || displayName.isEmpty()) {
+            throw new FileNotFoundException("Display name cannot be null or empty");
+        }
+        // Prevent path traversal in displayName
+        if (displayName.contains("..") || displayName.contains("/") || displayName.contains("\\")) {
+            throw new FileNotFoundException("Invalid display name: " + displayName);
+        }
 
         File parent = getFileForDocId(documentId);
         File file = new File(parent.getPath(), displayName);
@@ -520,6 +527,16 @@ public class DocumentsProvider extends android.provider.DocumentsProvider{
     private File getFileForDocId(String docId) throws FileNotFoundException {
         File f = new File(docId);
         if (!f.exists()) throw new FileNotFoundException(f.getAbsolutePath() + " not found");
+        // Prevent path traversal: ensure resolved path stays under baseDir
+        try {
+            File base = baseDir();
+            if (!f.getCanonicalPath().startsWith(base.getCanonicalPath() + File.separator)
+                    && !f.getCanonicalPath().equals(base.getCanonicalPath())) {
+                throw new FileNotFoundException("Access denied: " + docId);
+            }
+        } catch (IOException e) {
+            throw new FileNotFoundException("Invalid path: " + docId);
+        }
         return f;
     }
 }

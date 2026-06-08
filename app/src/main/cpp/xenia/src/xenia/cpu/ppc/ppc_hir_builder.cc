@@ -206,7 +206,7 @@ bool PPCHIRBuilder::Emit(GuestFunction* function, uint32_t flags) {
       // See ax360e_perf_log.h:RecordTlbOpIgnored + IsTlbManagementInstruction above + new harness seqs.
       // Mirrors existing cache op handling (ppc_emit_memory.cc icbi etc.). No guest TLB structs.
       if (IsTlbManagementInstruction(code)) {
-        ax360e::perf::g_cpu_accuracy.RecordTlbOpIgnored();  // always (lightweight)
+        g_cpu_accuracy.RecordTlbOpIgnored();  // always (lightweight)
         if (cvars::a64_accuracy_debug) {
           XELOGW("A64 Accuracy (TLB/ERAT R2): ignoring TLB/SLB management op (NOP) - "
                  "opcode=0x{:08X} @0x{:08X}. Per R2: low title impact on Xenon flat+HLE "
@@ -219,6 +219,7 @@ bool PPCHIRBuilder::Emit(GuestFunction* function, uint32_t flags) {
         // Continue as pure NOP (no HIR, no context sync required for these under our model).
         continue;
       }
+
 
       XELOGE("Invalid instruction {:08X} {:08X}", address, code);
       Comment("INVALID!");
@@ -636,12 +637,19 @@ Value* PPCHIRBuilder::LoadReserved() {
 
 // New accurate versions (preferred path)
 Value* PPCHIRBuilder::LoadReservedValue(Value* address, hir::TypeName type) {
-  return AppendInstr(OPCODE_LOAD_RESERVED_info, type, 0, address);
+  Value* dest = AllocValue(type);
+  Instr* i = AppendInstr(OPCODE_LOAD_RESERVED_info, 0, dest);
+  i->set_src1(address);
+  return dest;
 }
 
 Value* PPCHIRBuilder::StoreReservedValue(Value* address, Value* value) {
   // Returns I8 (1 = store succeeded, 0 = failed/reservation lost)
-  return AppendInstr(OPCODE_STORE_RESERVED_info, INT8_TYPE, 0, address, value);
+  Value* dest = AllocValue(INT8_TYPE);
+  Instr* i = AppendInstr(OPCODE_STORE_RESERVED_info, 0, dest);
+  i->set_src1(address);
+  i->set_src2(value);
+  return dest;
 }
 
 }  // namespace ppc

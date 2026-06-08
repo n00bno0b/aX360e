@@ -26,12 +26,14 @@
 
 #include <algorithm>
 #include <unordered_map>
+#include <jni.h>
 
 #include "xenia/base/assert.h"
 #include "xenia/base/clock.h"
 #include "xenia/base/logging.h"
 #include "xenia/base/string.h"
 #include "xenia/base/threading.h"
+#include "xenia/cpu/cpu_flags.h"
 
 // CPU accuracy metrics (timebase reads etc.)
 #include "ax360e_perf_log.h"
@@ -440,14 +442,14 @@ struct LOAD_CLOCK : Sequence<LOAD_CLOCK, I<OPCODE_LOAD_CLOCK, I64Op>> {
       e.MUL(i.dest, i.dest, X0);
       e.MOV(X0, ratio.second);
       e.UDIV(i.dest, i.dest, X0);
-      ax360e::perf::g_cpu_accuracy.RecordTimebaseRead();
+      g_cpu_accuracy.RecordTimebaseRead();
       return;
     }
 #endif
     // Fallback path (uses UpdateGuestClock + possible mutex).
     e.CallNative(LoadClock);
     e.MOV(i.dest, X0);
-    ax360e::perf::g_cpu_accuracy.RecordTimebaseRead();
+    g_cpu_accuracy.RecordTimebaseRead();
   }
   static uint64_t LoadClock(void* raw_context) {
     uint64_t t = Clock::QueryGuestTickCount();
@@ -459,7 +461,7 @@ struct LOAD_CLOCK : Sequence<LOAD_CLOCK, I<OPCODE_LOAD_CLOCK, I64Op>> {
       if (ctx->dec_pending) {
         // Opportunistic underflow count (timebase read in tight loops common for DEC polling).
         // Full delivery still via CheckDecrementerInterrupt + Reenter (respects EE).
-        ax360e::perf::g_cpu_accuracy.RecordDecUnderflowFired();
+        g_cpu_accuracy.RecordDecUnderflowFired();
         // Defer actual raise to the check builtin (called on mtmsr or other safe points).
         // For immediate, the mtmsr path + fire_time will catch it.
       }
@@ -1758,11 +1760,11 @@ struct MUL_ADD_F32
     // R1 ps_* harness: count FMA cases when accuracy stress active (ps_maddx will lower to this).
     // Lightweight; pairs with harness sequences. Citations: R1 FMA priority for ps_* + 128B psq_st.
     if (cvars::a64_ps_accuracy_stress || cvars::a64_accuracy_debug) {
-      ax360e::perf::g_cpu_accuracy.RecordPairedSingleFMA();
-      ax360e::perf::g_cpu_accuracy.RecordPairedSingleArith(2);
+      g_cpu_accuracy.RecordPairedSingleFMA();
+      g_cpu_accuracy.RecordPairedSingleArith(2);
       // CAPTAIN RE-TASK: ps_* specific debug counter (new ps_fma_executed) for R1 harness visibility.
       // Gated same as existing; distinguishes ps family FMA exec from scalar. See harness + tracker.
-      ax360e::perf::g_cpu_accuracy.RecordPsFmaExecuted(2);
+      g_cpu_accuracy.RecordPsFmaExecuted(2);
     }
   }
 };
@@ -2948,24 +2950,35 @@ void EmitStructuredFallback(A64Emitter& e, const hir::Instr* instr) {
   bool did_zero = false;
 
   // V128 / vector dest is extremely common for unhandled Altivec paths.
-  if (instr->dest && instr->dest->IsV128()) {
-    auto& vreg = instr->dest->reg();
-    e.EOR(vreg.B16(), vreg.B16(), vreg.B16());   // zero the 128-bit dest
-    did_zero = true;
-  } else if (instr->dest) {
-    // Scalar integer/float dests
-    if (instr->dest->IsInt64()) {
-      e.MOV(instr->dest->reg().X(), XZR);
+  if (instr->dest && (instr->dest->flags & VALUE_IS_ALLOCATED)) {
+    if (instr->dest->type == VEC128_TYPE) {
+      QReg vreg(0);
+      A64Emitter::SetupReg(instr->dest, vreg);
+      e.EOR(vreg.B16(), vreg.B16(), vreg.B16());   // zero the 128-bit dest
       did_zero = true;
-    } else if (instr->dest->IsInt32() || instr->dest->IsInt16() || instr->dest->IsInt8()) {
-      e.MOV(instr->dest->reg().W(), WZR);
-      did_zero = true;
-    } else if (instr->dest->IsFloat64()) {
-      e.FMOV(instr->dest->reg().D(), 0.0);
-      did_zero = true;
-    } else if (instr->dest->IsFloat32()) {
-      e.FMOV(instr->dest->reg().S(), 0.0f);
-      did_zero = true;
+    } else {
+      // Scalar integer/float dests
+      if (instr->dest->type == INT64_TYPE) {
+        XReg xreg(0);
+        A64Emitter::SetupReg(instr->dest, xreg);
+        e.MOV(xreg, XZR);
+        did_zero = true;
+      } else if (instr->dest->type == INT32_TYPE || instr->dest->type == INT16_TYPE || instr->dest->type == INT8_TYPE) {
+        WReg wreg(0);
+        A64Emitter::SetupReg(instr->dest, wreg);
+        e.MOV(wreg, WZR);
+        did_zero = true;
+      } else if (instr->dest->type == FLOAT64_TYPE) {
+        DReg dreg(0);
+        A64Emitter::SetupReg(instr->dest, dreg);
+        e.FMOV(dreg, XZR);
+        did_zero = true;
+      } else if (instr->dest->type == FLOAT32_TYPE) {
+        SReg sreg(0);
+        A64Emitter::SetupReg(instr->dest, sreg);
+        e.FMOV(sreg, WZR);
+        did_zero = true;
+      }
     }
   }
 

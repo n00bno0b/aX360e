@@ -758,6 +758,10 @@ public class MainActivity extends AppCompatActivity {
             editor.putString(PREF_GAME_DIR,uri.toString());
             editor.apply();
         }
+        catch(SecurityException e){
+            android.util.Log.e("ax360e", "SAF permission denied for game dir", e);
+            PreferenceManager.getDefaultSharedPreferences(ctx).edit().remove(PREF_GAME_DIR).apply();
+        }
         catch(Exception e){
             android.util.Log.e("ax360e", "Failed to save game dir preference", e);
         }
@@ -880,6 +884,10 @@ public class MainActivity extends AppCompatActivity {
             if(iso_dir==null||!iso_dir.exists())
                 return metas;
             DocumentFile[] files=iso_dir.listFiles();
+            if (files == null) {
+                android.util.Log.e("ax360e", "SAF permission lost for game directory");
+                return metas;
+            }
             for(DocumentFile file:files){
                 String fileName = file.getName();
                 if(fileName == null) continue;

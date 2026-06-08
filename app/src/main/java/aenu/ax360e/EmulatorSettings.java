@@ -48,7 +48,7 @@ public class EmulatorSettings extends AppCompatActivity {
     static final String KEY_DRIVER_LOADER_INDICATOR="CustomDrivers|driver_loader_indicator";
     static final String KEY_VIEW_DRIVER_STATUS="CustomDrivers|view_driver_status";
     static final String KEY_REFRESH_DRIVER_STATE="CustomDrivers|refresh_driver_state";
-    static final String KEY_MANAGE_PATCHES="Patches|manage_patches";
+    static final String KEY_CUSTOM_DRIVER_GPU_RESTORE="CustomDrivers|gpu_driver_restore";
 
     // Advanced settings keys
     static final String KEY_TURNIP_DRIVER_INFO="TurnipAdvanced|driver_info";
@@ -56,6 +56,7 @@ public class EmulatorSettings extends AppCompatActivity {
     static final String KEY_PRESET_HIGH_QUALITY="Presets|high_quality";
     static final String KEY_PRESET_MAXIMUM_QUALITY="Presets|maximum_quality";
     static final String KEY_PRESET_BATTERY_OPTIMIZED="Presets|battery_optimized";
+    static final String KEY_MANAGE_PATCHES="Patches|manage_patches";
 
     static final int WARNING_COLOR=0xffff8000;
 
@@ -623,6 +624,9 @@ public class EmulatorSettings extends AppCompatActivity {
             Preference manage_patches_pref=findPreference(KEY_MANAGE_PATCHES);
             if(manage_patches_pref!=null)
                 manage_patches_pref.setOnPreferenceClickListener(this);
+            Preference restore_driver_pref=findPreference(KEY_CUSTOM_DRIVER_GPU_RESTORE);
+            if(restore_driver_pref!=null)
+                restore_driver_pref.setOnPreferenceClickListener(this);
 
             // Advanced settings click listeners
             Preference turnip_driver_info_pref=findPreference(KEY_TURNIP_DRIVER_INFO);
@@ -700,6 +704,11 @@ public class EmulatorSettings extends AppCompatActivity {
 
             if(KEY_CUSTOM_DRIVER_GPU_REMOVE.equals(preference.getKey())){
                 remove_custom_driver_gpu();
+                return true;
+            }
+
+            if(KEY_CUSTOM_DRIVER_GPU_RESTORE.equals(preference.getKey())){
+                restore_driver_backup();
                 return true;
             }
 
@@ -816,9 +825,8 @@ public class EmulatorSettings extends AppCompatActivity {
         }
 
         void setup_custom_driver_gpu(android.net.Uri uri){
-            Preference gpu_pref=findPreference(KEY_CUSTOM_DRIVER_GPU);
-            if(uri == null){
-                // p3-5: ALWAYS reflect live runtime state using fresh TurnipDriverInfo (natives: isUsingLibadrenotools, isActiveInProcess, detailed status)
+            Preference gpu_pref = findPreference(KEY_CUSTOM_DRIVER_GPU);
+            if (uri == null){
                 TurnipDriverInfo driverInfo = TurnipDriverInfo.detect(requireContext());
                 if (driverInfo.isInstalled()) {
                     if (gpu_pref != null) {
@@ -843,6 +851,16 @@ public class EmulatorSettings extends AppCompatActivity {
                 } else {
                     if (gpu_pref != null) gpu_pref.setSummary(getString(R.string.es_hint_custom_drivers_gpu));
                 }
+                return;
+            }
+
+            String validationError = CustomDriverUtils.validateDriverPackage(requireContext(), uri);
+            if (validationError != null) {
+                new AlertDialog.Builder(requireContext())
+                        .setTitle("Invalid Driver Package")
+                        .setMessage(validationError)
+                        .setPositiveButton("OK", null)
+                        .show();
                 return;
             }
 
@@ -911,7 +929,7 @@ public class EmulatorSettings extends AppCompatActivity {
 
         void open_custom_driver_gpu_picker(){
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-            intent.setType("application/zip");
+            intent.setType("*/*");
             intent.addCategory(Intent.CATEGORY_OPENABLE);
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             intent.addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
@@ -925,9 +943,22 @@ public class EmulatorSettings extends AppCompatActivity {
             if (gpu_pref != null) {
                 gpu_pref.setSummary(getString(R.string.es_hint_custom_drivers_gpu));
             }
-            // p3-5: Refresh indicator + other driver UI to reflect removal (live state)
             refreshDriverLiveState();
             Toast.makeText(requireContext(), getString(R.string.custom_driver_removed), Toast.LENGTH_SHORT).show();
+        }
+
+        void restore_driver_backup() {
+            if (CustomDriverUtils.hasDriverBackup(requireContext())) {
+                boolean restored = CustomDriverUtils.restoreDriverFromBackup(requireContext());
+                if (restored) {
+                    refreshDriverLiveState();
+                    Toast.makeText(requireContext(), "Driver restored from backup. Restart app to activate.", Toast.LENGTH_LONG).show();
+                } else {
+                    Toast.makeText(requireContext(), "Failed to restore driver backup", Toast.LENGTH_SHORT).show();
+                }
+            } else {
+                Toast.makeText(requireContext(), "No driver backup available", Toast.LENGTH_SHORT).show();
+            }
         }
 
         // p3-5: Core live refresh used by onResume, quick action, install/remove, initial create.

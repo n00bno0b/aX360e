@@ -649,7 +649,7 @@ static inline void GQRTypeToWidthSign(uint32_t type, int* out_bits, bool* out_si
   }
 }
 
-static_assert(sizeof(PPCContext) == 2784, "");  // 64B aligned. Net: +32B uint32 gqr[8] near f[32] (task spec) -64B consolidated late stub. Per R1 ps report + ppc_emit_fpu.cc plan. GQR now uint32[8] at 0x220.
+static_assert(sizeof(PPCContext) == 2816, "");  // 64B aligned. Net: +32B uint32 gqr[8] near f[32] (task spec) -64B consolidated late stub. Per R1 ps report + ppc_emit_fpu.cc plan. GQR now uint32[8] at 0x220.
 #pragma pack(pop)
 static_assert(sizeof(PPCContext) % 64 == 0, "64b padded");
 

@@ -44,8 +44,10 @@ static std::unique_ptr<DocumentFile> _find_file_in_tree(JNIEnv *env, std::unique
             jmethodID equalsMethod = env->GetMethodID(uriClass, "equals", "(Ljava/lang/Object;)Z");
 
             if (equalsMethod != nullptr && env->CallBooleanMethod(dfUri, equalsMethod, uri)) {
+                env->DeleteLocalRef(uriClass);
                 return std::move(df);
             }
+            env->DeleteLocalRef(uriClass);
         }
 
         if (df->isDirectory()) {
@@ -54,7 +56,6 @@ static std::unique_ptr<DocumentFile> _find_file_in_tree(JNIEnv *env, std::unique
                 return found;
             }
         }
-
     }
 
     return nullptr;

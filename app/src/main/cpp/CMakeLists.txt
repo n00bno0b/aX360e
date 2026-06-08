@@ -195,6 +195,16 @@ endif()
 # They were only required for the pre-libadrenotools manual loading strategy.
 # libadrenotools handles dependency resolution internally.
 
+# Add NDK Vulkan headers
+if(DEFINED ENV{ANDROID_NDK})
+    set(NDK_VULKAN_INCLUDE "$ENV{ANDROID_NDK}/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include")
+elseif(DEFINED ENV{ANDROID_NDK_HOME})
+    set(NDK_VULKAN_INCLUDE "$ENV{ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include")
+else()
+    set(NDK_VULKAN_INCLUDE "C:/Users/kirby/AppData/Local/Android/Sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include")
+endif()
+target_include_directories(emu PRIVATE ${NDK_VULKAN_INCLUDE})
+
 target_include_directories(emu PRIVATE
         xenia
         xenia/src

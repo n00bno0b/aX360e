@@ -34,7 +34,7 @@ public class ProgressTask {
     UI_Task failed_task;
     UI_Task done_task;
 
-    public Handler task_handler=new Handler() {
+    public Handler task_handler = new Handler(android.os.Looper.getMainLooper()) {
         @Override
         public void handleMessage(Message msg) {
             if(progress_dialog!=null&&progress_dialog.isShowing()){

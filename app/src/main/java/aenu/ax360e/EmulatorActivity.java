@@ -96,13 +96,27 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
     private android.widget.TextView performanceOverlay;
 
     private void continueOnCreate(){
+        if (Emulator.get == null) {
+            new AlertDialog.Builder(this)
+                .setTitle("Error")
+                .setMessage("Emulator native library failed to load. Please restart the app.")
+                .setPositiveButton("Exit", (d, w) -> finish())
+                .setCancelable(false)
+                .show();
+            return;
+        }
         String uri=getIntent().getStringExtra(EXTRA_GAME_URI);
-        this.gameUri = uri; // Store for later use
+        this.gameUri = uri;
         aenu.emulator.Emulator.Path path=aenu.emulator.Emulator.Path.from(uri,-1);
         Emulator.get.setup_context(this);
         Uri gameDirUri = MainActivity.load_pref_game_dir(this);
         if (gameDirUri != null) {
-            Emulator.get.setup_document_file_tree(DocumentFile.fromTreeUri(this, gameDirUri));
+            DocumentFile gameDir = DocumentFile.fromTreeUri(this, gameDirUri);
+            if (gameDir != null && gameDir.exists()) {
+                Emulator.get.setup_document_file_tree(gameDir);
+            } else {
+                Log.w("ax360e", "Game directory SAF URI invalid or permission lost: " + gameDirUri);
+            }
         }
         Emulator.get.setup_game_path(path);
         Emulator.get.setup_launch_args(new String[]{
@@ -224,9 +238,13 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
     @Override
     public void onBackPressed()
     {
-
         if(delay_dialog!=null)
             return;
+
+        if (Emulator.get == null) {
+            finish();
+            return;
+        }
 
         AlertDialog.Builder ab=new AlertDialog.Builder(this);
         ab.setPositiveButton(R.string.quit, new DialogInterface.OnClickListener(){
@@ -323,6 +341,7 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
+        if (Emulator.get == null) return super.onKeyDown(keyCode, event);
         if (isGameControllerSource(event.getSource()) && !acceptControllerEvent(event)) {
             return true;
         }
@@ -348,6 +367,7 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
 
     @Override
     public boolean onKeyUp(int keyCode, KeyEvent event) {
+        if (Emulator.get == null) return super.onKeyUp(keyCode, event);
         if (isGameControllerSource(event.getSource()) && !acceptControllerEvent(event)) {
             return true;
         }
@@ -565,6 +585,7 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
 
     @Override
     public boolean onGenericMotion(View v, MotionEvent event) {
+        if (Emulator.get == null) return super.onGenericMotionEvent(event);
         if (!isGameControllerSource(event.getSource())) {
             return super.onGenericMotionEvent(event);
         }

@@ -25,6 +25,12 @@ bool is_using_custom_adreno_driver();
 // Returns a short human-readable status string (useful for diagnostics / UI).
 std::string get_custom_driver_status();
 
+// Returns the installed custom driver directory path (empty if none).
+std::string get_installed_driver_path();
+
+// Returns the installed custom driver .so filename (empty if none).
+std::string get_installed_driver_name();
+
 // Returns true if the current driver was loaded through libadrenotools.
 bool is_using_libadrenotools();
 

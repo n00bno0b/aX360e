@@ -54,7 +54,9 @@ public class GameMetadata {
         metadata.isFavorite = json.optBoolean("isFavorite", false);
         metadata.compatibilityRating = json.optString("compatibilityRating", "unknown");
         metadata.coverArtPath = json.optString("coverArtPath", null);
+        if (metadata.coverArtPath != null && metadata.coverArtPath.isEmpty()) metadata.coverArtPath = null;
         metadata.engineProfileOverride = json.optString("engineProfileOverride", null);
+        if (metadata.engineProfileOverride != null && metadata.engineProfileOverride.isEmpty()) metadata.engineProfileOverride = null;
         return metadata;
     }
     

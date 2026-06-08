@@ -1,5 +1,5 @@
 #include "adreno_driver.h"
-#include "vk_symbols.h"   // For ResolveVulkanSymbols / ResetVulkanSymbols
+#include "vk_symbols.h"
 
 #include <jni.h>
 #include <android/log.h>
@@ -7,6 +7,7 @@
 #include <string>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <mutex>
 
 #if defined(HAS_LIBADRENOTOOLS)
 #include "adrenotools/driver.h"
@@ -19,8 +20,11 @@
 
 namespace {
 
+std::mutex g_driver_mutex;
 bool g_using_custom_driver = false;
 std::string g_last_status;
+std::string g_installed_driver_path;
+std::string g_installed_driver_name;
 
 void* g_libvulkan_handle = nullptr;
 
@@ -30,6 +34,8 @@ bool load_custom_adreno_driver(const std::string& driver_dir,
                                const std::string& driver_name,
                                bool enable_redirection)
 {
+    std::lock_guard<std::mutex> lock(g_driver_mutex);
+
     if (g_using_custom_driver) {
         LOGI("Custom driver already loaded");
         return true;
@@ -51,6 +57,20 @@ bool load_custom_adreno_driver(const std::string& driver_dir,
         return false;
     }
 
+    // Verify the file is readable and non-empty
+    struct stat st;
+    if (stat(full_driver_path.c_str(), &st) != 0 || st.st_size == 0) {
+        g_last_status = "ERROR: Driver file is empty or unreadable: " + full_driver_path;
+        LOGE("Custom driver file stat failed or empty: %s", full_driver_path.c_str());
+        return false;
+    }
+
+    // Additional validation: check for vk_icd.json alongside the driver
+    std::string icd_path = driver_dir + "/vk_icd.json";
+    if (access(icd_path.c_str(), F_OK) != 0) {
+        LOGW("vk_icd.json not found at %s — driver may still work with direct .so loading", icd_path.c_str());
+    }
+
 #if defined(HAS_LIBADRENOTOOLS)
     // === Preferred path: libadrenotools ===
     LOGI("Using libadrenotools for driver loading");
@@ -67,7 +87,9 @@ bool load_custom_adreno_driver(const std::string& driver_dir,
     // Temporary directory for injected libraries (inside app data is fine)
     std::string tmp_dir = driver_dir + "/tmp/";
     // Best-effort ensure the tmp directory exists (adrenotools uses it for extracted hooks)
-    mkdir(tmp_dir.c_str(), 0755);  // ignore return; if it fails adrenotools will surface a clear error
+    if (mkdir(tmp_dir.c_str(), 0755) != 0 && errno != EEXIST) {
+        LOGW("Failed to create tmp dir %s: %s", tmp_dir.c_str(), strerror(errno));
+    }
 
     void* user_mapping = nullptr;
 
@@ -85,6 +107,8 @@ bool load_custom_adreno_driver(const std::string& driver_dir,
     if (g_libvulkan_handle) {
         g_using_custom_driver = true;
         g_last_status = "Loaded via libadrenotools: " + driver_name;
+        g_installed_driver_path = driver_dir;
+        g_installed_driver_name = driver_name;
         LOGI("libadrenotools successfully loaded custom driver");
 
         // Resolve all required Vulkan symbols from the newly loaded library.
@@ -139,14 +163,27 @@ void unload_custom_adreno_driver() {
 }
 
 bool is_using_custom_adreno_driver() {
+    std::lock_guard<std::mutex> lock(g_driver_mutex);
     return g_using_custom_driver;
 }
 
 std::string get_custom_driver_status() {
+    std::lock_guard<std::mutex> lock(g_driver_mutex);
     return g_last_status.empty() ? "No custom driver status" : g_last_status;
 }
 
+std::string get_installed_driver_path() {
+    std::lock_guard<std::mutex> lock(g_driver_mutex);
+    return g_installed_driver_path;
+}
+
+std::string get_installed_driver_name() {
+    std::lock_guard<std::mutex> lock(g_driver_mutex);
+    return g_installed_driver_name;
+}
+
 bool is_using_libadrenotools() {
+    std::lock_guard<std::mutex> lock(g_driver_mutex);
 #if defined(HAS_LIBADRENOTOOLS)
     return g_using_custom_driver;
 #else
@@ -270,6 +307,18 @@ Java_aenu_ax360e_Emulator_nativeGetDetailedDriverStatus(JNIEnv* env, jclass claz
 JNIEXPORT jboolean JNICALL
 Java_aenu_ax360e_Emulator_nativeSupportsLibadrenotoolsBuild(JNIEnv* env, jclass clazz) {
     return supports_libadrenotools_build() ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jstring JNICALL
+Java_aenu_ax360e_Emulator_nativeGetInstalledDriverPath(JNIEnv* env, jclass clazz) {
+    std::string path = get_installed_driver_path();
+    return env->NewStringUTF(path.c_str());
+}
+
+JNIEXPORT jstring JNICALL
+Java_aenu_ax360e_Emulator_nativeGetInstalledDriverName(JNIEnv* env, jclass clazz) {
+    std::string name = get_installed_driver_name();
+    return env->NewStringUTF(name.c_str());
 }
 
 } // extern "C"

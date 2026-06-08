@@ -183,7 +183,7 @@ int InstrEmit_ps_addx(PPCHIRBuilder& f, const InstrData& i) {
   //   - Own prior: emitters now live in opcode table/lookup/frontend (ppc_opcode_*_gen.cc etc).
   // This is the high-leverage step only possible after making dispatch real.
   if (cvars::a64_accuracy_debug || cvars::a64_ps_accuracy_stress) {
-    ax360e::perf::g_cpu_accuracy.RecordPairedSingleArith(2);  // ps0 + ps1 elements for this ps_addx site
+    g_cpu_accuracy.RecordPairedSingleArith(2);  // ps0 + ps1 elements for this ps_addx site
     // No FMA here; addx is pure Add (still valuable for validation sequences with known values).
   }
 
@@ -242,9 +242,9 @@ int InstrEmit_ps_maddx(PPCHIRBuilder& f, const InstrData& i) {
   // the new ps stress cvar. Reservation interaction noted for when psq_st stores (other agents)
   // are involved (psq_st as normal store per R1 must ClearXenon 128B granule).
   if (cvars::a64_accuracy_debug || cvars::a64_ps_accuracy_stress) {
-    ax360e::perf::g_cpu_accuracy.RecordPairedSingleArith(2);
-    ax360e::perf::g_cpu_accuracy.RecordPsFmaExecuted(2);  // ps_maddx FMA on both elements (ps0/ps1)
-    ax360e::perf::g_cpu_accuracy.RecordPairedSingleFMA(); // legacy alias for harness compat
+    g_cpu_accuracy.RecordPairedSingleArith(2);
+    g_cpu_accuracy.RecordPsFmaExecuted(2);  // ps_maddx FMA on both elements (ps0/ps1)
+    g_cpu_accuracy.RecordPairedSingleFMA(); // legacy alias for harness compat
   }
 
   Value* fra = f.LoadFPR(i.A.FRA);
@@ -298,9 +298,9 @@ int InstrEmit_ps_msubx(PPCHIRBuilder& f, const InstrData& i) {
   // emitters (no more dead stubs). Small reservation note: arith paths themselves don't store,
   // but when other agents land psq_st stores they will interact via same ClearXenon paths.
   if (cvars::a64_accuracy_debug || cvars::a64_ps_accuracy_stress) {
-    ax360e::perf::g_cpu_accuracy.RecordPairedSingleArith(2);
-    ax360e::perf::g_cpu_accuracy.RecordPsFmaExecuted(2);
-    ax360e::perf::g_cpu_accuracy.RecordPairedSingleFMA();
+    g_cpu_accuracy.RecordPairedSingleArith(2);
+    g_cpu_accuracy.RecordPsFmaExecuted(2);
+    g_cpu_accuracy.RecordPairedSingleFMA();
   }
 
   Value* fra = f.LoadFPR(i.A.FRA);
@@ -410,8 +410,8 @@ int InstrEmit_ps_subx(PPCHIRBuilder& f, const InstrData& i) {
   // roundtrips + psq + 128B psq_st res invalidation + cross-thread pairing cases in harness).
   // Gated exactly under a64_accuracy_debug || a64_ps_accuracy_stress.
   if (cvars::a64_accuracy_debug || cvars::a64_ps_accuracy_stress) {
-    ax360e::perf::g_cpu_accuracy.RecordPairedSingleArith(2);  // ps0 + ps1 for this ps_subx site
-    ax360e::perf::g_cpu_accuracy.RecordPsSubSelArith(2);      // dedicated for sub/sel uncovered R1 edges
+    g_cpu_accuracy.RecordPairedSingleArith(2);  // ps0 + ps1 for this ps_subx site
+    g_cpu_accuracy.RecordPsSubSelArith(2);      // dedicated for sub/sel uncovered R1 edges
   }
 
   Value* fra = f.LoadFPR(i.A.FRA);
@@ -481,8 +481,8 @@ int InstrEmit_ps_sel(PPCHIRBuilder& f, const InstrData& i) {
   // combined ps arith(FMA+sub/sel)+GQR+psq+128B+pairing sequences).
   // Gated under a64_accuracy_debug || a64_ps_accuracy_stress.
   if (cvars::a64_accuracy_debug || cvars::a64_ps_accuracy_stress) {
-    ax360e::perf::g_cpu_accuracy.RecordPairedSingleArith(2);  // ps0 + ps1 for this ps_sel site
-    ax360e::perf::g_cpu_accuracy.RecordPsSubSelArith(2);      // dedicated for sub/sel R1 edges
+    g_cpu_accuracy.RecordPairedSingleArith(2);  // ps0 + ps1 for this ps_sel site
+    g_cpu_accuracy.RecordPsSubSelArith(2);      // dedicated for sub/sel R1 edges
   }
 
   Value* fra = f.LoadFPR(i.A.FRA);

@@ -1323,10 +1323,8 @@ int InstrEmit_psq_st(PPCHIRBuilder& f, const InstrData& i) {
   if (st_scale <= -16 || st_scale >= 16) {
     f.CommentFormat(" [SCALE EDGE] psq_st |scale|=%d (R1 GQR +/-31 range; fidelity critical for vertex/skin)", st_scale);
   }
-  int32_t q0 = GQRQuantize(ps0_f32, st_scale, is_signed, bits);
-  int32_t q1 = (W == 0) ? GQRQuantize(ps1_f32, st_scale, is_signed, bits) : 0;
-  f.CommentFormat("psq_st (D-form) GQR quant PROD (store): W=%u I=%u scale=%d type=%u bits=%d signed=%d q0=%d q1=%d (GQR helpers ppc_context.h + real HIR LoadContext gqr; full W/I/types/edges; R1 + 128B psq_st skeleton + this production + harness psq_st_* counters + barriers/TLB)",
-                  (unsigned)W, (unsigned)I, st_scale, (unsigned)st_type, bits, is_signed ? 1 : 0, q0, q1);
+  f.CommentFormat("psq_st (D-form) GQR quant PROD (store): W=%u I=%u scale=%d type=%u bits=%d signed=%d (GQR helpers ppc_context.h + real HIR LoadContext gqr; full W/I/types/edges; R1 + 128B psq_st skeleton + this production + harness psq_st_* counters + barriers/TLB)",
+                  (unsigned)W, (unsigned)I, st_scale, (unsigned)st_type, bits, is_signed ? 1 : 0);
 
   // Record under debug cvar (polish: emitters now directly drive psq_st counters too).
   // if (cvars::a64_ps_accuracy_stress || cvars::a64_accuracy_debug) { ... RecordPsqStExecuted(W==0?2:1); RecordPsqStGqrCase(); }
@@ -1361,10 +1359,8 @@ int InstrEmit_psq_stu(PPCHIRBuilder& f, const InstrData& i) {
   uint32_t ty = GQRGetType(sample_gqr, true); int b; bool sg; GQRTypeToWidthSign(ty, &b, &sg);
   if (ty < 4 || ty > 7) { b=16; sg=true; f.CommentFormat(" [EDGE] psq_stu invalid type=%u defaulted", (unsigned)ty); }
   if (sc <= -16 || sc >= 16) f.CommentFormat(" [SCALE EDGE] psq_stu |%d|", sc);
-  int32_t q0 = GQRQuantize(ps0_f32, sc, sg, b);
-  int32_t q1 = (W == 0) ? GQRQuantize(ps1_f32, sc, sg, b) : 0;
-  f.CommentFormat("psq_stu PROD GQR quant (store): W=%u I=%u q0=%d q1=%d (full W/I + types/edges + real HIR LoadContext; ppc_context.h helpers + 128B f.Store + R1 + this production + psq_st_* harness + barriers/TLB)",
-                  (unsigned)W, (unsigned)I, q0, q1);
+  f.CommentFormat("psq_stu PROD GQR quant (store): W=%u I=%u sc=%d sg=%d b=%d (full W/I + types/edges + real HIR LoadContext; ppc_context.h helpers + 128B f.Store + R1 + this production + psq_st_* harness + barriers/TLB)",
+                  (unsigned)W, (unsigned)I, sc, (int)sg, b);
 
   f.Store(ea, f.ByteSwap(f.Cast(f.LoadFPR(i.D.RT), INT64_TYPE)));
   StoreEA(f, i.D.RA, ea);
@@ -1393,10 +1389,8 @@ int InstrEmit_psq_stx(PPCHIRBuilder& f, const InstrData& i) {
   uint32_t sample_gqr = 0x0005C000u;
   int sc = GQRGetScale(sample_gqr, true); int b; bool sg; GQRTypeToWidthSign(GQRGetType(sample_gqr, true), &b, &sg);
   if (GQRGetType(sample_gqr, true) < 4 || GQRGetType(sample_gqr, true) > 7) { b=16; sg=true; }
-  int32_t q0 = GQRQuantize(ps0_f32, sc, sg, b);
-  int32_t q1 = (W == 0) ? GQRQuantize(ps1_f32, sc, sg, b) : 0;
-  f.CommentFormat("psq_stx PROD GQR quant (store): W=%u I=%u q0=%d q1=%d (X-form W/I decode + all types/edges + real HIR LoadContext gqr; helpers ppc_context.h + full 128B/pairing f.Store skeleton; R1 + 128B + this production + harness psq_st counters + barriers/TLB)",
-                  (unsigned)W, (unsigned)I, q0, q1);
+  f.CommentFormat("psq_stx PROD GQR quant (store): W=%u I=%u sc=%d sg=%d b=%d (X-form W/I decode + all types/edges + real HIR LoadContext gqr; helpers ppc_context.h + full 128B/pairing f.Store skeleton; R1 + 128B + this production + harness psq_st counters + barriers/TLB)",
+                  (unsigned)W, (unsigned)I, sc, (int)sg, b);
 
   f.Store(ea, f.ByteSwap(f.Cast(f.LoadFPR(i.X.RT), INT64_TYPE)));
   // 128B/pairing polish: indexed form Store hits identical ClearXenon + cross-thread probe

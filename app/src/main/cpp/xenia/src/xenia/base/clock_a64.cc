@@ -27,14 +27,13 @@ constexpr int32_t CNTFRQ_EL0 = ARM64_SYSREG(3, 3, 14, 0, 0);
 constexpr int32_t CNTVCT_EL0 = ARM64_SYSREG(3, 3, 14, 0, 2);
 #define xe_cpu_mrs(reg) _ReadStatusReg(reg)
 #elif XE_COMPILER_CLANG || XE_COMPILER_GNUC
-constexpr int32_t CNTFRQ_EL0 = 0b11'011'1110'0000'000;
-constexpr int32_t CNTVCT_EL0 = 0b11'011'1110'0000'010;
-
-uint64_t xe_cpu_mrs(uint32_t reg) {
-  uint64_t result;
-  __asm__ volatile("mrs \t%0," #reg : "=r"(result));
-  return result;
-}
+constexpr int32_t CNTFRQ_EL0 = 0; // standard register name used in macro
+constexpr int32_t CNTVCT_EL0 = 0;
+#define xe_cpu_mrs(reg) ({ \
+  uint64_t result; \
+  __asm__ volatile("mrs \t%0," #reg : "=r"(result)); \
+  result; \
+})
 #else
 #error \
     "No cpu instruction wrappers xe_cpu_mrs(CNTVCT_EL0); for current compiler implemented."

@@ -81,7 +81,15 @@ public class GameProfileManager {
                 return;
             }
 
-            fis.read(data);
+            int totalRead = 0;
+            int bytesRead;
+            while (totalRead < data.length && (bytesRead = fis.read(data, totalRead, data.length - totalRead)) != -1) {
+                totalRead += bytesRead;
+            }
+            if (totalRead < data.length) {
+                Log.e(TAG, "Incomplete read of profiles file: expected " + data.length + " bytes, got " + totalRead);
+                return;
+            }
             JSONObject root = new JSONObject(new String(data));
             JSONArray profileArray = root.getJSONArray("profiles");
 

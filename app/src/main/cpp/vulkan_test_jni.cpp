@@ -404,8 +404,8 @@ Java_aenu_ax360e_VulkanTestActivity_nRunVulkanTest(JNIEnv *env, jobject thiz, jo
         return env->NewStringUTF(("Error: vkQueuePresentKHR failed: " + std::to_string(res)).c_str());
     }
 
-    // Wait a bit to show the color before cleanup
-    LOGI("Rendering successful, waiting 2 seconds...");
+    // Render for a short time to show the result
+    LOGI("Rendering successful");
     for (int i = 0; i < 20; ++i) {
         if (cancel_requested()) {
             LOGI("Vulkan test cancelled during post-present wait");
@@ -416,9 +416,26 @@ Java_aenu_ax360e_VulkanTestActivity_nRunVulkanTest(JNIEnv *env, jobject thiz, jo
     }
 
     LOGI("Cleaning up...");
+
+    // Build result string before cleanup
+    std::string result_str;
+    if (is_turnip) {
+        result_str = "SUCCESS (Mesa/Turnip): " + std::string(props.deviceName) + " Vulkan " +
+                     std::to_string(VK_VERSION_MAJOR(props.apiVersion)) + "." +
+                     std::to_string(VK_VERSION_MINOR(props.apiVersion));
+    } else if (is_stock_adreno) {
+        result_str = "Stock Adreno: " + std::string(props.deviceName) + " Vulkan " +
+                     std::to_string(VK_VERSION_MAJOR(props.apiVersion)) + "." +
+                     std::to_string(VK_VERSION_MINOR(props.apiVersion));
+    } else {
+        result_str = "Other GPU: " + std::string(props.deviceName) + " Vulkan " +
+                     std::to_string(VK_VERSION_MAJOR(props.apiVersion)) + "." +
+                     std::to_string(VK_VERSION_MINOR(props.apiVersion));
+    }
+
     cleanup();
 
-    return env->NewStringUTF("Success: Rendered Clear Color!");
+    return env->NewStringUTF(result_str.c_str());
 }
 
 extern "C"
