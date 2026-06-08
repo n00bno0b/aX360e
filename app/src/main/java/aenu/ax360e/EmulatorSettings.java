@@ -13,6 +13,9 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
+
 import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -40,7 +43,63 @@ public class EmulatorSettings extends AppCompatActivity {
     static final int REQUEST_CODE_CUSTOM_DRIVER_TYPE=6201;
     static final int REQUEST_CODE_CUSTOM_DRIVER_GPU=6202;
 
-    static final String KEY_HID_DRIVER_TYPE="HID|hid";
+    // SAF picker launchers using modern ActivityResult API
+    private ActivityResultLauncher<Intent> customDriverGpuLauncher;
+    private ActivityResultLauncher<Intent> customDriverTypeLauncher;
+
+    public interface OnDriverInstallListener {
+        void onDriverGpuSelected(Uri uri);
+        void onDriverTypeSelected(String type);
+    }
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+
+        // Register SAF picker launchers BEFORE fragment is created
+        customDriverGpuLauncher = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(),
+            result -> {
+                Log.i("EmulatorSettings", "GPU picker result: code=" + result.getResultCode());
+                if (result.getResultCode() == RESULT_OK && result.getData() != null) {
+                    Uri uri = result.getData().getData();
+                    Log.i("EmulatorSettings", "GPU picker URI: " + uri);
+                    if (uri != null) {
+                        int takeFlags = result.getData().getFlags()
+                            & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                        try {
+                            getContentResolver().takePersistableUriPermission(uri, takeFlags);
+                        } catch (SecurityException e) {
+                            Log.w("EmulatorSettings", "Failed to persist URI permission: " + uri, e);
+                        }
+                    }
+                    if (fragment != null && uri != null) {
+                        fragment.setup_custom_driver_gpu(uri);
+                    }
+                }
+            });
+
+        customDriverTypeLauncher = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(),
+            result -> {
+                Log.i("EmulatorSettings", "Type picker result: code=" + result.getResultCode());
+                if (result.getResultCode() == RESULT_OK && result.getData() != null) {
+                    String type = result.getData().getStringExtra(EXTRA_CUSTOM_DRIVER_TYPE);
+                    if (fragment != null) {
+                        fragment.setup_custom_driver_type(type);
+                    }
+                }
+            });
+
+        // Create and attach the settings fragment
+        String config_path = getIntent().getStringExtra(EXTRA_CONFIG_PATH);
+        if (config_path != null) {
+            fragment = SettingsFragment.newInstance(config_path, false);
+        } else {
+            fragment = SettingsFragment.newInstance(Application.get_global_config_file().getAbsolutePath(), true);
+        }
+        getSupportFragmentManager().beginTransaction().replace(android.R.id.content, fragment).commit();
+    }
     static final String KEY_CUSTOM_DRIVER_LOAD_TYPE="CustomDrivers|load_driver_type";
     static final String KEY_CUSTOM_DRIVER_GPU="CustomDrivers|gpu_driver";
     static final String KEY_CUSTOM_DRIVER_GPU_REMOVE="CustomDrivers|gpu_driver_remove";
@@ -49,6 +108,26 @@ public class EmulatorSettings extends AppCompatActivity {
     static final String KEY_VIEW_DRIVER_STATUS="CustomDrivers|view_driver_status";
     static final String KEY_REFRESH_DRIVER_STATE="CustomDrivers|refresh_driver_state";
     static final String KEY_CUSTOM_DRIVER_GPU_RESTORE="CustomDrivers|gpu_driver_restore";
+
+    static final String KEY_HID_DRIVER_TYPE="HID|hid";
+    static final String KEY_AUDIO_DRIVER_TYPE="APU|apu";
+    static final String KEY_GPU_DRIVER_TYPE="GPU|gpu";
+    static final String KEY_DISPLAY_RESOLUTION="Video|internal_display_resolution";
+    static final String KEY_GPU_VSYNC="GPU|vsync";
+    static final String KEY_AA_MODE="Display|postprocess_antialiasing";
+    static final String KEY_SCALING_MODE="Display|postprocess_scaling_and_sharpening";
+    static final String KEY_DYNAMIC_RESOLUTION="MobileGPU|dynamic_resolution";
+    static final String KEY_RESOLUTION_SCALE_MIN="MobileGPU|resolution_scale_min";
+    static final String KEY_RESOLUTION_SCALE_MAX="MobileGPU|resolution_scale_max";
+    static final String KEY_POWER_MODE="PowerManagement|power_mode";
+    static final String KEY_SHOW_PERFORMANCE_OVERLAY="Performance|show_performance_overlay";
+    static final String KEY_FORCE_MAX_CLOCKS="Performance|force_max_clocks";
+    static final String KEY_ENABLE_VIBRATOR="Input|enable_vibrator";
+    static final String KEY_CPU_ACCURACY="CPU|cpu";
+    static final String KEY_LOG_LEVEL="Logging|log_level";
+    static final String KEY_LICENSE_MASK="Content|license_mask";
+    static final String KEY_USER_COUNTRY="XConfig|user_country";
+    static final String KEY_USER_LANGUAGE="XConfig|user_language";
 
     // Advanced settings keys
     static final String KEY_TURNIP_DRIVER_INFO="TurnipAdvanced|driver_info";
@@ -825,6 +904,7 @@ public class EmulatorSettings extends AppCompatActivity {
         }
 
         void setup_custom_driver_gpu(android.net.Uri uri){
+            Log.i("EmulatorSettings", "setup_custom_driver_gpu called: uri=" + uri);
             Preference gpu_pref = findPreference(KEY_CUSTOM_DRIVER_GPU);
             if (uri == null){
                 TurnipDriverInfo driverInfo = TurnipDriverInfo.detect(requireContext());
@@ -934,7 +1014,12 @@ public class EmulatorSettings extends AppCompatActivity {
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             intent.addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
             intent.putExtra(DocumentsContract.EXTRA_EXCLUDE_SELF, true);
-            ((AppCompatActivity)requireActivity()).startActivityForResult(intent, REQUEST_CODE_CUSTOM_DRIVER_GPU);
+            EmulatorSettings activity = (EmulatorSettings) requireActivity();
+            if (activity.customDriverGpuLauncher != null) {
+                activity.customDriverGpuLauncher.launch(intent);
+            } else {
+                Log.e("EmulatorSettings", "customDriverGpuLauncher is null!");
+            }
         }
 
         void remove_custom_driver_gpu() {
@@ -1038,7 +1123,12 @@ public class EmulatorSettings extends AppCompatActivity {
             String current=config.load_config_entry(KEY_HID_DRIVER_TYPE);
             Intent intent=new Intent(requireContext(),CustomDriverTypeActivity.class);
             intent.putExtra(EXTRA_CUSTOM_DRIVER_TYPE,current);
-            ((AppCompatActivity)requireActivity()).startActivityForResult(intent,REQUEST_CODE_CUSTOM_DRIVER_TYPE);
+            EmulatorSettings activity = (EmulatorSettings) requireActivity();
+            if (activity.customDriverTypeLauncher != null) {
+                activity.customDriverTypeLauncher.launch(intent);
+            } else {
+                Log.e("EmulatorSettings", "customDriverTypeLauncher is null!");
+            }
         }
 
         void show_turnip_driver_info() {
@@ -1082,8 +1172,43 @@ public class EmulatorSettings extends AppCompatActivity {
                         ((androidx.appcompat.app.AlertDialog) dialog).dismiss();
                         new android.os.Handler(android.os.Looper.getMainLooper()).post(this::show_turnip_driver_info);
                     })
-                    .setNegativeButton(getString(R.string.close), null)
-                    .create().show();
+                     .setNegativeButton(getString(R.string.close), null)
+                     // Test driver load: directly dlopen the installed driver and verify Vulkan symbols
+                     .setNeutralButton("Test Load", (dialog, which) -> {
+                         new Thread(() -> {
+                             try {
+                                 String dir = CustomDriverUtils.getCustomDriverDirectory(requireContext());
+                                 if (dir != null) {
+                                     String soPath = CustomDriverUtils.findDriverSoPath(
+                                         new java.io.File(dir));
+                                     if (soPath != null) {
+                                         String name = soPath.substring(soPath.lastIndexOf('/') + 1);
+                                         String result = Emulator.nativeTestDriverLoad(dir, name);
+                                         Log.i("EmulatorSettings", "Driver test: " + result);
+                                         final String msg = result;
+                                         new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                                             Toast.makeText(requireContext(), msg, Toast.LENGTH_LONG).show();
+                                         });
+                                     } else {
+                                         new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                                             Toast.makeText(requireContext(), "Driver .so not found", Toast.LENGTH_SHORT).show();
+                                         });
+                                     }
+                                 } else {
+                                     new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                                         Toast.makeText(requireContext(), "Driver directory null", Toast.LENGTH_SHORT).show();
+                                     });
+                                 }
+                             } catch (Exception e) {
+                                 Log.e("EmulatorSettings", "Driver test failed", e);
+                                 final String err = e.getMessage();
+                                 new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                                     Toast.makeText(requireContext(), "Test failed: " + err, Toast.LENGTH_LONG).show();
+                                 });
+                             }
+                         }).start();
+                     })
+                     .create().show();
         }
 
         void apply_performance_preset(String presetKey) {
@@ -1177,48 +1302,4 @@ public class EmulatorSettings extends AppCompatActivity {
     }
 
     SettingsFragment fragment;
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-
-        String config_path=getIntent().getStringExtra(EXTRA_CONFIG_PATH);
-
-
-        if(config_path!=null) {
-            fragment=SettingsFragment.newInstance(config_path,false);
-        }
-        else{
-            fragment=SettingsFragment.newInstance(Application.get_global_config_file().getAbsolutePath(),true);
-        }
-
-        getSupportFragmentManager().beginTransaction().replace(android.R.id.content,fragment).commit();
-    }
-
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-
-        if(resultCode!=RESULT_OK || data==null)
-            return;
-
-        if(requestCode==REQUEST_CODE_CUSTOM_DRIVER_TYPE){
-            String type=data.getStringExtra(EXTRA_CUSTOM_DRIVER_TYPE);
-            if(fragment!=null)
-                fragment.setup_custom_driver_type(type);
-        } else if (requestCode==REQUEST_CODE_CUSTOM_DRIVER_GPU) {
-            Uri uri = data.getData();
-            if (uri != null) {
-                int takeFlags = data.getFlags() & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
-                try {
-                    getContentResolver().takePersistableUriPermission(uri, takeFlags);
-                } catch (SecurityException e) {
-                    Log.w("EmulatorSettings", "Failed to persist custom driver URI permission: " + uri, e);
-                }
-            }
-            if (fragment!=null && uri != null) {
-                // p3-5: Use full live refresh so GPU summary + loader indicator + advanced info summary all update together post-install
-                fragment.refreshDriverLiveState();
-            }
-        }
-    }
 }

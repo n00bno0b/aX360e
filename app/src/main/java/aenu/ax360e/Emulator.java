@@ -117,6 +117,7 @@ public class Emulator extends aenu.emulator.Emulator{
     public static native boolean nativeSupportsLibadrenotoolsBuild();
     public static native String nativeGetInstalledDriverPath();
     public static native String nativeGetInstalledDriverName();
+    public static native String nativeTestDriverLoad(String driverDir, String driverName);
 
     public static int nc_open_uri_fd(Context ctx,Uri uri) {
         ParcelFileDescriptor pfd_ = null;

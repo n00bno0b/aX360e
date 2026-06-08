@@ -223,12 +223,11 @@ public class CustomDriverUtils {
     public static void setupDriverEnv(Context context) {
         File dir = getDriverDirectory(context);
         File icdFile = new File(dir, "vk_icd.json");
+        Log.i(TAG, "setupDriverEnv: dir=" + dir.getAbsolutePath() + " icdExists=" + icdFile.exists());
         if (icdFile.exists()) {
             try {
-                // Confirm a valid driver .so exists before mutating the process environment.
-                // On Android the system Vulkan loader ignores VK_ICD_FILENAMES,
-                // so we export the direct .so path for native code to dlopen.
                 String soPath = findDriverSoPath(dir);
+                Log.i(TAG, "setupDriverEnv: soPath=" + soPath);
                 if (soPath == null) {
                     Log.w(TAG, "vk_icd.json exists but no valid vulkan .so found; skipping env setup");
                     return;
@@ -311,7 +310,7 @@ public class CustomDriverUtils {
      * Find the Vulkan .so path inside the installed driver directory.
      * Returns null if no valid driver .so is found.
      */
-    private static String findDriverSoPath(File dir) {
+    static String findDriverSoPath(File dir) {
         // First try parsing vk_icd.json for library_path
         File icdFile = new File(dir, "vk_icd.json");
         if (icdFile.exists()) {

@@ -5,6 +5,7 @@ import android.app.AlertDialog;
 import android.app.Dialog;
 import android.content.DialogInterface;
 import android.content.SharedPreferences;
+import android.content.Intent;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Message;
@@ -118,14 +119,36 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
                 Log.w("ax360e", "Game directory SAF URI invalid or permission lost: " + gameDirUri);
             }
         }
-        Emulator.get.setup_game_path(path);
-        Emulator.get.setup_launch_args(new String[]{
-                "--storage_root="+Application.get_app_data_dir().getAbsolutePath(),
-                "--config="+Application.get_global_config_file().getAbsolutePath(),
-                // log_file cvar is not defined on AX360E - logging goes to logcat via log_to_logcat
-        });
+        // Pass custom driver path via launch args (more reliable than env vars)
+        String customDriverDir = CustomDriverUtils.getCustomDriverDirectory(this);
+        if (customDriverDir != null) {
+            Emulator.get.setup_launch_args(new String[]{
+                    "--storage_root="+Application.get_app_data_dir().getAbsolutePath(),
+                    "--config="+Application.get_global_config_file().getAbsolutePath(),
+                    "--custom_driver_dir="+customDriverDir,
+            });
+            Log.i("ax360e", "Custom driver dir passed via launch args: " + customDriverDir);
+        } else {
+            Emulator.get.setup_launch_args(new String[]{
+                    "--storage_root="+Application.get_app_data_dir().getAbsolutePath(),
+                    "--config="+Application.get_global_config_file().getAbsolutePath(),
+            });
+        }
 
         Emulator.get.setup_uri_info_list_file(Application.get_uri_info_list_file().getAbsolutePath());
+
+        Log.i("ax360e", "=== continueOnCreate START === gameUri=" + uri);
+
+        // Check if custom Turnip driver is installed - required for GPU rendering
+        boolean customDriverInstalled = CustomDriverUtils.isDriverInstalled(this);
+        boolean supportsLibadrenotools = Emulator.nativeSupportsLibadrenotoolsBuild();
+        Log.i("ax360e", "Game launch: customDriverInstalled=" + customDriverInstalled
+              + " supportsLibadrenotools=" + supportsLibadrenotools);
+
+        if (!customDriverInstalled) {
+            Log.w("ax360e", "No custom Turnip driver installed - GPU rendering will likely fail with stock Adreno driver");
+        }
+
         setContentView(R.layout.activity_emulator);
         sf = (SurfaceView) findViewById(R.id.surface_view);
         sf.getHolder().addCallback(EmulatorActivity.this);
@@ -390,13 +413,16 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
     }
     @Override
     public void surfaceCreated(@NonNull SurfaceHolder holder) {
+        Log.i("ax360e", "=== surfaceCreated START === started=" + started);
 
         if(!started){
             started=true;
 
             // Resolve and apply launch environment (driver + Turnip vars)
+            Log.i("ax360e", "Calling LaunchEnvironmentResolver.resolveAndApply for: " + gameUri);
             LaunchEnvironmentResolver envResolver = new LaunchEnvironmentResolver(this);
             envResolver.resolveAndApply(gameUri);
+            Log.i("ax360e", "LaunchEnvironmentResolver done, calling setup_surface");
 
             Emulator.get.setup_surface(holder.getSurface());
             try {
@@ -404,6 +430,9 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
             } catch (aenu.emulator.Emulator.BootException e) {
                 throw new RuntimeException(e);
             }
+
+            // Verify custom driver loaded after boot
+            verifyCustomDriverLoaded();
         }
         else{
             Emulator.get.setup_surface(holder.getSurface());
@@ -413,6 +442,40 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
         }
 
 
+    }
+
+    private void verifyCustomDriverLoaded() {
+        try {
+            boolean usingCustomDriver = Emulator.nativeIsUsingCustomAdrenoDriver();
+            boolean usingLibadrenotools = Emulator.nativeIsUsingLibadrenotools();
+            String driverStatus = Emulator.nativeGetDetailedDriverStatus();
+            Log.i("ax360e", "Driver verification: usingCustom=" + usingCustomDriver
+                  + " usingLibadrenotools=" + usingLibadrenotools
+                  + " status=" + driverStatus);
+
+            if (!usingCustomDriver) {
+                Log.w("ax360e", "Custom Turnip driver NOT active - games will show black screen with stock Adreno Vulkan");
+                runOnUiThread(() -> {
+                    new AlertDialog.Builder(this)
+                        .setTitle("No Custom GPU Driver")
+                        .setMessage("The emulator is running with the stock Adreno Vulkan driver, which does not support the required Vulkan features for rendering.\n\n"
+                                + "Games will show a black screen.\n\n"
+                                + "To fix this:\n"
+                                + "1. Go to Settings → Custom GPU Driver\n"
+                                + "2. Install a Turnip driver ZIP for your Adreno GPU\n"
+                                + "3. Restart the app\n\n"
+                                + "Driver status: " + driverStatus)
+                        .setPositiveButton("Open Settings", (d, w) -> {
+                            finish();
+                            startActivity(new Intent(this, EmulatorSettings.class));
+                        })
+                        .setNegativeButton("Continue Anyway", null)
+                        .show();
+                });
+            }
+        } catch (Exception e) {
+            Log.e("ax360e", "Failed to verify custom driver", e);
+        }
     }
 
     @Override

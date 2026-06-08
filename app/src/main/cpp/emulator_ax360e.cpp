@@ -50,6 +50,24 @@ MemoryPressureState g_memory_pressure;
 // Global CPU accuracy / diagnostics tracker (from ax360e_perf_log.h)
 ax360e::perf::CpuAccuracyTracker g_cpu_accuracy(10000);  // report every ~10k relevant events
 
+static jstring j_native_test_driver_load(JNIEnv* env, jclass clazz, jstring driverDir, jstring driverName) {
+    const char* dir = env->GetStringUTFChars(driverDir, nullptr);
+    const char* name = env->GetStringUTFChars(driverName, nullptr);
+    __android_log_print(ANDROID_LOG_INFO, "aX360e_Emulator", "nativeTestDriverLoad: dir=%s name=%s", dir, name);
+    bool loaded = load_custom_adreno_driver(dir, name, true);
+    env->ReleaseStringUTFChars(driverDir, dir);
+    env->ReleaseStringUTFChars(driverName, name);
+    if (loaded) {
+        std::string status = get_custom_driver_status();
+        __android_log_print(ANDROID_LOG_INFO, "aX360e_Emulator", "Driver loaded: %s", status.c_str());
+        return env->NewStringUTF(("SUCCESS: " + status).c_str());
+    } else {
+        std::string status = get_custom_driver_status();
+        __android_log_print(ANDROID_LOG_ERROR, "aX360e_Emulator", "Driver load failed: %s", status.c_str());
+        return env->NewStringUTF(("FAILED: " + status).c_str());
+    }
+}
+
 static void j_setup_context(JNIEnv* env,jobject self,jobject context ){
     g_context = env->NewGlobalRef(context);
 }
@@ -848,7 +866,8 @@ int register_ax360e_Emulator(JNIEnv* env){
             // 128B reservation stress harness trigger (CAPTAIN task)
             {"trigger_128b_reservation_stress_test", "()V", (void *) j_trigger_128b_reservation_stress},
             // R1 ps_* accuracy stress harness trigger (CAPTAIN / original research author validator)
-            {"trigger_ps_accuracy_stress_test", "()V", (void *) j_trigger_ps_accuracy_stress}
-    };
+             {"trigger_ps_accuracy_stress_test", "()V", (void *) j_trigger_ps_accuracy_stress},
+             {"nativeTestDriverLoad", "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;", (void *) j_native_test_driver_load}
+     };
     return env->RegisterNatives(g_class_Emulator,methods, sizeof(methods)/sizeof(methods[0]));
 }

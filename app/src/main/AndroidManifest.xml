@@ -66,6 +66,10 @@
             android:label="@string/vulkan_test_title"
             android:screenOrientation="landscape"
             android:process=":vktest"/>
+        <activity android:name="aenu.ax360e.DriverTestActivity"
+            android:exported="true"
+            android:label="Driver Test"/>
+
         <activity android:name="aenu.ax360e.CustomDriverTypeActivity"
             android:exported="false"
             android:label="@string/custom_driver_type_editor_title"/>

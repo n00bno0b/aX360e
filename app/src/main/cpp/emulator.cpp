@@ -467,6 +467,9 @@ static void j_change_surface(JNIEnv* env,jobject self,jint w,jint h){
 }
 
 static void j_setup_surface(JNIEnv* env,jobject self,jobject surface){
+    const char* driver_dir = std::getenv("CUSTOM_DRIVER_DIR");
+    __android_log_print(ANDROID_LOG_INFO, "ax360e_native",
+        "j_setup_surface called, CUSTOM_DRIVER_DIR=%s", driver_dir ? driver_dir : "(null)");
 
     if(ae::window){
         ANativeWindow_release(ae::window);
@@ -475,6 +478,8 @@ static void j_setup_surface(JNIEnv* env,jobject self,jobject surface){
         ae::window=ANativeWindow_fromSurface(env,surface);
         ae::window_width=ANativeWindow_getWidth(ae::window);
         ae::window_height=ANativeWindow_getHeight(ae::window);
+        __android_log_print(ANDROID_LOG_INFO, "ax360e_native",
+            "surface set: %dx%d", ae::window_width, ae::window_height);
     }
 }
 

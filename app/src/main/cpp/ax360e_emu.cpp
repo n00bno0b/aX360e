@@ -376,6 +376,23 @@ namespace xe {
                     const char* driver_dir = std::getenv("CUSTOM_DRIVER_DIR");
                     const char* driver_path = std::getenv("CUSTOM_DRIVER_PATH");
 
+                    // Also check launch args (more reliable than env vars across processes)
+                    if (!driver_dir || driver_dir[0] == '\0') {
+                        for (const auto& arg : g_launch_args) {
+                            std::string prefix = "--custom_driver_dir=";
+                            if (arg.find(prefix) == 0) {
+                                driver_dir = arg.c_str() + prefix.length();
+                                LOGD("Got driver dir from launch args: %s", driver_dir);
+                                break;
+                            }
+                        }
+                    }
+
+                    __android_log_print(ANDROID_LOG_INFO, "ax360e_perf",
+                        "DRIVER_CHECK: CUSTOM_DRIVER_DIR=%s CUSTOM_DRIVER_PATH=%s",
+                        driver_dir ? driver_dir : "(null)",
+                        driver_path ? driver_path : "(null)");
+
                     if (driver_dir && driver_dir[0] != '\0') {
                         // Prefer directory + infer common Turnip name if needed
                         std::string dir(driver_dir);
