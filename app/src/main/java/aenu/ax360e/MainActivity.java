@@ -772,9 +772,7 @@ public class MainActivity extends AppCompatActivity {
             String uri_str=PreferenceManager.getDefaultSharedPreferences(ctx).getString(PREF_GAME_DIR,null);
             if(uri_str==null)
                 return null;
-            Uri uri= Uri.parse(uri_str);
-            ctx.getContentResolver().takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            return uri;
+            return Uri.parse(uri_str);
         }
         catch(Exception e){
             android.util.Log.e("ax360e", "Failed to load game dir preference", e);
