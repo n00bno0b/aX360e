@@ -388,17 +388,15 @@ namespace xe {
                         }
                     }
 
-                    __android_log_print(ANDROID_LOG_INFO, "ax360e_perf",
+                    __android_log_print(ANDROID_LOG_INFO, "ax360e_native",
                         "DRIVER_CHECK: CUSTOM_DRIVER_DIR=%s CUSTOM_DRIVER_PATH=%s",
                         driver_dir ? driver_dir : "(null)",
                         driver_path ? driver_path : "(null)");
 
                     if (driver_dir && driver_dir[0] != '\0') {
-                        // Prefer directory + infer common Turnip name if needed
                         std::string dir(driver_dir);
-                        std::string name = "libvulkan_freedreno.so"; // common name
+                        std::string name = "libvulkan_freedreno.so";
 
-                        // If we have a full path, extract the filename
                         if (driver_path && driver_path[0] != '\0') {
                             size_t last_slash = std::string(driver_path).find_last_of("/\\");
                             if (last_slash != std::string::npos) {
@@ -406,15 +404,20 @@ namespace xe {
                             }
                         }
 
-                        LOGD("Attempting early custom driver load via adreno_driver: dir=%s, name=%s", 
-                             dir.c_str(), name.c_str());
+                        __android_log_print(ANDROID_LOG_INFO, "ax360e_native",
+                            "Attempting early custom driver load: dir=%s name=%s", dir.c_str(), name.c_str());
 
                         bool loaded = load_custom_adreno_driver(dir, name, true);
                         if (loaded) {
-                            LOGD("Custom Adreno driver loaded successfully via new loader (pre-Vulkan)");
+                            __android_log_print(ANDROID_LOG_INFO, "ax360e_native",
+                                "Custom Adreno driver loaded successfully!");
                         } else {
-                            LOGW("Custom driver load failed or fell back to legacy");
+                            __android_log_print(ANDROID_LOG_ERROR, "ax360e_native",
+                                "Custom driver load FAILED! Falling back to stock driver");
                         }
+                    } else {
+                        __android_log_print(ANDROID_LOG_WARN, "ax360e_native",
+                            "No custom driver dir set - will use stock Adreno driver");
                     }
                 }
 

@@ -13,6 +13,7 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.drawable.Icon;
 import android.net.Uri;
+import android.util.Log;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
@@ -104,9 +105,11 @@ public class MainActivity extends AppCompatActivity {
         gameListAdapter.setOnGameClickListener(new GameListAdapter.OnGameClickListener() {
             @Override
             public void onGameClick(Emulator.GameInfo game) {
+                Log.i("ax360e", "onGameClick: " + game.name + " uri=" + game.uri);
                 Intent intent = new Intent("aenu.intent.action.AX360E");
                 intent.setPackage(getPackageName());
                 intent.putExtra(EmulatorActivity.EXTRA_GAME_URI, game.uri);
+                Log.i("ax360e", "Starting EmulatorActivity with URI: " + game.uri);
                 startActivity(intent);
             }
 

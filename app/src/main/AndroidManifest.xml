@@ -40,13 +40,11 @@
         </activity>
 
         <activity android:name="aenu.ax360e.EmulatorActivity"
-
             android:screenOrientation="sensorLandscape"
             android:launchMode="singleTask"
             android:configChanges="layoutDirection|locale|orientation|uiMode|screenLayout|screenSize|smallestScreenSize|keyboard|keyboardHidden|navigation"
             android:exported="true"
             android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
-            android:process=":emu"
             >
             <intent-filter>
                 <action android:name="aenu.intent.action.AX360E" />

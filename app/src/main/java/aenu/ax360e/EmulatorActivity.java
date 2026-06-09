@@ -55,6 +55,7 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
         public boolean handleMessage(@NonNull Message msg) {
 
             if(msg.what!=DELAY_ON_CREATE) return false;
+            Log.i("ax360e", "delay_on_create handler: dismissing dialog and calling on_create");
             if(delay_dialog!=null){
                 delay_dialog.dismiss();
                 delay_dialog=null;
@@ -66,6 +67,7 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
     private static final long MIN_RAM_BYTES = 4L * 1024 * 1024 * 1024; // 4 GB
 
     void on_create(){
+        Log.i("ax360e", "=== on_create START ===");
         // Check minimum RAM as proxy for address space availability
         // Xbox 360 emulation requires 4GB+ virtual address space (xenia maps physical_membase_
         // at mapping_base_ + 0x100000000). While this checks physical RAM rather than VA space,
@@ -159,9 +161,15 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
         envResolver.resolveAndApply(gameUri);
         Log.i("ax360e", "LaunchEnvironmentResolver done, calling boot");
 
+        Log.i("ax360e", "About to call Emulator.get.boot() - Emulator.get=" + (Emulator.get != null));
         try {
             Emulator.get.boot();
+            Log.i("ax360e", "Emulator.get.boot() returned successfully");
         } catch (aenu.emulator.Emulator.BootException e) {
+            Log.e("ax360e", "Emulator.get.boot() threw BootException", e);
+            throw new RuntimeException(e);
+        } catch (Exception e) {
+            Log.e("ax360e", "Emulator.get.boot() threw unexpected exception", e);
             throw new RuntimeException(e);
         }
 
@@ -251,6 +259,7 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
     @Override
     protected void onCreate(android.os.Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        Log.i("ax360e", "=== EmulatorActivity onCreate === should_delay=" + Application.should_delay_load());
         if(!Application.should_delay_load()){
             on_create();
             return;
@@ -263,7 +272,9 @@ public class EmulatorActivity extends Activity implements SurfaceHolder.Callback
             public void run() {
                 try {
                     Thread.sleep(500);
+                    Log.i("ax360e", "Loading native library...");
                     Emulator.load_library();
+                    Log.i("ax360e", "Native library loaded, sending DELAY_ON_CREATE");
                     Thread.sleep(100);
                     delay_on_create.sendEmptyMessage(DELAY_ON_CREATE);
                 } catch (InterruptedException e) {

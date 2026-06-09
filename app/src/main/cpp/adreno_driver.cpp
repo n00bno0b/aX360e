@@ -80,16 +80,15 @@ bool load_custom_adreno_driver(const std::string& driver_dir,
         flags |= ADRENOTOOLS_DRIVER_FILE_REDIRECT;
     }
 
-    // Use the app's native library directory for the hook library
-    // (this is where the adrenotools hook .so lives after packaging)
-    const char* hook_lib_dir = nullptr; // let adrenotools figure it out when possible
+    const char* hook_lib_dir = nullptr;
 
-    // Temporary directory for injected libraries (inside app data is fine)
     std::string tmp_dir = driver_dir + "/tmp/";
-    // Best-effort ensure the tmp directory exists (adrenotools uses it for extracted hooks)
     if (mkdir(tmp_dir.c_str(), 0755) != 0 && errno != EEXIST) {
         LOGW("Failed to create tmp dir %s: %s", tmp_dir.c_str(), strerror(errno));
     }
+
+    LOGI("adrenotools_open_libvulkan params: flags=%d, tmp_dir=%s, driver_dir=%s, driver_name=%s",
+         flags, tmp_dir.c_str(), driver_dir.c_str(), driver_name.c_str());
 
     void* user_mapping = nullptr;
 
@@ -109,24 +108,12 @@ bool load_custom_adreno_driver(const std::string& driver_dir,
         g_last_status = "Loaded via libadrenotools: " + driver_name;
         g_installed_driver_path = driver_dir;
         g_installed_driver_name = driver_name;
-        LOGI("libadrenotools successfully loaded custom driver");
+        LOGI("libadrenotools successfully loaded custom driver! handle=%p", g_libvulkan_handle);
 
         // Resolve all required Vulkan symbols from the newly loaded library.
         ResetVulkanSymbols();
         if (ResolveVulkanSymbols(g_libvulkan_handle)) {
             LOGI("Vulkan symbols resolved successfully via libadrenotools path");
-
-            // Optional verification: try to query the actual physical device
-            // to confirm we really got a Turnip/Mesa driver.
-            if (vkEnumeratePhysicalDevices_ && vkGetPhysicalDeviceProperties_) {
-                uint32_t deviceCount = 0;
-                if (vkEnumeratePhysicalDevices_(nullptr, &deviceCount, nullptr) == VK_SUCCESS && deviceCount > 0) {
-                    // We can't easily create an instance here without more context,
-                    // but at least the pointers are valid. Real verification happens later
-                    // when Xenia creates the real VkInstance.
-                    LOGI("Symbol resolution looks healthy (device enumeration functions available)");
-                }
-            }
         } else {
             LOGE("Symbol resolution FAILED after libadrenotools load — custom driver will likely not work");
             g_last_status = "ERROR: Loaded library but failed to resolve Vulkan entry points.";
@@ -134,8 +121,8 @@ bool load_custom_adreno_driver(const std::string& driver_dir,
 
         return true;
     } else {
-        LOGE("adrenotools_open_libvulkan failed for %s", driver_name.c_str());
-        g_last_status = "ERROR: Failed to load via libadrenotools.\nDriver: " + driver_name + "\nCheck logcat for details (AdrenoDriver tag).";
+        LOGE("adrenotools_open_libvulkan FAILED for %s (handle=null)", driver_name.c_str());
+        g_last_status = "ERROR: adrenotools_open_libvulkan returned null for: " + driver_name;
     }
 #else
     LOGW("libadrenotools not available at build time - custom driver support disabled");
@@ -193,8 +180,10 @@ bool is_using_libadrenotools() {
 
 bool supports_libadrenotools_build() {
 #if defined(HAS_LIBADRENOTOOLS)
+    LOGI("supports_libadrenotools_build: HAS_LIBADRENOTOOLS is DEFINED");
     return true;
 #else
+    LOGW("supports_libadrenotools_build: HAS_LIBADRENOTOOLS is NOT DEFINED");
     return false;
 #endif
 }
